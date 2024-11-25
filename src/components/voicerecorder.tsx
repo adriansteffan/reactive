@@ -1,9 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { HiMicrophone, HiStop, HiTrash } from 'react-icons/hi2';
 
-import { SurveyQuestionElementBase } from 'survey-react-ui';
-
-import { Question, Serializer } from 'survey-core';
 interface AudioVisualizerProps {
   stream: MediaStream;
 }
@@ -191,7 +188,6 @@ export const VoiceRecorder = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
-  
   const startRecording = async () => {
     try {
       /*This is really hacky but it works and there is a deadline, we should find a way to pass around such values in the future */
@@ -300,12 +296,7 @@ export const VoiceRecorder = ({
       {/* Audio player and action buttons */}
       {audioUrl && !isRecording && (
         <div className='flex flex-col items-center space-y-4 w-full max-w-md'>
-          <audio
-            controls
-            preload='none'
-            className='w-full'
-            playsInline 
-          >
+          <audio controls preload='none' className='w-full' playsInline>
             <source src={audioUrl} type='audio/mp4' />
             <source src={audioUrl} type='audio/webm' />
             Your browser does not support the audio element.
@@ -327,56 +318,18 @@ export const VoiceRecorder = ({
   );
 };
 
-const CUSTOM_TYPE = 'voicerecorder';
 
-export class VoiceRecorderModel extends Question {
-  getType() {
-    return CUSTOM_TYPE;
-  }
-}
 
-Serializer.addClass(
-  CUSTOM_TYPE,
-  [],
-  function () {
-    return new VoiceRecorderModel('');
-  },
-  'question',
-);
-
-export default class VoiceRecorderQuestion extends SurveyQuestionElementBase {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(props: any) {
-    super(props);
-    this.state = { value: this.question.value };
-  }
-  get question() {
-    return this.questionBase;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handleSaveVoiceData = (data: any) => {
-    this.question.value = data;
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handleDiscardVoiceData = () => {
-    this.question.value = null;
-  };
-
-  get style() {
-    return this.question.getPropertyValue('readOnly') || this.question.isDesignMode
-      ? { pointerEvents: 'none' }
-      : undefined;
-  }
-
-  renderElement() {
-    return (
-      <VoiceRecorder
-        question={{ value: null }}
-        handleSaveVoiceData={this.handleSaveVoiceData}
-        handleDiscardVoiceData={this.handleDiscardVoiceData}
-      />
-    );
-  }
+export default function VoicerecorderQuestionComponent({
+  setValue,
+}: {
+  setValue: (data: object | null) => void;
+}) {
+  return (
+    <VoiceRecorder
+      question={{ value: null }}
+      handleSaveVoiceData={(data) => setValue(data)}
+      handleDiscardVoiceData={() => setValue(null)}
+    />
+  );
 }

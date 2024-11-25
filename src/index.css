@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+:root {
+  --font-atkinson: 'Atkinson Hyperlegible', system-ui, sans-serif;
+}
+
+* {
+  -webkit-touch-callout: none;
+}
+
+@layer base {
+  body {
+    @apply select-none;
+  }
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('Atkinson_Hyperlegible/AtkinsonHyperlegible-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('Atkinson_Hyperlegible/AtkinsonHyperlegible-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('Atkinson_Hyperlegible/AtkinsonHyperlegible-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('Atkinson_Hyperlegible/AtkinsonHyperlegible-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+}
+
+/* customization for the surveyjs elements - a bit hacky and broken*/
+.sd-root-modern {
+  background-color: white !important;
+  background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+  background-size: 16px 16px;
+  position: relative; /* Make sure position is set for proper rendering */
+  font-family: 'Atkinson Hyperlegible', sans-serif; /* Added this line */
+}
+
+.sd-root-modern * {
+  font-family: 'Atkinson Hyperlegible', sans-serif;
+}
+
+/* for the rating group panel, maybe we can move that into the component at some point*/
+.sd-row,
+.sd-clearfix {
+  padding-bottom: 20px !important;
+}
+
+/* fix pet peeve in surveyjs */
+@media (max-width: 639px) {
+  .sd-imagepicker__item--inline {
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 10px;
+  }
+}

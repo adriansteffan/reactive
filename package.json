@@ -1,0 +1,68 @@
+{
+  "name": "reactive-psych",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest --silent=false",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "bin": {
+    "create-reactive-experiment": "bin/setup.js",
+    "reactive-psych": "bin/setup.js"
+  },
+  "main": "./dist/reactivepsych.umd.js",
+  "module": "./dist/reactivepsych.es.js",
+  "types": "./dist/mod.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/reactivepsych.es.js",
+      "require": "./dist/reactivepsych.umd.js",
+      "types": "./dist/mod.d.ts"
+    },
+    "./style.css": "./dist/style.css",
+    "./tailwind.config.js": "./dist/tailwind.config.js"
+  },
+  "author": "Adrian Steffan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/adriansteffan/reactive-psych/issues"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.1.0",
+    "react-query": "^3.39.3",
+    "react-toastify": "^10.0.6",
+    "survey-react-ui": "^1.12.9",
+    "uuid": "^11.0.3"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^3.4.3"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.11",
+    "@types/node": "^22.9.2",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.2.0",
+    "@typescript-eslint/parser": "^7.2.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "postcss": "^8.4.38",
+    "prettier": "3.2.5",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.2.2",
+    "vite": "^5.2.0",
+    "vite-plugin-dts": "^4.3.0",
+    "vite-plugin-static-copy": "^2.1.0",
+    "vitest": "^2.1.5"
+  }
+}

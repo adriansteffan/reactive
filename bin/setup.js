@@ -66,7 +66,7 @@ Project ${projectName} created successfully!
 To get started:
     cd ${projectName}
     npm i
-    npm start
+    npm run dev
     `);
 } catch (error) {
   console.error('Error creating project:', error);

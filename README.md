@@ -10,7 +10,7 @@ You will need a current version of [node.js](https://nodejs.org/en/download/) in
 ## Create a template project
 
 ```
-npx adriansteffan/react-psych [your_project_name]
+npx adriansteffan/reactive-psych
 ```
 
 ## Development

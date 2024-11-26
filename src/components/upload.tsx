@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
-import { FileUpload, StudyEvent } from '../utils/convert';
+import { FileUpload, StudyEvent } from '../utils/common';
 
 interface UploadPayload {
   sessionId: string;

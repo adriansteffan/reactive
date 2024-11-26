@@ -11,6 +11,9 @@ import Quest from './quest';
 import MasterMindleWrapper from './mastermindlewrapper';
 import MicrophoneCheck from './microphonecheck';
 
+// Default Custom Questions
+import VoicerecorderQuestionComponent from './voicerecorder';
+
 
 type ComponentsMap = {
   [key: string]: ComponentType<any>;
@@ -24,6 +27,12 @@ const defaultComponents: ComponentsMap = {
   MicrophoneCheck,
   MasterMindleWrapper,
 };
+
+
+const defaultCustomQuestions = {
+  'voicerecorder': VoicerecorderQuestionComponent
+}
+
 
 interface ExperimentTrial {
   name: string;
@@ -41,10 +50,6 @@ interface TrialData {
   duration: number;
 }
 
-interface ExperimentProps {
-  timeline: ExperimentTrial[];
-  components?: ComponentsMap;
-}
 
 // Function to transform experiment definition into components
 const transformExperiment = (
@@ -52,7 +57,8 @@ const transformExperiment = (
   next: (data: any) => void,
   data: any,
   progress: number,
-  componentsMap: ComponentsMap
+  componentsMap: ComponentsMap,
+  customQuestions: ComponentsMap,
 ) => {
   return experimentDef.map((def, index) => {
     // Look up component in provided components map
@@ -85,6 +91,7 @@ const transformExperiment = (
         <Component
           next={next}
           data={data}
+          {...(def.type === "Quest" ? { customQuestions: customQuestions } : {})}
           {...def.props}
         />
       </div>
@@ -92,12 +99,18 @@ const transformExperiment = (
   });
 };
 
-export default function Experiment({ timeline, components = {} }: ExperimentProps) {
+export default function Experiment({ timeline, components = {}, questions = {} }: {
+  timeline: ExperimentTrial[];
+  components?: ComponentsMap;
+  questions?: ComponentsMap;
+}) {
   const [trialCounter, setTrialCounter] = useState(0);
   const [data, setData] = useState<TrialData[]>([]);
   const [trialStartTime, setTrialStartTime] = useState(now());
 
   const componentsMap = { ...defaultComponents, ...components };
+  const customQuestions: ComponentsMap = {...defaultCustomQuestions, ...questions};
+
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -129,6 +142,7 @@ export default function Experiment({ timeline, components = {} }: ExperimentProp
     next,
     data,
     trialCounter / (timeline.length - 1),
-    componentsMap
+    componentsMap,
+    customQuestions,
   )[trialCounter];
 }

@@ -2,53 +2,11 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
-import { convertData, StudyEvent } from '../utils/convert';
-
-async function blobUrlToBase64(blobUrl: string): Promise<string> {
-  const response = await fetch(blobUrl);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        const base64String = reader.result.split(',')[1];
-        resolve(base64String);
-      }
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-interface AudioFile {
-  base64Data: string;
-  filename: string;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function processAudioObj(name: string, audioUrl: any): Promise<AudioFile | null> {
-  if (audioUrl.startsWith('blob:')) {
-    try {
-      const base64Data = await blobUrlToBase64(audioUrl);
-      return {
-        base64Data,
-        filename: `${name}.wav`
-      };
-    } catch (error) {
-      console.error(`Error processing audio recording for ${name}:`, error);
-      return null;
-    }
-  }
-  return null;
-}
+import { FileUpload, StudyEvent } from '../utils/convert';
 
 interface UploadPayload {
   sessionId: string;
-  files: {
-    type: string;
-    content: string;
-  }[];
-  audioFiles: AudioFile[];
+  files: FileUpload[];
 }
 
 interface UploadResponse {
@@ -56,7 +14,19 @@ interface UploadResponse {
   message?: string;
 }
 
-export default function Upload({ data, next }: { data: StudyEvent[]; next: () => void }) {
+export default function Upload({
+  data,
+  next,
+  sessionID,
+  generateFiles,
+  uploadRaw = true,
+}: {
+  data: StudyEvent[];
+  next: () => void;
+  sessionID?: string | null;
+  generateFiles: (sessionID: string, data: StudyEvent[]) => FileUpload[];
+  uploadRaw: boolean;
+}) {
   const [uploadState, setUploadState] = useState<'initial' | 'uploading' | 'success' | 'error'>(
     'initial',
   );
@@ -83,35 +53,17 @@ export default function Upload({ data, next }: { data: StudyEvent[]; next: () =>
   const handleUpload = async () => {
     setUploadState('uploading');
 
-    const convertedData = convertData(data);
-    const sessionId = uuidv4();
+    const sessionIDUpload = sessionID ?? uuidv4();
 
-    const audioFiles: AudioFile[] = [];
-
-    try {
-      for (const audiodata of convertedData.audios) {
-        const audioFile = await processAudioObj(audiodata.name, audiodata.url);
-        if (audioFile) {
-          audioFiles.push(audioFile);
-        }
-      }
-    } catch (error) {
-      console.error('Error processing audio files:', error);
-      setUploadState('error');
+    const files: FileUpload[] = generateFiles ? generateFiles(sessionIDUpload, data) : [];
+    if (uploadRaw) {
+      files.push({ filename: `${sessionIDUpload}.raw.json`, content: JSON.stringify(data), encoding: 'utf8' });
     }
 
     try {
-      //console.log('Extracted audio files:', audioFiles.length);
-
       const payload: UploadPayload = {
-        sessionId,
-        files: [
-          { type: 'global', content: convertedData.globalCsv },
-          { type: 'block', content: convertedData.blockCsv },
-          { type: 'game', content: convertedData.gameCsv },
-          { type: 'guess', content: convertedData.guessCsv },
-        ],
-        audioFiles,
+        sessionId: sessionIDUpload,
+        files,
       };
 
       uploadData.mutate(payload);

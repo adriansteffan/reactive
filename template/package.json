@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "backend": "npm run dev --prefix backend",
+    "dev:all": "concurrently -n \"FRONT,BACK\" -c \"blue,green\" \"npm run dev\" \"npm run backend\"",
     "build": "tsc && vite build",
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -29,6 +31,7 @@
     "@typescript-eslint/parser": "^8.16.0",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.19",
+    "concurrently": "^9.1.0",
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",

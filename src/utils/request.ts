@@ -1,13 +1,13 @@
-const BACKEND_URL = "";
+const BACKEND_ROUTE = "/backend/";
 
 export async function post(endpoint: string, body: object | FormData) {
   if (body instanceof FormData) {
-    return await fetch(`${BACKEND_URL}${endpoint}`, {
+    return await fetch(`${BACKEND_ROUTE}${endpoint}`, {
       method: 'POST',
       body,
     });
   } else {
-    return fetch(`${BACKEND_URL}${endpoint}`, {
+    return fetch(`${BACKEND_ROUTE}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -16,7 +16,7 @@ export async function post(endpoint: string, body: object | FormData) {
 }
 
 export async function get(endpoint: string) {
-  const res = await fetch(`${BACKEND_URL}${endpoint}`);
+  const res = await fetch(`${BACKEND_ROUTE}${endpoint}`);
   return res;
 }
 

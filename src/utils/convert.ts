@@ -1,15 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { FileUpload, StudyEvent } from './common';
 
-// Generic type for all data structures
-export interface StudyEvent {
-  index: number;
-  type: string;
-  name: string;
-  data: any;
-  start: number;
-  end: number;
-  duration: number;
-}
+
 
 export function arrayToCSV(array: any[]): string {
   if (array.length === 0) return '';
@@ -93,7 +85,6 @@ export function convertData(studyData: StudyEvent[]) {
         // alternating game and survey
         let gameMetaData: { solution?: string[] | string } = {};
         for (const subTrial of games) {
-          
           if (subTrial.type == 'game') {
             const gameIndex = subTrial.index / 2;
             let guesses = [];
@@ -119,10 +110,7 @@ export function convertData(studyData: StudyEvent[]) {
             }
           } else if (subTrial.type == 'survey') {
             const gameIndex = (subTrial.index - 1) / 2;
-            const { answers, audios } = processSurvey(
-              `${trial.name}_${gameIndex}`,
-              subTrial.data,
-            );
+            const { answers, audios } = processSurvey(`${trial.name}_${gameIndex}`, subTrial.data);
             audioData = [...audioData, ...audios];
             gameData.push({
               ...{
@@ -134,7 +122,6 @@ export function convertData(studyData: StudyEvent[]) {
                 duration: subTrial.duration,
                 start: subTrial.start,
                 end: subTrial.end,
-                
               },
               ...gameMetaData,
               ...answers,
@@ -172,3 +159,48 @@ export function convertData(studyData: StudyEvent[]) {
 }
 
 export default convertData;
+
+async function blobUrlToBase64(blobUrl: string): Promise<string> {
+  const response = await fetch(blobUrl);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+
+export async function generateFiles(sessionId: string, data: any) {
+  const files: FileUpload[] = [];
+  const convertedData = convertData(data);
+
+  files.push(
+    { filename: `${sessionId}_global.csv`, content: convertedData.globalCsv, encoding: 'utf8' },
+    { filename: `${sessionId}_block.csv`, content: convertedData.blockCsv, encoding: 'utf8' },
+    { filename: `${sessionId}_game.csv`, content: convertedData.gameCsv, encoding: 'utf8' },
+    { filename: `${sessionId}_guess.csv`, content: convertedData.guessCsv, encoding: 'utf8' },
+  );
+
+  // Process audio files
+  for (const audiodata of convertedData.audios) {
+    if (audiodata.url.startsWith('blob:')) {
+      try {
+        const base64Content = await blobUrlToBase64(audiodata.url);
+        files.push({
+          filename: `${audiodata.name}.wav`,
+          content: base64Content,
+          encoding: 'base64',
+        });
+      } catch (error) {
+        console.error(`Error processing audio recording for ${audiodata.name}:`, error);
+      }
+    }
+  }
+}

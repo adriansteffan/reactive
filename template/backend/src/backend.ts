@@ -85,7 +85,7 @@ api.post(
 app.use('/backend', api);
 
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../../dist');
+  const distPath = path.join(__dirname, '../static');
   app.use(express.static(distPath));
   
   // Serve index.html for all non-API routes (for client-side routing)

@@ -91,7 +91,7 @@ const experiment = [
         </>
       ),
     },
-  ]).flatMap((block, blockindex) => [
+  ]).flatMap((block: any, blockindex: number) => [
     {
       name: `blocktype${block.feedbacktype}_blockindex${blockindex}_mastermindle`,
       type: 'MasterMindleWrapper',

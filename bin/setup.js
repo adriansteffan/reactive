@@ -17,7 +17,8 @@ const rl = readline.createInterface({
 
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
 
-function copyDir(src, dest) {
+
+function copyDir(src, dest, ignoreFiles = []) {
   mkdirSync(dest, { recursive: true });
 
   const entries = readdirSync(src, { withFileTypes: true });
@@ -25,11 +26,16 @@ function copyDir(src, dest) {
   for (let entry of entries) {
     const srcPath = join(src, entry.name);
     const destPath = join(dest, entry.name);
+    
+    // Check if the current file path matches any in the ignore list
+    const shouldIgnore = ignoreFiles.some(ignorePath => 
+      join(src, entry.name) === join(src, ignorePath)
+    );
 
     if (entry.isDirectory()) {
+      // only ignore at top level
       copyDir(srcPath, destPath);
-    } else if (entry.name === 'package.json') {
-      // Skip package.json as we'll handle it separately
+    } else if (shouldIgnore) {
       continue;
     } else {
       copyFileSync(srcPath, destPath);
@@ -57,7 +63,7 @@ async function main() {
       process.exit(1);
     }
 
-    copyDir(templatePath, projectPath);
+    copyDir(templatePath, projectPath, ['package.json']);
 
     const templatePackageJsonPath = join(templatePath, 'package.json');
     if (!existsSync(templatePackageJsonPath)) {

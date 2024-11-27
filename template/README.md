@@ -4,15 +4,9 @@ Built with [reactive-psych](https://github.com/adriansteffan/reactive-psych)
 
 ## Setup
 
-For deployment, you will need[docker](https://docs.docker.com/engine/install/)
-
-Prepare your `.env` file by following the instructions laid out in the `.env.template` file.
-
-* For deployment/production, a `.env` file is enough.
-* For development, create a `.env.development` file for the dev servers and a `.env` file to test the deployment locally.
-
-
 ## Deployment / Production
+
+For deployment, you will need[docker](https://docs.docker.com/engine/install/)
 
 
 To build the docker images, run 
@@ -54,10 +48,10 @@ You will need a current version of [node.js](https://nodejs.org/en/download/) in
 
 #### Installation
 
-From the `frontend` directory, run
+From the root directory, run
 
 ```
-npm i
+npm i && npm i --prefix backend
 ```
 
 #### Running
@@ -65,9 +59,9 @@ npm i
 Run the app in the development mode with
 
 ```
-npm run dev
+npm run dev:all
 ```
-in the `frontend` directory.
+in the root directory.
 
 By default, open [http://localhost:5173](http://localhost:5173) to view it in the browser.
 The page will reload if you make edits.

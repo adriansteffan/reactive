@@ -10,7 +10,9 @@
     "build": "tsc && vite build",
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "rp-dev-pull": "npm uninstall reactive-psych && npm install --registry http://localhost:4873 reactive-psych",
+    "rp-dev-setup": "npm set registry http://localhost:4873/ --location . && npx rp-dev-pull"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.61.3",

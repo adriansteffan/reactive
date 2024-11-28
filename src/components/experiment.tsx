@@ -14,7 +14,6 @@ import MicrophoneCheck from './microphonecheck';
 // Default Custom Questions
 import VoicerecorderQuestionComponent from './voicerecorder';
 
-
 type ComponentsMap = {
   [key: string]: ComponentType<any>;
 };
@@ -28,11 +27,9 @@ const defaultComponents: ComponentsMap = {
   MasterMindleWrapper,
 };
 
-
 const defaultCustomQuestions = {
-  'voicerecorder': VoicerecorderQuestionComponent
-}
-
+  voicerecorder: VoicerecorderQuestionComponent,
+};
 
 interface ExperimentTrial {
   name: string;
@@ -50,56 +47,39 @@ interface TrialData {
   duration: number;
 }
 
-
 // Function to transform experiment definition into components
 const transformExperiment = (
   experimentDef: ExperimentTrial[],
+  index: number,
   next: (data: any) => void,
   data: any,
-  progress: number,
   componentsMap: ComponentsMap,
   customQuestions: ComponentsMap,
 ) => {
-  return experimentDef.map((def, index) => {
-    // Look up component in provided components map
-    const Component = componentsMap[def.type];
+  const def = experimentDef[index];
 
-    if (!Component) {
-      throw new Error(`No component found for type: ${def.type}`);
-    }
+  // Look up component in provided components map
+  const Component = componentsMap[def.type];
 
-    return (
-      <div key={index} className='px-4 w-screen'>
-        <div className='mt-4 sm:mt-12 max-w-2xl mx-auto flex-1 h-6 bg-gray-200 rounded-full overflow-hidden'>
-          <div
-            className={`h-full bg-gray-200 rounded-full duration-300 ${
-              progress > 0 ? ' border-black border-2' : ''
-            }`}
-            style={{
-              width: `${progress * 100}%`,
-              backgroundImage: `repeating-linear-gradient(
-                -45deg,
-                #E5E7EB,
-                #E5E7EB 10px,
-                #D1D5DB 10px,
-                #D1D5DB 20px
-              )`,
-              transition: 'width 300ms',
-            }}
-          />
-        </div>
-        <Component
-          next={next}
-          data={data}
-          {...(def.type === "Quest" ? { customQuestions: customQuestions } : {})}
-          {...def.props}
-        />
-      </div>
-    );
-  });
+  if (!Component) {
+    throw new Error(`No component found for type: ${def.type}`);
+  }
+
+  return (
+    <Component
+      next={next}
+      data={data}
+      {...(def.type === 'Quest' ? { customQuestions: customQuestions } : {})}
+      {...def.props}
+    />
+  );
 };
 
-export default function Experiment({ timeline, components = {}, questions = {} }: {
+export default function Experiment({
+  timeline,
+  components = {},
+  questions = {},
+}: {
   timeline: ExperimentTrial[];
   components?: ComponentsMap;
   questions?: ComponentsMap;
@@ -109,8 +89,9 @@ export default function Experiment({ timeline, components = {}, questions = {} }
   const [trialStartTime, setTrialStartTime] = useState(now());
 
   const componentsMap = { ...defaultComponents, ...components };
-  const customQuestions: ComponentsMap = {...defaultCustomQuestions, ...questions};
+  const customQuestions: ComponentsMap = { ...defaultCustomQuestions, ...questions };
 
+  const progress = trialCounter / (timeline.length - 1);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -137,12 +118,27 @@ export default function Experiment({ timeline, components = {}, questions = {} }
     setTrialCounter(trialCounter + 1);
   }
 
-  return transformExperiment(
-    timeline,
-    next,
-    data,
-    trialCounter / (timeline.length - 1),
-    componentsMap,
-    customQuestions,
-  )[trialCounter];
+  return (
+    <div className='px-4 w-screen'>
+      <div className='mt-4 sm:mt-12 max-w-2xl mx-auto flex-1 h-6 bg-gray-200 rounded-full overflow-hidden'>
+        <div
+          className={`h-full bg-gray-200 rounded-full duration-300 ${
+            progress > 0 ? ' border-black border-2' : ''
+          }`}
+          style={{
+            width: `${progress * 100}%`,
+            backgroundImage: `repeating-linear-gradient(
+          -45deg,
+          #E5E7EB,
+          #E5E7EB 10px,
+          #D1D5DB 10px,
+          #D1D5DB 20px
+        )`,
+            transition: 'width 300ms',
+          }}
+        />
+      </div>
+      {transformExperiment(timeline, trialCounter, next, data, componentsMap, customQuestions)};
+    </div>
+  );
 }

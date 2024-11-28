@@ -11,8 +11,7 @@
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "rp-dev-pull": "npm uninstall reactive-psych && npm install --registry http://localhost:4873 reactive-psych",
-    "rp-dev-setup": "npm set registry http://localhost:4873/ --location . && npx rp-dev-pull"
+    "rp-dev-pull": "npm link reactive-psych"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.61.3",
@@ -21,7 +20,7 @@
     "react-dom": "^18.2.0",
     "react-icons": "^5.1.0",
     "react-toastify": "^10.0.6",
-    "reactive-psych": "github:adriansteffan/reactive-psych",
+    "reactive-psych": "RP_VERSION",
     "survey-react-ui": "^1.12.9"
   },
   "devDependencies": {

@@ -72,7 +72,7 @@ async function main() {
     }
 
     let packageJsonContent = readFileSync(templatePackageJsonPath, 'utf8');
-    packageJsonContent = packageJsonContent.replace(/PROJECT_NAME/g, projectName);
+    packageJsonContent = packageJsonContent.replace(/PROJECT_NAME/g, projectName).replace(/RP_VERSION/g, process.env.npm_package_version);
 
     writeFileSync(join(projectPath, 'package.json'), packageJsonContent);
 
@@ -94,5 +94,4 @@ To get started:
   }
 }
 
-// Run the main function
 main();

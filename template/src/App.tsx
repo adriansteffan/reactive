@@ -1,5 +1,42 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Experiment, shuffleArray } from 'reactive-psych';
+import { useState } from 'react';
+import { Experiment, BaseComponentProps, ExperimentConfig } from 'reactive-psych';
+
+const config: ExperimentConfig = { showProgressBar: true };
+
+const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number }) => {
+  const [count, setCount] = useState(0);
+
+  return (
+    <>
+      <h1 className='text-4xl'>
+        <strong>Custom Component</strong>
+      </h1>
+      <br />
+      This is a custom component component. Click the button {maxCount} times to progress
+      <br />
+      <button
+        onClick={() => {
+          setCount(count + 1);
+          if (count + 1 === maxCount) {
+            next({});
+          }
+        }}
+        className='mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
+      >
+        Count: {count}
+      </button>
+    </>
+  );
+};
+
+const CustomQuestion = () => {
+  return (
+    <>
+      <p>This is a custom question</p>
+    </>
+  );
+};
 
 const experiment = [
   {
@@ -11,20 +48,23 @@ const experiment = [
       content: (
         <>
           <h1 className='text-4xl'>
-            <strong>Welcome to our experiment!</strong>
+            <strong>Hello ReactivePsych! </strong>
           </h1>
           <br />
-          In this study we will be investigating under which conditions people exert mental effort
-          and which types of feedback can alter or encourage this. You will be taking part in five
-          different variations of a game, each containing the same task but with different feedback
-          methods. You will get a detailed explanation of the type of feedback you will be getting
-          before each block, however the basic task remains the same. <br />
+          This is a basic text component. <br />
         </>
       ),
     },
   },
   {
-    name: `TEST`,
+    name: 'customtrial',
+    type: 'CustomTrial',
+    props: {
+      maxCount: 5,
+    },
+  },
+  {
+    name: 'survey',
     type: 'Quest',
     props: {
       surveyJson: {
@@ -32,36 +72,18 @@ const experiment = [
           {
             elements: [
               {
-                type: 'imagepicker',
-                name: 'choosefeedback',
-                title:
-                  'If you could continue playing the game, which feedback option would you choose? (Placeholder images until we finalize on the design)',
+                type: 'rating',
+                name: 'examplequestion',
+                title: 'We can use all of the surveyjs components in the framework',
                 isRequired: true,
-                imageWidth: 200,
-                imageHeight: 150,
-                showLabel: true,
-                choices: [
-                  {
-                    value: '2',
-                    imageLink: 'https://placehold.co/600x400/EEE/31343C',
-                    text: 'A',
-                  },
-                  {
-                    value: '3',
-                    imageLink: 'https://placehold.co/600x400/EEE/31343C',
-                    text: 'B',
-                  },
-                  {
-                    value: '4',
-                    imageLink: 'https://placehold.co/600x400/EEE/31343C',
-                    text: 'C',
-                  },
-                  {
-                    value: '5',
-                    imageLink: 'https://placehold.co/600x400/EEE/31343C',
-                    text: 'D',
-                  },
-                ],
+                rateMin: 1,
+                rateMax: 6,
+                minRateDescription: 'Not at all',
+                maxRateDescription: 'Extremely',
+              },
+              {
+                title: 'Cutom Question',
+                type: 'CustomQuestion',
               },
             ],
           },
@@ -70,93 +92,25 @@ const experiment = [
     },
   },
   {
-    name: 'miccheck',
-    type: 'MicrophoneCheck',
-  },
-  ...shuffleArray([
-    {
-      feedbacktype: 5,
-      text: (
-        <>
-          <h1 className='text-4xl mb-8'>
-            <strong>Get ready!</strong>
-          </h1>
-          <p>
-            Remember, to verify your guess, press "Check". You will then receive feedback on whether
-            your guess was correct or, if not, which positions are correct (✓), which are incorrect
-            (X), and which have a correct colour which is found in another spot (C). If you would
-            like to skip the current color code to be guessed and instead be given a new one, please
-            press "Skip".
-          </p>
-        </>
-      ),
-    },
-  ]).flatMap((block: any, blockindex: number) => [
-    {
-      name: `blocktype${block.feedbacktype}_blockindex${blockindex}_mastermindle`,
-      type: 'MasterMindleWrapper',
-      props: {
-        blockIndex: `${blockindex}`,
-        feedback: block.feedbacktype,
-        timeLimit: 120,
-        maxGuesses: 8,
-      },
-    },
-    {
-      name: `blocktype${block.feedbacktype}_blockindex${blockindex}_survey`,
-      type: 'Quest',
-      props: {
-        surveyJson: {
-          pages: [
-            {
-              elements: [
-                {
-                  type: 'rating',
-                  name: 'enjoyment',
-                  title:
-                    'Game completed! How much did you enjoy solving the tasks with this feedback variant?',
-                  isRequired: true,
-                  rateMin: 1,
-                  rateMax: 6,
-                  minRateDescription: 'Not at all',
-                  maxRateDescription: 'Extremely',
-                },
-                {
-                  type: 'voicerecorder',
-                  name: 'senseofeffort',
-                  title:
-                    'Please describe how would design a question targetted at extracting: Sense of effort, qualitative question (Question Missing)',
-                  isRequired: true,
-                },
-                {
-                  type: 'voicerecorder',
-                  name: 'strategyusage',
-                  title: 'What strategy did you use the most in this block? (Yellow in doc)',
-                  isRequired: true,
-                },
-                {
-                  type: 'rating',
-                  name: 'effortsu',
-                  title: 'How effortful was the usage of this strategy?',
-                  isRequired: true,
-                  rateMin: 1,
-                  rateMax: 6,
-                  minRateDescription: 'Not at all',
-                  maxRateDescription: 'Extremely',
-                },
-              ],
-            },
-          ],
-        },
-      },
-    },
-  ]),
-  {
     name: 'upload',
     type: 'Upload',
+  },
+  {
+    name: 'finaltext',
+    type: 'Text',
+    props: {
+      content: <>Thank you for participating in our study, you can now close the browser window.</>,
+    },
   },
 ];
 
 export default function App() {
-  return <><Experiment timeline={experiment} /></>;
+  return (
+    <Experiment
+      config={config}
+      timeline={experiment}
+      components={{CustomTrial}}
+      questions={{CustomQuestion}}
+    />
+  );
 }

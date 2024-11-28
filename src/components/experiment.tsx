@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { now } from '../utils/common';
+import { ExperimentConfig, now } from '../utils/common';
 import { useEffect, useState } from 'react';
 import { ComponentType } from 'react';
 
@@ -56,9 +56,12 @@ const transformExperiment = (
   componentsMap: ComponentsMap,
   customQuestions: ComponentsMap,
 ) => {
+  if (index >= experimentDef.length) {
+    return <></>;
+  }
+
   const def = experimentDef[index];
 
-  // Look up component in provided components map
   const Component = componentsMap[def.type];
 
   if (!Component) {
@@ -77,10 +80,14 @@ const transformExperiment = (
 
 export default function Experiment({
   timeline,
+  config = {
+    showProgressBar: true,
+  },
   components = {},
   questions = {},
 }: {
   timeline: ExperimentTrial[];
+  config?: ExperimentConfig;
   components?: ComponentsMap;
   questions?: ComponentsMap;
 }) {
@@ -120,7 +127,11 @@ export default function Experiment({
 
   return (
     <div className='px-4 w-screen'>
-      <div className='mt-4 sm:mt-12 max-w-2xl mx-auto flex-1 h-6 bg-gray-200 rounded-full overflow-hidden'>
+      <div
+        className={` ${
+          config.showProgressBar ? '' : 'hidden '
+        } mt-4 sm:mt-12 max-w-2xl mx-auto flex-1 h-6 bg-gray-200 rounded-full overflow-hidden`}
+      >
         <div
           className={`h-full bg-gray-200 rounded-full duration-300 ${
             progress > 0 ? ' border-black border-2' : ''
@@ -138,7 +149,7 @@ export default function Experiment({
           }}
         />
       </div>
-      {transformExperiment(timeline, trialCounter, next, data, componentsMap, customQuestions)};
+      {transformExperiment(timeline, trialCounter, next, data, componentsMap, customQuestions)}
     </div>
   );
 }

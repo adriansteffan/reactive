@@ -238,13 +238,24 @@ export const VoiceRecorder = ({
     }
   };
 
-  const saveRecording = (blob: Blob, url: string) => {
+  const saveRecording = async (blob: Blob, url: string) => {
     if (blob && url) {
+      const base64Data = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          // Remove data URL prefix (e.g., "data:audio/webm;base64,")
+          const base64 = reader.result?.toString().split(',')[1] || '';
+          resolve(base64);
+        };
+        reader.readAsDataURL(blob);
+      });
+
       handleSaveVoiceData({
         blob: blob,
         // dont change this type, since the upload function depends on it while looking for audio. we might want to refactor this at some point
         type: 'audiorecording',
         url: url,
+        data64: base64Data,
         timestamp: new Date().toISOString(),
       });
     }

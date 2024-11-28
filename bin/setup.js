@@ -85,7 +85,7 @@ Project ${projectName} created successfully!
 To get started:
     cd ${projectName}
     npm i && npm i --prefix backend
-    npm run dev
+    npm run dev:all
     `);
 
   } catch (error) {

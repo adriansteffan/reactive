@@ -1,14 +1,13 @@
 {
   "name": "reactive-psych",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview",
-    "dev-publish": "npm run build && npm publish --registry http://localhost:4873"
+    "preview": "vite preview"
   },
   "bin": {
     "create-reactive-experiment": "bin/setup.js",

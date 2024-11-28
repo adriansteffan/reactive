@@ -12,7 +12,7 @@ export default defineConfig(() => {
   return {
     plugins: [
       react(),
-      dts({ include: ['src/mod.tsx'] }),
+      dts({ include: ['src'] , rollupTypes: true}),
       viteStaticCopy({
         targets: [
           {

@@ -12,7 +12,7 @@ You will need a current version of [node.js](https://nodejs.org/en/download/) in
 ### Create a template project
 
 ```
-npx adriansteffan/reactive-psych
+npx reactive-psych
 ```
 
 Then follow the instructions shown there and in the created `README.md`

@@ -4,10 +4,13 @@ import { mkdirSync, readdirSync, copyFileSync, existsSync, writeFileSync, readFi
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const version = createRequire(import.meta.url)(join(__dirname, '../package.json')).version;
+console.log(version)
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -72,7 +75,7 @@ async function main() {
     }
 
     let packageJsonContent = readFileSync(templatePackageJsonPath, 'utf8');
-    packageJsonContent = packageJsonContent.replace(/PROJECT_NAME/g, projectName).replace(/RP_VERSION/g, process.env.npm_package_version);
+    packageJsonContent = packageJsonContent.replace(/PROJECT_NAME/g, projectName).replace(/RP_VERSION/g, version);
 
     writeFileSync(join(projectPath, 'package.json'), packageJsonContent);
 

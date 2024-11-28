@@ -1,4 +1,4 @@
-const BACKEND_ROUTE = "/backend/";
+const BACKEND_ROUTE = "/backend";
 
 export async function post(endpoint: string, body: object | FormData) {
   if (body instanceof FormData) {

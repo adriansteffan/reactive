@@ -71,6 +71,7 @@ const transformExperiment = (
   return (
     <Component
       next={next}
+      key={index}
       data={data}
       {...(def.type === 'Quest' ? { customQuestions: customQuestions } : {})}
       {...def.props}

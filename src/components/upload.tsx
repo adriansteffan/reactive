@@ -31,7 +31,7 @@ export default function Upload({
   const [uploadState, setUploadState] = useState<'initial' | 'uploading' | 'success' | 'error'>(
     'initial',
   );
-  const shouldUpload = !getParam('upload', true, 'boolean');
+  const shouldUpload = getParam('upload', true, 'boolean');
   const shouldDownload = getParam('download', false, 'boolean');
 
   const uploadData = useMutation({

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { ExperimentConfig, now } from '../utils/common';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ComponentType } from 'react';
 
 // Default components
@@ -94,7 +94,7 @@ export default function Experiment({
 }) {
   const [trialCounter, setTrialCounter] = useState(0);
   const [data, setData] = useState<TrialData[]>([]);
-  const [trialStartTime, setTrialStartTime] = useState(now());
+  const trialStartTimeRef = useRef(now());
 
   const componentsMap = { ...defaultComponents, ...components };
   const customQuestions: ComponentsMap = { ...defaultCustomQuestions, ...questions };
@@ -115,14 +115,14 @@ export default function Experiment({
         type: currentTrial.type,
         name: currentTrial.name,
         data: newData,
-        start: trialStartTime,
+        start: trialStartTimeRef.current,
         end: currentTime,
-        duration: currentTime - trialStartTime,
+        duration: currentTime - trialStartTimeRef.current,
       };
       setData([...data, trialData]);
     }
 
-    setTrialStartTime(currentTime);
+    trialStartTimeRef.current = currentTime;
     setTrialCounter(trialCounter + 1);
   }
 

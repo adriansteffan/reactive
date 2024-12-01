@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
-import { FileUpload, StudyEvent } from '../utils/common';
+import { FileUpload, getParam, StudyEvent } from '../utils/common';
+import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 
 interface UploadPayload {
   sessionId: string;
@@ -30,6 +31,8 @@ export default function Upload({
   const [uploadState, setUploadState] = useState<'initial' | 'uploading' | 'success' | 'error'>(
     'initial',
   );
+  const shouldUpload = !getParam('upload', true, 'boolean');
+  const shouldDownload = getParam('download', false, 'boolean');
 
   const uploadData = useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,6 +53,24 @@ export default function Upload({
     },
   });
 
+  const downloadFiles = useCallback(async (files: FileUpload[]) => {
+    const zipWriter = new ZipWriter(new BlobWriter());
+
+    for (const file of files) {
+      await zipWriter.add(file.filename, new TextReader(file.content));
+    }
+
+    const blob = await zipWriter.close();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'study-data.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
   const handleUpload = async () => {
     setUploadState('uploading');
 
@@ -57,7 +78,11 @@ export default function Upload({
 
     const files: FileUpload[] = generateFiles ? generateFiles(sessionIDUpload, data) : [];
     if (uploadRaw) {
-      files.push({ filename: `${sessionIDUpload}.raw.json`, content: JSON.stringify(data), encoding: 'utf8' });
+      files.push({
+        filename: `${sessionIDUpload}.raw.json`,
+        content: JSON.stringify(data),
+        encoding: 'utf8',
+      });
     }
 
     try {
@@ -65,6 +90,15 @@ export default function Upload({
         sessionId: sessionIDUpload,
         files,
       };
+
+      if (shouldDownload) {
+        await downloadFiles(files);
+      }
+
+      if (!shouldUpload) {
+        next();
+        return;
+      }
 
       uploadData.mutate(payload);
     } catch (error) {

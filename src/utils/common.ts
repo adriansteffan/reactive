@@ -33,7 +33,48 @@ export interface ExperimentConfig {
 }
 
 export interface BaseComponentProps {
-  next: (data: object) => void,
-  data?: object,
-  metaData?: object,
+  next: (data: object) => void;
+  data?: object;
+  metaData?: object;
+}
+
+type ParamType = 'string' | 'number' | 'boolean' | 'array' | 'json';
+type ParamValue<T extends ParamType> = T extends 'number'
+  ? number | undefined
+  : T extends 'boolean'
+    ? boolean | undefined
+    : T extends 'array' | 'json'
+      ? any | undefined
+      : string | undefined;
+
+export function getParam<T extends ParamType>(
+  name: string,
+  defaultValue: ParamValue<T> | undefined,
+  type: T = 'string' as T,
+): ParamValue<T> | undefined {
+  const value = new URLSearchParams(window.location.search).get(name);
+  if (!value) return defaultValue;
+  if (value.toLowerCase() === 'undefined') return undefined;
+
+  const conversions: Record<ParamType, (v: string) => any> = {
+    string: (v) => v,
+    number: (v) => Number(v) || defaultValue,
+    boolean: (v) => v.toLowerCase() === 'true',
+    array: (v) => {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return defaultValue;
+      }
+    },
+    json: (v) => {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return defaultValue;
+      }
+    },
+  };
+
+  return conversions[type](value);
 }

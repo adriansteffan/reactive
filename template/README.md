@@ -1,6 +1,6 @@
 # Experiment Boilerplate
 
-Built with [reactive-psych](https://github.com/adriansteffan/reactive-psych)
+Built with [reactive](https://github.com/adriansteffan/reactive)
 
 ## Setup
 

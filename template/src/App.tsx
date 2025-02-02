@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
-import { Experiment, BaseComponentProps, ExperimentConfig } from 'reactive-psych';
+import { Experiment, BaseComponentProps, ExperimentConfig } from '@adriansteffan/reactive';
 
 const config: ExperimentConfig = { showProgressBar: true };
 
@@ -48,7 +48,7 @@ const experiment = [
       content: (
         <>
           <h1 className='text-4xl'>
-            <strong>Hello ReactivePsych! </strong>
+            <strong>Hello Reactive! </strong>
           </h1>
           <br />
           This is a basic text component. <br />

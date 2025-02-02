@@ -1,4 +1,4 @@
-# ReactivePsych
+# reactive
 
 A framework for quickly building interactive online experiments using Typescript, React, and TailwindCSS. Comes with a template project that has all batteries included (build tools, docker deployment setup, node server for upload etc.)
 The project is very early stage, so many of the abstractions are still very leaky and the documentation is largely unfinished.
@@ -13,7 +13,7 @@ You will need a current version of [node.js](https://nodejs.org/en/download/) in
 ### Create a template project
 
 ```
-npx reactive-psych
+npx @adriansteffan/reactive
 ```
 
 Then follow the instructions shown there and in the created `README.md`
@@ -52,8 +52,8 @@ npm link
 Then set up a local testing project:
 
 ```
-npx reactive-psych
-npm uninstall reactive-psych && npm link reactive-psych
+npx @adriansteffan/reactive
+npm uninstall @adriansteffan/reactive && npm link @adriansteffan/reactive
 ```
 
 

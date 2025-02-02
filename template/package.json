@@ -11,7 +11,7 @@
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "rp-dev-pull": "npm link reactive-psych"
+    "rp-dev-pull": "npm link @adriansteffan/reactive"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.61.3",
@@ -20,7 +20,7 @@
     "react-dom": "^18.2.0",
     "react-icons": "^5.1.0",
     "react-toastify": "^10.0.6",
-    "reactive-psych": "RP_VERSION",
+    "@adriansteffan/reactive": "RP_VERSION",
     "survey-react-ui": "^1.12.9"
   },
   "devDependencies": {

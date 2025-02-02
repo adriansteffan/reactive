@@ -1,6 +1,6 @@
 {
-  "name": "reactive-psych",
-  "version": "0.0.9",
+  "name": "@adriansteffan/reactive",
+  "version": "0.0.10",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,15 +11,15 @@
   },
   "bin": {
     "create-reactive-experiment": "bin/setup.js",
-    "reactive-psych": "bin/setup.js"
+    "@adriansteffan/reactive": "bin/setup.js"
   },
-  "main": "./dist/reactivepsych.umd.js",
-  "module": "./dist/reactivepsych.es.js",
+  "main": "./dist/reactive.umd.js",
+  "module": "./dist/reactive.es.js",
   "types": "./dist/mod.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/reactivepsych.es.js",
-      "require": "./dist/reactivepsych.umd.js",
+      "import": "./dist/reactive.es.js",
+      "require": "./dist/reactive.umd.js",
       "types": "./dist/mod.d.ts"
     },
     "./style.css": "./dist/style.css",
@@ -28,7 +28,7 @@
   "author": "Adrian Steffan",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/adriansteffan/reactive-psych/issues"
+    "url": "https://github.com/adriansteffan/reactive/issues"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.61.3",

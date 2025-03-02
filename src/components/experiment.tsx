@@ -8,7 +8,6 @@ import { ComponentType } from 'react';
 import Upload from './upload';
 import Text from './text';
 import Quest from './quest';
-import MasterMindleWrapper from './mastermindlewrapper';
 import MicrophoneCheck from './microphonecheck';
 
 // Default Custom Questions
@@ -24,7 +23,6 @@ const defaultComponents: ComponentsMap = {
   Quest,
   Upload,
   MicrophoneCheck,
-  MasterMindleWrapper,
 };
 
 const defaultCustomQuestions = {
@@ -127,7 +125,7 @@ export default function Experiment({
   }
 
   return (
-    <div className='px-4 w-screen'>
+    <div className='px-4 w-full'>
       <div
         className={` ${
           config.showProgressBar ? '' : 'hidden '

@@ -30,7 +30,6 @@ Premade components available so far:
 * Quest: SurveyJS questionnaires
     * ... all questiontypes supported by SurveyJS can be used
     * voicerecorder: a custom question type that allows participants to record voice
-* MasterMindleWrapper: (weird name atm, needs splitting up) Participants play a game similar to Mastermind with varying difficulties
 * Upload: Uploads the collected data on a button press by the participant 
 
 

@@ -32,7 +32,7 @@ export default defineConfig(() => {
         entry: resolve(__dirname, 'src/mod.tsx'),
         name: 'MyLibrary',
         formats: ['es', 'umd'],
-        fileName: (format: string) => `reactivepsych.${format}.js`,
+        fileName: (format: string) => `reactive.${format}.js`,
       },
       rollupOptions: {
         external: ['react', 'react-dom'],

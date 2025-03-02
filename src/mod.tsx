@@ -6,9 +6,8 @@ import Upload from './components/upload';
 import ExperimentProvider from './components/experimentprovider';
 import Experiment from './components/experiment';
 import { shuffle, BaseComponentProps, ExperimentConfig } from './utils/common';
-import MasterMindleWrapper from './components/mastermindlewrapper';
 
-export { Text, MicCheck, Quest, Upload, MasterMindleWrapper, Experiment, ExperimentProvider, shuffle };
+export { Text, MicCheck, Quest, Upload, Experiment, ExperimentProvider, shuffle };
 export type { BaseComponentProps, ExperimentConfig };
 export * from './utils/common';
 

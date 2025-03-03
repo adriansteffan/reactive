@@ -166,7 +166,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream }) => {
       ref={canvasRef}
       width={300}
       height={60}
-      className='mx-auto rounded-lg bg-white shadow-sm'
+      className='mx-auto rounded-lg bg-white shadow-xs'
     />
   );
 };

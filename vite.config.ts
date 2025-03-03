@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import dts from 'vite-plugin-dts';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
+import tailwindcssPostcss from '@tailwindcss/postcss';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 
@@ -16,15 +17,16 @@ export default defineConfig(() => {
       viteStaticCopy({
         targets: [
           {
-            src: 'tailwind.config.js',
+            src: 'src/index.css',
             dest: '.',
+            rename: 'preset.css',
           },
         ],
       }),
     ],
     css: {
       postcss: {
-        plugins: [tailwindcss, autoprefixer],
+        plugins: [tailwindcssPostcss, autoprefixer],
       },
     },
     build: {

@@ -7,6 +7,7 @@ import { ComponentType } from 'react';
 // Default components
 import Upload from './upload';
 import Text from './text';
+import ProlificEnding from './prolificending';
 import Quest from './quest';
 import MicrophoneCheck from './microphonecheck';
 
@@ -20,6 +21,7 @@ type ComponentsMap = {
 // Default components map
 const defaultComponents: ComponentsMap = {
   Text,
+  ProlificEnding,
   Quest,
   Upload,
   MicrophoneCheck,

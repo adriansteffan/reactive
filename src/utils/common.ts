@@ -52,10 +52,22 @@ export function getParam<T extends ParamType>(
   defaultValue: ParamValue<T> | undefined,
   type: T = 'string' as T,
 ): ParamValue<T> | undefined {
-  const value = new URLSearchParams(window.location.search).get(name);
-  if (!value) return defaultValue;
-  if (value.toLowerCase() === 'undefined') return undefined;
+  // First, check for the parameter in the base64-encoded JSON
+  const encodedJson = new URLSearchParams(window.location.search).get('_b');
+  if (encodedJson) {
+    try {
+      const jsonString = atob(encodedJson);
+      const decodedParams = JSON.parse(jsonString);
+      if (name in decodedParams) {
+        return decodedParams[name];
+      }
+    } catch {
+      // Silently fail if decoding or parsing fails, fallthrough to lower case
+    }
+  }
 
+  //Next, check for the parameter directly in the URL
+  // since this does not have the automatic type conversions of JSON.parse, we have to create helper functionss
   const conversions: Record<ParamType, (v: string) => any> = {
     string: (v) => v,
     number: (v) => Number(v) || defaultValue,
@@ -76,5 +88,26 @@ export function getParam<T extends ParamType>(
     },
   };
 
-  return conversions[type](value);
+  const convertValue = (value: any): ParamValue<T> | undefined => {
+    if (
+      (type === 'string' && typeof value === 'string') ||
+      (type === 'number' && typeof value === 'number') ||
+      (type === 'boolean' && typeof value === 'boolean') ||
+      (type === 'array' && Array.isArray(value)) ||
+      (type === 'json' && typeof value === 'object' && value !== null)
+    ) {
+      return value as ParamValue<T>;
+    }
+
+    if (typeof value === 'string') {
+      if (value.toLowerCase() === 'undefined') return undefined;
+      return conversions[type](value);
+    }
+
+    return defaultValue;
+  };
+
+  const value = new URLSearchParams(window.location.search).get(name);
+  if (value === undefined || value === null) return defaultValue;
+  return convertValue(value);
 }

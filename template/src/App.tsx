@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Experiment, BaseComponentProps, ExperimentConfig } from '@adriansteffan/reactive';
 
+
 const config: ExperimentConfig = { showProgressBar: true };
 
 const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number }) => {
@@ -94,6 +95,9 @@ const experiment = [
   {
     name: 'upload',
     type: 'Upload',
+    props: {
+      autoUpload: false,
+    }
   },
   {
     name: 'finaltext',

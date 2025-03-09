@@ -11,6 +11,10 @@ export function shuffle(array: any[]) {
   return array;
 }
 
+export function isDesktop(){
+  return (window as any).electronAPI !== undefined
+}
+
 // Generic type for all data structures
 export interface StudyEvent {
   index: number;

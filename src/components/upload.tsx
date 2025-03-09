@@ -1,9 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
 import { FileUpload, getParam, StudyEvent } from '../utils/common';
 import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
+
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
 
 interface UploadPayload {
   sessionId: string;
@@ -15,22 +18,175 @@ interface UploadResponse {
   message?: string;
 }
 
+
+interface FileBackend {
+  directoryExists(path: string): Promise<boolean>;
+  createDirectory(path: string): Promise<void>;
+  saveFile(filename: string, content: string, directory: string): Promise<void>;
+}
+
+const createElectronFileBackend = (): FileBackend => {
+  const electronAPI = (window as any).electronAPI;
+  
+  return {
+    directoryExists: async (path: string): Promise<boolean> => {
+      const result = await electronAPI.directoryExists(path);
+      return result.success && result.exists;
+    },
+    createDirectory: async (path: string): Promise<void> => {
+      await electronAPI.createDirectory(path);
+    },
+    saveFile: async (filename: string, content: string, directory: string): Promise<void> => {
+      await electronAPI.saveFile(filename, content, directory);
+    }
+  };
+};
+
+
+const createCapacitorFileBackend = (parentFolder?: string): FileBackend => {
+ 
+  const getPath = (path: string): string => {
+    if (!parentFolder) {
+      return path;
+    }
+    return path ? `${parentFolder}/${path}` : parentFolder;
+  };
+  
+  return {
+    directoryExists: async (path: string): Promise<boolean> => {
+      try {
+  
+        if (parentFolder) {
+          try {
+            await Filesystem.readdir({
+              path: parentFolder,
+              directory: Directory.Documents
+            });
+          } catch {
+            // Parent folder doesn't exist, so subpath doesn't exist either
+            return false;
+          }
+        }
+        
+        const fullPath = getPath(path);
+        const result = await Filesystem.readdir({
+          path: fullPath,
+          directory: Directory.Documents
+        });
+        return result.files.length >= 0; 
+      } catch {
+        return false;
+      }
+    },
+    
+    createDirectory: async (path: string): Promise<void> => {
+      try {
+       
+        if (parentFolder) {
+          try {
+            await Filesystem.mkdir({
+              path: parentFolder,
+              directory: Directory.Documents,
+              recursive: false
+            });
+          } catch (e) {
+            // Parent directory might already exist, that's fine
+          }
+        }
+        
+        const fullPath = getPath(path);
+        await Filesystem.mkdir({
+          path: fullPath,
+          directory: Directory.Documents,
+          recursive: true
+        });
+      } catch (e) {
+        console.error('Error creating directory:', e);
+        throw e;
+      }
+    },
+    
+    saveFile: async (filename: string, content: string, directory: string): Promise<void> => {
+      
+      const fullDirectory = getPath(directory);
+      
+      await Filesystem.writeFile({
+        path: `${fullDirectory}/${filename}`,
+        data: content,
+        directory: Directory.Documents,
+        encoding: 'utf8' as Encoding,
+      });
+    }
+  };
+};
+
+export type Platform = 'electron' | 'capacitor' | 'web';
+
+export const getPlatform = (): Platform => {
+  if ((window as any).electronAPI) {
+    return 'electron';
+  } else if (Capacitor.isNativePlatform()) {
+    return 'capacitor';
+  } else {
+    return 'web';
+  }
+};
+
+const getFileBackend = (parentDir?: string): { backend: FileBackend | null, type: Platform } => {
+  const platform = getPlatform();
+  
+  switch (platform) {
+    case 'electron':
+      return { backend: createElectronFileBackend(), type: platform };
+    case 'capacitor':
+      return { backend: createCapacitorFileBackend(parentDir), type: platform };
+    case 'web':
+      return { backend: null, type: platform };
+  }
+};
+
+// Function to generate a unique directory name
+const getUniqueDirectoryName = async (
+  backend: FileBackend,
+  baseSessionId: string
+): Promise<string> => {
+  let uniqueSessionID = baseSessionId;
+  
+  if (await backend.directoryExists(uniqueSessionID)) {
+    let counter = 1;
+    uniqueSessionID = `${baseSessionId}_${counter}`;
+    
+    while (await backend.directoryExists(uniqueSessionID)) {
+      counter++;
+      uniqueSessionID = `${baseSessionId}_${counter}`;
+    }
+  }
+  
+  return uniqueSessionID;
+};
+
 export default function Upload({
   data,
   next,
   sessionID,
   generateFiles,
   uploadRaw = true,
+  autoUpload = false,
+  androidFolderName,
 }: {
   data: StudyEvent[];
   next: () => void;
   sessionID?: string | null;
   generateFiles: (sessionID: string, data: StudyEvent[]) => FileUpload[];
   uploadRaw: boolean;
+  autoUpload: boolean;
+  androidFolderName?: string;
 }) {
   const [uploadState, setUploadState] = useState<'initial' | 'uploading' | 'success' | 'error'>(
     'initial',
   );
+  const uploadInitiatedRef = useRef(false);
+
   const shouldUpload = getParam('upload', true, 'boolean');
   const shouldDownload = getParam('download', false, 'boolean');
 
@@ -70,12 +226,19 @@ export default function Upload({
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, []);
-
-  const handleUpload = async () => {
+  
+  
+  const handleUpload = useCallback(async () => {
     setUploadState('uploading');
-
+  
+    if (uploadInitiatedRef.current) {
+      return;
+    }
+  
+    uploadInitiatedRef.current = true;
+  
     const sessionIDUpload = sessionID ?? uuidv4();
-
+  
     const files: FileUpload[] = generateFiles ? generateFiles(sessionIDUpload, data) : [];
     if (uploadRaw) {
       files.push({
@@ -84,32 +247,80 @@ export default function Upload({
         encoding: 'utf8',
       });
     }
-
+  
     try {
       const payload: UploadPayload = {
         sessionId: sessionIDUpload,
         files,
       };
-
+  
       if (shouldDownload) {
         await downloadFiles(files);
       }
-
+  
       if (!shouldUpload) {
         next();
         return;
       }
-
-      uploadData.mutate(payload);
+  
+      // Get the current platform and appropriate file backend
+      const { backend, type } = getFileBackend(androidFolderName);
+      
+      if (type === 'web') {
+        // Web API case
+        uploadData.mutate(payload);
+      } else if (backend) {
+        try {
+          // Get a unique directory name
+          const uniqueSessionID = await getUniqueDirectoryName(backend, sessionIDUpload);
+          
+          // Create the directory
+          await backend.createDirectory(uniqueSessionID);
+          
+          // Save all files
+          for (const file of files) {
+            await backend.saveFile(file.filename, file.content, uniqueSessionID);
+          }
+          
+          setUploadState('success');
+          next();
+        } catch (error) {
+          console.error(`Error saving files with ${type}:`, error);
+          setUploadState('error');
+        }
+      }
     } catch (error) {
       console.error('Error uploading:', error);
       setUploadState('error');
     }
-  };
+  }, [
+    sessionID,
+    generateFiles,
+    data,
+    uploadRaw,
+    shouldDownload,
+    shouldUpload,
+    downloadFiles,
+    next,
+    uploadData,
+  ]);
+
+  useEffect(() => {
+    if (autoUpload && !uploadInitiatedRef.current && handleUpload) {
+      handleUpload();
+    }
+  }, [autoUpload, handleUpload]);
+
+  // reset the duplicate prevention if there was an error uploading
+  useEffect(() => {
+    if (uploadState === 'error') {
+      uploadInitiatedRef.current = false;
+    }
+  }, [uploadState]);
 
   return (
     <div className='flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16'>
-      {uploadState == 'initial' && (
+      {uploadState == 'initial' && !autoUpload && (
         <>
           <p className=''>
             Thank you for participating! Please click the button below to submit your data.

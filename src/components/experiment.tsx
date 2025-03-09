@@ -9,6 +9,8 @@ import Upload from './upload';
 import Text from './text';
 import ProlificEnding from './prolificending';
 import Quest from './quest';
+import EnterFullscreen from './enterfullscreen';
+import ExitFullscreen from './exitfullscreen';
 import MicrophoneCheck from './microphonecheck';
 
 // Default Custom Questions
@@ -22,6 +24,8 @@ type ComponentsMap = {
 const defaultComponents: ComponentsMap = {
   Text,
   ProlificEnding,
+  EnterFullscreen,
+  ExitFullscreen,  
   Quest,
   Upload,
   MicrophoneCheck,

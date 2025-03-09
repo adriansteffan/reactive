@@ -1,11 +1,9 @@
-import { defineConfig } from 'vite'
+// config shared between the electron and non electron part of vite
 import react from '@vitejs/plugin-react'
 import topLevelAwait from 'vite-plugin-top-level-await';
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-//@ts-ignore
-export default defineConfig(() => {
-  return {
+
+export const sharedConfig = {
     plugins: [react(),topLevelAwait({
       // The export name of top-level await promise for each chunk module
       promiseExportName: '__tla',
@@ -21,4 +19,3 @@ export default defineConfig(() => {
       }
     }
   };
-});

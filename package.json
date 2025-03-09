@@ -1,6 +1,6 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -31,6 +31,9 @@
     "url": "https://github.com/adriansteffan/reactive/issues"
   },
   "dependencies": {
+    "@capacitor/core": "^7.0.1",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
     "@tanstack/react-query": "^5.61.3",
     "@tanstack/react-query-devtools": "^5.61.3",
     "@zip.js/zip.js": "^2.7.53",

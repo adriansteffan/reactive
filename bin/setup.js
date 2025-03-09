@@ -66,7 +66,7 @@ async function main() {
       process.exit(1);
     }
 
-    copyDir(templatePath, projectPath, ['package.json']);
+    copyDir(templatePath, projectPath, ['package.json','capacitor.config.js']);
 
     const templatePackageJsonPath = join(templatePath, 'package.json');
     if (!existsSync(templatePackageJsonPath)) {
@@ -78,6 +78,18 @@ async function main() {
     packageJsonContent = packageJsonContent.replace(/PROJECT_NAME/g, projectName).replace(/RP_VERSION/g, version);
 
     writeFileSync(join(projectPath, 'package.json'), packageJsonContent);
+
+
+    const templateCapacitorPath = join(templatePath, 'capacitor.config.js');
+    if (!existsSync(templateCapacitorPath)) {
+      console.error('Template capacitor.config.js not found');
+      process.exit(1);
+    }
+
+    let capacitorContent = readFileSync(templateCapacitorPath, 'utf8');
+    capacitorContent = capacitorContent.replace(/PROJECT_NAME/g, projectName);
+
+    writeFileSync(join(projectPath, 'capacitor.config.js'), capacitorContent);
 
     console.log(`
 Project ${projectName} created successfully!

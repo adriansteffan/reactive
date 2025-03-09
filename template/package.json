@@ -2,7 +2,47 @@
   "name": "PROJECT_NAME",
   "private": true,
   "version": "0.0.0",
+  "author": "",
+  "description": "",
   "type": "module",
+  "main": "dist-electron/main/index.js",
+  "build": {
+    "appId": "",
+    "productName": "PROJECT_NAME",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron",
+      "dist"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "backend": "npm run dev --prefix backend",
@@ -11,10 +51,20 @@
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "rp-dev-pull": "npm link @adriansteffan/reactive"
+    "rp-dev-pull": "npm link @adriansteffan/reactive",
+    "electron:dev": "NODE_ENV=development electron-vite dev",
+    "electron:build": "vite build && electron-vite build",
+    "electron:preview": "electron-vite preview",
+    "package:win": "electron-vite build && electron-builder --win",
+    "package:mac": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {
     "@adriansteffan/reactive": "RP_VERSION",
+    "@capacitor/android": "^7.0.1",
+    "@capacitor/core": "^7.0.1",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/ios": "^7.0.1",
+    "@capacitor/share": "^7.0.0",
     "@tanstack/react-query": "^5.61.3",
     "@tanstack/react-query-devtools": "^5.61.3",
     "react": "^18.2.0",
@@ -24,6 +74,7 @@
     "survey-react-ui": "^1.12.9"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.0.1",
     "@tailwindcss/postcss": "^4.0.9",
     "@tailwindcss/typography": "^0.5.16",
     "@types/howler": "^2.2.11",
@@ -34,6 +85,9 @@
     "@typescript-eslint/parser": "^8.16.0",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^9.1.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",

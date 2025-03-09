@@ -80,16 +80,16 @@ async function main() {
     writeFileSync(join(projectPath, 'package.json'), packageJsonContent);
 
 
-    const templateCapacitorPath = join(templatePath, 'capacitor.config.js');
+    const templateCapacitorPath = join(templatePath, 'capacitor.config.ts');
     if (!existsSync(templateCapacitorPath)) {
-      console.error('Template capacitor.config.js not found');
+      console.error('Template capacitor.config.ts not found');
       process.exit(1);
     }
 
     let capacitorContent = readFileSync(templateCapacitorPath, 'utf8');
     capacitorContent = capacitorContent.replace(/PROJECT_NAME/g, projectName);
 
-    writeFileSync(join(projectPath, 'capacitor.config.js'), capacitorContent);
+    writeFileSync(join(projectPath, 'capacitor.config.ts'), capacitorContent);
 
     console.log(`
 Project ${projectName} created successfully!

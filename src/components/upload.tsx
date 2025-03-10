@@ -319,7 +319,7 @@ export default function Upload({
   }, [uploadState]);
 
   return (
-    <div className='flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16'>
+    <div className='flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10'>
       {uploadState == 'initial' && !autoUpload && (
         <>
           <p className=''>

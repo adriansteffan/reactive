@@ -131,11 +131,11 @@ export default function Experiment({
   }
 
   return (
-    <div className='px-4 w-full'>
+    <div className='w-full'>
       <div
         className={` ${
           config.showProgressBar ? '' : 'hidden '
-        } mt-4 sm:mt-12 max-w-2xl mx-auto flex-1 h-6 bg-gray-200 rounded-full overflow-hidden`}
+        } px-4 mt-4 sm:mt-12 max-w-2xl mx-auto flex-1 h-6 bg-gray-200 rounded-full overflow-hidden`}
       >
         <div
           className={`h-full bg-gray-200 rounded-full duration-300 ${

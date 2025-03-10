@@ -271,7 +271,7 @@ export const VoiceRecorder = ({
   };
 
   return (
-    <div className='flex flex-col items-center space-y-4 p-4 bg-white'>
+    <div className='flex flex-col items-center space-y-4 p-4 bg-white px-8 '>
       {/* Recording button */}
       {!audioUrl && (
         <button

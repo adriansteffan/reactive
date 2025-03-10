@@ -17,7 +17,7 @@ function Text({
   };
 
   return (
-    <div className={`max-w-prose mx-auto ${className} mt-20 mb-20`}>
+    <div className={`max-w-prose mx-auto ${className} mt-20 mb-20 px-4 `}>
       <article
         className={`prose prose-2xl prose-slate text-xl prose-a:text-blue-600 prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold text-black leading-relaxed
             ${animate ? 'animate-slide-down opacity-0' : ''}`}

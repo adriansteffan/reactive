@@ -114,7 +114,7 @@ const MicrophoneCheck = ({ next }: { next: (data: object) => void }) => {
   const [recordingExists, setRecordingExists] = useState(false);
 
   return (
-    <div className={`max-w-prose mx-auto mt-20 mb-20`}>
+    <div className={`max-w-prose mx-auto mt-20 mb-20 px-4 `}>
       <article className='prose prose-2xl prose-slate text-xl text-black leading-relaxed'>
         <h1 className='text-3xl mb-6 font-semibold'>Let's test your microphone!</h1>
         <p>

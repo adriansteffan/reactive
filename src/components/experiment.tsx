@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { ExperimentConfig, now } from '../utils/common';
-import { useEffect, useRef, useState } from 'react';
+import { ExperimentConfig, now, Store, TrialData } from '../utils/common';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ComponentType } from 'react';
 
 // Default components
 import Upload from './upload';
 import Text from './text';
+import PlainInput from './plaininput';
 import ProlificEnding from './prolificending';
 import Quest from './quest';
 import EnterFullscreen from './enterfullscreen';
@@ -25,63 +26,211 @@ const defaultComponents: ComponentsMap = {
   Text,
   ProlificEnding,
   EnterFullscreen,
-  ExitFullscreen,  
+  ExitFullscreen,
   Quest,
   Upload,
   MicrophoneCheck,
+  PlainInput,
 };
 
 const defaultCustomQuestions = {
   voicerecorder: VoicerecorderQuestionComponent,
 };
 
-interface ExperimentTrial {
+interface ComponentTrial {
   name: string;
   type: string;
-  props?: Record<string, any>;
+  props?: Record<string, any> | ((store: Store, data: TrialData[]) => Record<string, any>);
 }
 
-interface TrialData {
-  index: number;
-  type: string;
-  name: string;
-  data: object | undefined;
-  start: number;
-  end: number;
-  duration: number;
+
+// The | string parts need some refactoring in the future, but right now this prevents the consumer from having to write "as const" behind every type
+
+interface MarkerTrial {
+  type: 'MARKER' | string;
+  id: string;
 }
 
-// Function to transform experiment definition into components
-const transformExperiment = (
-  experimentDef: ExperimentTrial[],
-  index: number,
+interface IfGotoTrial {
+  type: 'IF_GOTO' | string;
+  cond: (store: Store, data: TrialData[]) => boolean;
+  marker: string;
+}
+
+interface UpdateStoreTrial {
+  type: 'UPDATE_STORE' | string;
+  fun: (store: Store, data: TrialData[]) => Store;
+}
+
+interface IfBlockTrial {
+  type: 'IF_BLOCK' | string;
+  cond: (store: Store, data: TrialData[]) => boolean;
+  timeline: ExperimentTrial[];
+}
+
+interface WhileBlockTrial {
+  type: 'WHILE_BLOCK' | string;
+  cond: (store: Store, data: TrialData[]) => boolean;
+  timeline: ExperimentTrial[];
+}
+
+type ExperimentTrial =
+  | MarkerTrial
+  | IfGotoTrial
+  | UpdateStoreTrial
+  | IfBlockTrial
+  | WhileBlockTrial
+  | ComponentTrial;
+
+interface ComponentInstruction {
+  type: 'Component';
+  content: ComponentTrial;
+}
+
+interface IfGotoInstruction {
+  type: 'IfGoto';
+  cond: (store: Store, data: TrialData[]) => boolean;
+  marker: string;
+}
+
+interface UpdateStoreInstruction {
+  type: 'UpdateStore';
+  fun: (store: Store, data: TrialData[]) => Store;
+}
+
+type BytecodeInstruction = ComponentInstruction | IfGotoInstruction | UpdateStoreInstruction;
+
+const renderComponentTrial = (
+  componentTrial: ComponentTrial,
+  key: number,
   next: (data: any) => void,
+  updateStore: (update: Store) => void,
   data: any,
   componentsMap: ComponentsMap,
   customQuestions: ComponentsMap,
+  store: Store,
 ) => {
-  if (index >= experimentDef.length) {
-    return <></>;
-  }
-
-  const def = experimentDef[index];
-
-  const Component = componentsMap[def.type];
+  const Component = componentsMap[componentTrial.type];
 
   if (!Component) {
-    throw new Error(`No component found for type: ${def.type}`);
+    throw new Error(`No component found for type: ${componentTrial.type}`);
   }
+
+  const componentProps =
+    typeof componentTrial.props === 'function'
+      ? componentTrial.props(store, data)
+      : componentTrial.props || {};
 
   return (
     <Component
       next={next}
-      key={index}
+      updateStore={updateStore}
+      key={key}
       data={data}
-      {...(def.type === 'Quest' ? { customQuestions: customQuestions } : {})}
-      {...def.props}
+      {...(componentTrial.type === 'Quest' ? { customQuestions: customQuestions } : {})}
+      {...componentProps}
     />
   );
 };
+
+function prefixUserMarkers(marker: string) {
+  return `user_${marker}`;
+}
+
+let uniqueMarkerCounter = 0;
+function generateUniqueMarker(prefix: string): string {
+  return `${prefix}_auto_${uniqueMarkerCounter++}`;
+}
+
+function compileTimeline(timeline: ExperimentTrial[]): {
+  instructions: BytecodeInstruction[];
+  markers: { [key: string]: number };
+} {
+  const instructions: BytecodeInstruction[] = [];
+  const markers: { [key: string]: number } = {};
+
+  function processTimeline(trials: ExperimentTrial[]) {
+    for (let i = 0; i < trials.length; i++) {
+      const trial = trials[i];
+
+      switch (trial.type) {
+        case 'MARKER':
+          markers[prefixUserMarkers((trial as MarkerTrial).id)] = instructions.length;
+          break;
+
+        case 'IF_GOTO':
+          const ifgotoTrial = trial as IfGotoTrial;
+          instructions.push({
+            type: 'IfGoto',
+            cond: ifgotoTrial.cond,
+            marker: prefixUserMarkers(ifgotoTrial.marker),
+          });
+          break;
+
+        case 'UPDATE_STORE':
+          instructions.push({
+            type: 'UpdateStore',
+            fun: (trial as UpdateStoreTrial).fun,
+          });
+          break;
+
+        case 'IF_BLOCK': {
+          const ifBlockTrial = trial as IfBlockTrial;
+
+          const endMarker = generateUniqueMarker('if_end');
+
+          instructions.push({
+            type: 'IfGoto',
+            cond: (store, data) => !ifBlockTrial.cond(store, data), // Negate condition to skip if false
+            marker: endMarker,
+          });
+
+          processTimeline(ifBlockTrial.timeline);
+
+          markers[endMarker] = instructions.length;
+          break;
+        }
+
+        case 'WHILE_BLOCK': {
+          const whileBlockTrial = trial as WhileBlockTrial;
+
+          const startMarker = generateUniqueMarker('while_start');
+          const endMarker = generateUniqueMarker('while_end');
+
+          markers[startMarker] = instructions.length;
+
+          instructions.push({
+            type: 'IfGoto',
+            cond: (store, data) => !whileBlockTrial.cond(store, data),
+            marker: endMarker,
+          });
+
+          processTimeline(whileBlockTrial.timeline);
+
+          instructions.push({
+            type: 'IfGoto',
+            cond: () => true, // Always jump back
+            marker: startMarker,
+          });
+
+          markers[endMarker] = instructions.length;
+          break;
+        }
+
+        default:
+          instructions.push({
+            type: 'Component',
+            content: trial as ComponentTrial,
+          });
+          break;
+      }
+    }
+  }
+
+  processTimeline(timeline);
+
+  return { instructions, markers };
+}
 
 export default function Experiment({
   timeline,
@@ -96,26 +245,38 @@ export default function Experiment({
   components?: ComponentsMap;
   questions?: ComponentsMap;
 }) {
+  const trialByteCode = useMemo(() => {
+    return compileTimeline(timeline);
+  }, [timeline]);
+
   const [trialCounter, setTrialCounter] = useState(0);
+  const [totalTrialsCompleted, setTotalTrialsCompleted] = useState(0);
   const [data, setData] = useState<TrialData[]>([]);
   const trialStartTimeRef = useRef(now());
+  const experimentStoreRef = useRef({});
 
   const componentsMap = { ...defaultComponents, ...components };
   const customQuestions: ComponentsMap = { ...defaultCustomQuestions, ...questions };
 
-  const progress = trialCounter / (timeline.length - 1);
+  const progress = trialCounter / (trialByteCode.instructions.length - 1);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [trialCounter]);
 
+  function updateStore(update: Store) {
+    const updatedStore = update;
+    experimentStoreRef.current = { ...experimentStoreRef.current, ...updatedStore };
+  }
+
   function next(newData?: object): void {
     const currentTime = now();
-    const currentTrial = timeline[trialCounter];
+    const currentTrial = (trialByteCode.instructions[trialCounter] as ComponentInstruction).content;
 
     if (currentTrial && data) {
       const trialData: TrialData = {
         index: trialCounter,
+        trialNumber: totalTrialsCompleted,
         type: currentTrial.type,
         name: currentTrial.name,
         data: newData,
@@ -124,10 +285,47 @@ export default function Experiment({
         duration: currentTime - trialStartTimeRef.current,
       };
       setData([...data, trialData]);
+      setTotalTrialsCompleted(totalTrialsCompleted + 1);
     }
 
-    trialStartTimeRef.current = currentTime;
-    setTrialCounter(trialCounter + 1);
+    let nextCounter = trialCounter + 1;
+    let foundNextComponent = false;
+
+    // Process control flow instructions until we find a Component or reach the end
+    while (!foundNextComponent && nextCounter < trialByteCode.instructions.length) {
+      const nextInstruction = trialByteCode.instructions[nextCounter];
+
+      switch (nextInstruction.type) {
+        case 'IfGoto':
+          if (nextInstruction.cond(experimentStoreRef.current, data)) {
+            const markerIndex = trialByteCode.markers[nextInstruction.marker];
+            if (markerIndex !== undefined) {
+              nextCounter = markerIndex;
+            } else {
+              console.error(`Marker ${nextInstruction.marker} not found`);
+              nextCounter++;
+            }
+          } else {
+            nextCounter++;
+          }
+          break;
+
+        case 'UpdateStore':
+          updateStore(nextInstruction.fun(experimentStoreRef.current, data));
+          nextCounter++;
+          break;
+
+        case 'Component':
+          foundNextComponent = true;
+          break;
+
+        default: // Unknown, skip
+          nextCounter++;
+      }
+    }
+
+    trialStartTimeRef.current = now();
+    setTrialCounter(nextCounter);
   }
 
   return (
@@ -154,7 +352,18 @@ export default function Experiment({
           }}
         />
       </div>
-      {transformExperiment(timeline, trialCounter, next, data, componentsMap, customQuestions)}
+      {trialCounter < trialByteCode.instructions.length &&
+        trialByteCode.instructions[trialCounter].type === 'Component' &&
+        renderComponentTrial(
+          (trialByteCode.instructions[trialCounter] as ComponentInstruction).content,
+          totalTrialsCompleted,
+          next,
+          updateStore,
+          data,
+          componentsMap,
+          customQuestions,
+          experimentStoreRef.current, // Pass the current store
+        )}
     </div>
   );
 }

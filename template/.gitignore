@@ -13,6 +13,8 @@ dist-electron
 dist-ssr
 release
 *.local
+android
+ios
 
 # Editor directories and files
 .vscode/*

@@ -10,7 +10,7 @@ function Text({
   onButtonClick?: () => void;
   className?: string;
   next: (newData: object) => void;
-  animate?: boolean; // new parameter
+  animate?: boolean;
 }) {
   const handleClick = () => {
     next({});

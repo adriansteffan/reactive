@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+
 export function now() {
   return Math.round(performance.now());
 }
@@ -11,13 +13,14 @@ export function shuffle(array: any[]) {
   return array;
 }
 
-export function isDesktop(){
-  return (window as any).electronAPI !== undefined
+export function isDesktop() {
+  return (window as any).electronAPI !== undefined;
 }
 
 // Generic type for all data structures
-export interface StudyEvent {
+export interface TrialData {
   index: number;
+  trialNumber: number,
   type: string;
   name: string;
   data: any;
@@ -36,10 +39,13 @@ export interface ExperimentConfig {
   showProgressBar: boolean;
 }
 
+export interface Store { [key: string]: any }
+
 export interface BaseComponentProps {
   next: (data: object) => void;
-  data?: object;
-  metaData?: object;
+  data: TrialData[];
+  store?: Store;
+  updateStore: (mergeIn: Store) => void;
 }
 
 type ParamType = 'string' | 'number' | 'boolean' | 'array' | 'json';
@@ -115,3 +121,17 @@ export function getParam<T extends ParamType>(
   if (value === undefined || value === null) return defaultValue;
   return convertValue(value);
 }
+
+
+
+export type Platform = 'desktop' | 'mobile' | 'web';
+
+export const getPlatform = (): Platform => {
+  if ((window as any).electronAPI) {
+    return 'desktop';
+  } else if (Capacitor.isNativePlatform()) {
+    return 'mobile';
+  } else {
+    return 'web';
+  }
+};

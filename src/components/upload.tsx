@@ -2,11 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
-import { FileUpload, getParam, StudyEvent } from '../utils/common';
+import { BaseComponentProps, FileUpload, getParam, getPlatform, Platform, Store, TrialData } from '../utils/common';
 import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { Capacitor } from '@capacitor/core';
 
 interface UploadPayload {
   sessionId: string;
@@ -120,25 +119,13 @@ const createCapacitorFileBackend = (parentFolder?: string): FileBackend => {
   };
 };
 
-export type Platform = 'electron' | 'capacitor' | 'web';
-
-export const getPlatform = (): Platform => {
-  if ((window as any).electronAPI) {
-    return 'electron';
-  } else if (Capacitor.isNativePlatform()) {
-    return 'capacitor';
-  } else {
-    return 'web';
-  }
-};
-
 const getFileBackend = (parentDir?: string): { backend: FileBackend | null, type: Platform } => {
   const platform = getPlatform();
   
   switch (platform) {
-    case 'electron':
+    case 'desktop':
       return { backend: createElectronFileBackend(), type: platform };
-    case 'capacitor':
+    case 'mobile':
       return { backend: createCapacitorFileBackend(parentDir), type: platform };
     case 'web':
       return { backend: null, type: platform };
@@ -168,16 +155,15 @@ const getUniqueDirectoryName = async (
 export default function Upload({
   data,
   next,
+  store,
   sessionID,
   generateFiles,
   uploadRaw = true,
   autoUpload = false,
   androidFolderName,
-}: {
-  data: StudyEvent[];
-  next: () => void;
+}: BaseComponentProps & {
   sessionID?: string | null;
-  generateFiles: (sessionID: string, data: StudyEvent[]) => FileUpload[];
+  generateFiles: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
   uploadRaw: boolean;
   autoUpload: boolean;
   androidFolderName?: string;
@@ -199,7 +185,7 @@ export default function Upload({
     onSuccess: (res: UploadResponse) => {
       if (res.status === 200) {
         setUploadState('success');
-        next();
+        next({});
       } else {
         setUploadState('error');
       }
@@ -239,7 +225,7 @@ export default function Upload({
   
     const sessionIDUpload = sessionID ?? uuidv4();
   
-    const files: FileUpload[] = generateFiles ? generateFiles(sessionIDUpload, data) : [];
+    const files: FileUpload[] = generateFiles ? generateFiles(sessionIDUpload, data, store) : [];
     if (uploadRaw) {
       files.push({
         filename: `${sessionIDUpload}.raw.json`,
@@ -259,7 +245,7 @@ export default function Upload({
       }
   
       if (!shouldUpload) {
-        next();
+        next({});
         return;
       }
   
@@ -283,7 +269,7 @@ export default function Upload({
           }
           
           setUploadState('success');
-          next();
+          next({});
         } catch (error) {
           console.error(`Error saving files with ${type}:`, error);
           setUploadState('error');

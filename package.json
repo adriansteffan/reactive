@@ -1,6 +1,6 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -34,6 +34,8 @@
     "@capacitor/core": "^7.0.1",
     "@capacitor/filesystem": "^7.0.0",
     "@capacitor/share": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
+    "@hugotomazi/capacitor-navigation-bar": "https://github.com/NYPL/capacitor-navigation-bar/releases/download/v4.1.0-fix.1/hugotomazi-capacitor-navigation-bar-4.1.0-fix.1.tgz",
     "@tanstack/react-query": "^5.61.3",
     "@tanstack/react-query-devtools": "^5.61.3",
     "@zip.js/zip.js": "^2.7.53",

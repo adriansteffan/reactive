@@ -1,7 +1,13 @@
 import { BaseComponentProps } from '../utils/common';
 import { useEffect } from 'react';
+import { StatusBar } from '@capacitor/status-bar';
+import { NavigationBar } from '@hugotomazi/capacitor-navigation-bar';
 
 function exitFullscreen() {
+
+  StatusBar.show();
+  NavigationBar.show();
+
   if (document.exitFullscreen) {
     document.exitFullscreen();
   } else if ((document as any).mozCancelFullScreen) {

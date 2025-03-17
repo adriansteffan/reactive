@@ -178,6 +178,8 @@ For ease of use, it makes sense to run the web version for most of the developme
 
 To build an iOS app containing your experiment, you will need a machine running MacOS and an installation of [XCode](https://apps.apple.com/us/app/xcode/id497799835). Furthermore, you will need to install [CocoaPods](https://cocoapods.org/), which is most easily installed with [Homebrew](https://brew.sh/).
 
+Temporary uglyness: Due to a bug in the dependency in for the capacitor fullscreening plugin, we need to manually add a file if we want to build for iOS, described (in the related Github issue)[https://github.com/hugotomazi/navigation-bar/issues/31#issuecomment-2687412929]. Here's to hope that that will be fixed in the near future.
+
 To set up the iOS project, run 
 
 ```

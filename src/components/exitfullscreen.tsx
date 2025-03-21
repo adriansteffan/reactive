@@ -1,12 +1,12 @@
 import { BaseComponentProps } from '../utils/common';
 import { useEffect } from 'react';
 import { StatusBar } from '@capacitor/status-bar';
-import { NavigationBar } from '@hugotomazi/capacitor-navigation-bar';
+import { ImmersiveMode } from '@adriansteffan/immersive-mode';
 
 function exitFullscreen() {
 
   StatusBar.show();
-  NavigationBar.show();
+  ImmersiveMode.disable();
 
   if (document.exitFullscreen) {
     document.exitFullscreen();

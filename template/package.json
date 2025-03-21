@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "@adriansteffan/reactive": "RP_VERSION",
+    "@adriansteffan/immersive-mode": "0.0.1",
     "@capacitor/android": "^7.0.1",
     "@capacitor/core": "^7.0.1",
     "@capacitor/filesystem": "^7.0.0",

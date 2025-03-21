@@ -13,6 +13,7 @@ import Quest from './quest';
 import EnterFullscreen from './enterfullscreen';
 import ExitFullscreen from './exitfullscreen';
 import MicrophoneCheck from './microphonecheck';
+import RequestFilePermission from './mobilefilepermission';
 
 // Default Custom Questions
 import VoicerecorderQuestionComponent from './voicerecorder';
@@ -31,6 +32,7 @@ const defaultComponents: ComponentsMap = {
   Upload,
   MicrophoneCheck,
   PlainInput,
+  RequestFilePermission
 };
 
 const defaultCustomQuestions = {

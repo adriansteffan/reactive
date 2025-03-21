@@ -2,14 +2,14 @@ import { BaseComponentProps } from '../utils/common';
 import Text from '../components/text';
 
 import { StatusBar } from '@capacitor/status-bar';
-import { NavigationBar } from '@hugotomazi/capacitor-navigation-bar';
+import { ImmersiveMode } from '@adriansteffan/immersive-mode';
 
 
 function enterFullscreen(element: any) {
   
   // Android
   StatusBar.hide();
-  NavigationBar.hide();
+  ImmersiveMode.enable();
 
   if (element.requestFullscreen) {
     element.requestFullscreen();

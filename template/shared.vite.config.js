@@ -10,6 +10,24 @@ export const sharedConfig = {
       // The function to generate import names of top-level await promise in each chunk module
       promiseImportName: (i) => `__tla_${i}`,
     }),],
+    build: {
+      target: 'es2015',
+      polyfillModulePreload: true,
+      terserOptions: {
+        parse: {
+          ecma: 2015,
+        },
+        compress: {
+          ecma: 5,
+          warnings: false,
+          comparisons: false,
+        },
+        output: {
+          ecma: 5,
+          comments: false,
+        },
+      },
+    },
     server: {
       proxy: {
         '/backend': {

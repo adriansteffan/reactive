@@ -9,9 +9,9 @@ import EnterFullscreen from './components/enterfullscreen';
 import ExitFullscreen from './components/exitfullscreen';
 import ExperimentProvider from './components/experimentprovider';
 import Experiment from './components/experiment';
+import RequestFilePermission from './components/mobilefilepermission';
 import { BaseComponentProps, ExperimentConfig } from './utils/common';
 
-export { Text, ProlificEnding, MicCheck, Quest, Upload, EnterFullscreen, ExitFullscreen, Experiment, ExperimentProvider, PlainInput};
+export { Text, ProlificEnding, MicCheck, Quest, Upload, EnterFullscreen, ExitFullscreen, Experiment, ExperimentProvider, PlainInput, RequestFilePermission};
 export type { BaseComponentProps, ExperimentConfig };
 export * from './utils/common';
-

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ExperimentRunner, BaseComponentProps, ExperimentConfig } from '@adriansteffan/reactive';
 
 
-const config: ExperimentConfig = { showProgressBar: true };
+const config: ExperimentConfig = { showProgressBar: false };
 
 const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number }) => {
   const [count, setCount] = useState(0);

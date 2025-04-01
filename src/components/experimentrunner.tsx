@@ -58,7 +58,7 @@ function isRuntimeComponentContent(content: any): content is RuntimeComponentCon
 export default function ExperimentRunner({
     timeline,
     config = {
-        showProgressBar: true,
+        showProgressBar: false,
     },
     components = {},
     questions = {},

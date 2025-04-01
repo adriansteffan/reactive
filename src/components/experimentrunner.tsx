@@ -1,4 +1,3 @@
-// Experiment.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { ExperimentConfig, Store } from '../utils/common';

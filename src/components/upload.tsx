@@ -313,7 +313,7 @@ export default function Upload({
           </p>
           <button
             onClick={handleUpload}
-            className='mt-8 bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
+            className='mt-8 cursor-pointer bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
           >
             Submit Data
           </button>
@@ -335,7 +335,7 @@ export default function Upload({
           </div>
           <button
             onClick={handleUpload}
-            className='px-4 py-2 bg-blue-500 text-white rounded-sm hover:bg-blue-600 transition-colors'
+            className='px-4 py-2 cursor-pointer bg-blue-500 text-white rounded-sm hover:bg-blue-600 transition-colors'
           >
             Try Again
           </button>

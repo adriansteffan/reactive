@@ -45,14 +45,14 @@ const defaultCustomQuestions: ComponentsMap = {
 };
 
 interface RuntimeComponentContent {
-  name: string;
+  name?: string;
   type: string;
   props?: Record<string, any> | ((store: Store, data: RefinedTrialData[]) => Record<string, any>);
 }
 
 function isRuntimeComponentContent(content: any): content is RuntimeComponentContent {
     return typeof content === 'object' && content !== null &&
-           typeof content.type === 'string' && typeof content.name === 'string';
+           typeof content.type === 'string';
 }
 
 export default function ExperimentRunner({
@@ -109,7 +109,7 @@ export default function ExperimentRunner({
                     end: currentTime,
                     duration: currentTime - trialStartTimeRef.current,
                     type: content.type,
-                    name: content.name,
+                    name: content.name ?? '',
                     responseData: componentResponseData,
                 };
                 setData(prevData => [...prevData, trialData]);

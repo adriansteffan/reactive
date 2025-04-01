@@ -3,6 +3,8 @@ import Text from '../components/text';
 
 export default function ProlificEnding({
   prolificCode,
+  data,
+  updateStore
 }: { prolificCode?: string } & BaseComponentProps) {
   let prolificCodeUsed = prolificCode ?? getParam('cc', undefined, 'string') ?? null;
 
@@ -26,5 +28,5 @@ export default function ProlificEnding({
     </div>
   );
 
-  return <Text content={content} buttonText='' next={() => {}} />;
+  return <Text data={data} updateStore={updateStore} content={content} buttonText='' next={() => {}} />;
 }

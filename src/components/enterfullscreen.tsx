@@ -29,6 +29,8 @@ export default function EnterFullscreen({
   content,
   buttonText,
   next,
+  data,
+  updateStore
 }: { prolificCode?: string; content?: React.ReactNode; buttonText?: string } & BaseComponentProps) {
   const contentWrap = (
     <div className='flex flex-col items-center'>
@@ -41,6 +43,8 @@ export default function EnterFullscreen({
 
   return (
     <Text
+      data={data}
+      updateStore={updateStore}
       content={contentWrap}
       buttonText={buttonText ?? 'Enter Fullscreen Mode'}
       next={() => {

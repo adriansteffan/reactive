@@ -1,3 +1,5 @@
+import { BaseComponentProps } from '../mod';
+
 function Text({
   content,
   buttonText = 'Click me',
@@ -9,9 +11,9 @@ function Text({
   buttonText?: string;
   onButtonClick?: () => void;
   className?: string;
-  next: (newData: object) => void;
   animate?: boolean;
-}) {
+} & BaseComponentProps) {
+
   const handleClick = () => {
     next({});
   };

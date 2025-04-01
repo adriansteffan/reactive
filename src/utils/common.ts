@@ -38,7 +38,7 @@ export interface ExperimentConfig {
 export interface Store { [key: string]: any }
 
 export interface BaseComponentProps {
-  next: (data: object) => void;
+  next: (data?: object, actualStartTime?: number, actualStopTime?: number) => void;
   data: TrialData[];
   store?: Store;
   updateStore: (mergeIn: Store) => void;

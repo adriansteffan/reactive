@@ -1,9 +1,5 @@
 import { Capacitor } from "@capacitor/core";
 
-export function now() {
-  return Math.round(performance.now());
-}
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function shuffle(array: any[]) {
   for (let i = array.length - 1; i >= 0; i--) {

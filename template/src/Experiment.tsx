@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
-import { Experiment, BaseComponentProps, ExperimentConfig } from '@adriansteffan/reactive';
+import { ExperimentRunner, BaseComponentProps, ExperimentConfig } from '@adriansteffan/reactive';
 
 
 const config: ExperimentConfig = { showProgressBar: true };
@@ -108,9 +108,9 @@ const experiment = [
   },
 ];
 
-export default function App() {
+export default function Experiment() {
   return (
-    <Experiment
+    <ExperimentRunner
       config={config}
       timeline={experiment}
       components={{CustomTrial}}

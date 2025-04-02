@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
-import { BaseComponentProps, ExperimentConfig } from '@adriansteffan/reactive';
+import { ExperimentRunner, BaseComponentProps, ExperimentConfig } from '@adriansteffan/reactive';
 
-// Optional experiment configuration
-export const config: ExperimentConfig = { showProgressBar: false };
 
-// Custom component definition
-export const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number }) => {
+const config: ExperimentConfig = { showProgressBar: true };
+
+const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number }) => {
   const [count, setCount] = useState(0);
 
   return (
@@ -32,8 +31,7 @@ export const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount:
   );
 };
 
-// Custom question definition
-export const CustomQuestion = () => {
+const CustomQuestion = () => {
   return (
     <>
       <p>This is a custom question</p>
@@ -41,14 +39,7 @@ export const CustomQuestion = () => {
   );
 };
 
-// Optional component mapping
-export const components = { CustomTrial };
-
-// Optional question mapping
-export const questions = { CustomQuestion };
-
-// The main experiment timeline
-export const experiment = [
+const experiment = [
   {
     name: 'introtext',
     type: 'Text',
@@ -116,3 +107,14 @@ export const experiment = [
     },
   },
 ];
+
+export default function Experiment() {
+  return (
+    <ExperimentRunner
+      config={config}
+      timeline={experiment}
+      components={{CustomTrial}}
+      questions={{CustomQuestion}}
+    />
+  );
+}

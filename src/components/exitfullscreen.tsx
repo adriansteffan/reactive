@@ -58,6 +58,11 @@ export default function ExitFullscreen({
 
   useEffect(() => {
     const performExitFullscreen = async () => {
+      if (!isFullscreen()) {
+        next({});
+        return;
+      }
+      
       if (getPlatform() === 'mobile' && Capacitor.getPlatform() === 'android') {
         StatusBar.show();
         ImmersiveMode.disable();
@@ -70,6 +75,7 @@ export default function ExitFullscreen({
           return;
         } catch (err) {
           console.error("Exiting fullscreen failed:", err);
+          next({});
           return;
         }
       }
@@ -85,6 +91,7 @@ export default function ExitFullscreen({
         addListenersForFallback();
       } else {
         console.warn('Fullscreen API is not supported by this browser.');
+        next({});
       }
     };
     

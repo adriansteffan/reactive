@@ -19,6 +19,7 @@ import ExitFullscreen from './exitfullscreen';
 import MicrophoneCheck from './microphonecheck';
 import RequestFilePermission from './mobilefilepermission';
 import CanvasBlock from './canvasblock';
+import CheckDevice from './checkdevice';
 
 import VoicerecorderQuestionComponent from './voicerecorder';
 import React from 'react';
@@ -38,6 +39,7 @@ const defaultComponents: ComponentsMap = {
   PlainInput,
   RequestFilePermission,
   CanvasBlock,
+  CheckDevice,
 };
 
 const defaultCustomQuestions: ComponentsMap = {

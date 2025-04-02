@@ -31,10 +31,18 @@ const Experiment = () => {
   );
 };
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// Store the root globally in a way that survives HMR updates
+// @ts-ignore - Add this property to window for development purposes
+if (!window.__vite_root) {
+  // @ts-ignore
+  window.__vite_root = ReactDOM.createRoot(document.getElementById('root')!);
+}
+
+// @ts-ignore
+window.__vite_root.render(
   <React.StrictMode>
     <ExperimentProvider>
       <Experiment />
     </ExperimentProvider>
-  </React.StrictMode>,
+  </React.StrictMode>
 );

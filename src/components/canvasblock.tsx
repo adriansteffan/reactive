@@ -11,7 +11,7 @@ import {
   RefinedTrialData,
   CanvasResultData,
 } from '../utils/bytecode';
-import { BaseComponentProps } from '../utils/common';
+import { BaseComponentProps, isFullscreen } from '../utils/common';
 
 interface CanvasSlide {
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
@@ -358,8 +358,8 @@ export default function CanvasBlock({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const vpWidth = window.innerWidth;
-    const vpHeight = window.innerHeight;
+    const vpWidth = isFullscreen() ? window.screen.width : window.innerWidth ;
+    const vpHeight = isFullscreen() ? window.screen.height: window.innerHeight;
     let computedWidth: number;
     let computedHeight: number;
     const parseNonRatioDimension = (
@@ -491,3 +491,4 @@ export default function CanvasBlock({
     </div>
   );
 }
+

@@ -9,6 +9,15 @@ export function shuffle(array: any[]) {
   return array;
 }
 
+export function isFullscreen(): boolean {
+  return !!(
+    document.fullscreenElement ||
+    (document as any).webkitFullscreenElement ||
+    (document as any).mozFullScreenElement ||
+    (document as any).msFullscreenElement
+  );
+}
+
 export function isDesktop() {
   return (window as any).electronAPI !== undefined;
 }

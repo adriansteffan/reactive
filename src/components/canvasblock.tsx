@@ -40,7 +40,14 @@ type CanvasBlockProps = {
   height?: number | string;
 } & BaseComponentProps;
 
-export default function CanvasBlock({ next, updateStore, timeline, width, height, store }: CanvasBlockProps) {
+export default function CanvasBlock({
+  next,
+  updateStore,
+  timeline,
+  width,
+  height,
+  store,
+}: CanvasBlockProps) {
   const { instructions, markers } = useMemo(() => compileTimeline(timeline), [timeline]);
 
   const instructionPointerRef = useRef(0);
@@ -52,6 +59,16 @@ export default function CanvasBlock({ next, updateStore, timeline, width, height
   const storeRef = useRef<Store>(store ?? {});
   const animationFrameRef = useRef<number | null>(null);
   const contentInstructionsCompletedRef = useRef(0);
+
+  const frameIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const refreshRate = storeRef.current._reactiveScreenRefreshRate;
+    const isValidRefreshRate =
+      typeof refreshRate === 'number' && refreshRate >= 20 && refreshRate <= 300;
+
+    frameIntervalRef.current = isValidRefreshRate ? 1000 / refreshRate : null;
+  }, [store]);
 
   const resolveSlideContent = useCallback(
     (instruction: UnifiedBytecodeInstruction): CanvasSlide | null => {
@@ -120,6 +137,7 @@ export default function CanvasBlock({ next, updateStore, timeline, width, height
   let handleSlideEnd: () => void;
 
   const tick = useCallback(() => {
+    const now = performance.now();
     const currentPointer = instructionPointerRef.current;
     if (currentPointer < 0 || currentPointer >= instructions.length) {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -134,14 +152,18 @@ export default function CanvasBlock({ next, updateStore, timeline, width, height
       return;
     }
 
-    const now = performance.now();
-    const elapsedSlideTime = now - slideStartTimeRef.current;
     const displayDuration = currentSlide.displayDuration ?? Infinity;
     const responseTimeLimit = currentSlide.responseTimeLimit ?? Infinity;
     const allowedKeys = currentSlide.allowedKeys ?? false;
     const noKeysAllowed =
       allowedKeys === false || (Array.isArray(allowedKeys) && allowedKeys.length === 0);
     let shouldEndSlide = false;
+
+    // if we know the screen refresh rate, add half the frame interval to the elapsed time to get more accurate time checking
+    const elapsedSlideTime =
+      now -
+      slideStartTimeRef.current +
+      (frameIntervalRef.current !== null ? frameIntervalRef.current * 0.5 : 0);
 
     if (
       isDrawingVisibleRef.current &&
@@ -153,6 +175,7 @@ export default function CanvasBlock({ next, updateStore, timeline, width, height
         shouldEndSlide = true;
       }
     }
+
     if (
       !shouldEndSlide &&
       responseTimeLimit !== Infinity &&
@@ -168,6 +191,7 @@ export default function CanvasBlock({ next, updateStore, timeline, width, height
         clearCanvas();
       }
     }
+
     if (shouldEndSlide) {
       handleSlideEnd();
     } else {

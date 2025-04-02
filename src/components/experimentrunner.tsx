@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { ExperimentConfig, Store } from '../utils/common';
-import { useEffect, useMemo, useRef, useState, ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, ComponentType } from 'react';
 import {
   compileTimeline,
   TimelineItem,
@@ -47,6 +47,7 @@ const defaultCustomQuestions: ComponentsMap = {
 interface RuntimeComponentContent {
   name?: string;
   type: string;
+  collectRefreshRate?: boolean; // New prop to trigger refresh rate collecting
   props?: Record<string, any> | ((store: Store, data: RefinedTrialData[]) => Record<string, any>);
 }
 
@@ -174,11 +175,71 @@ export default function ExperimentRunner({
     }
   }
 
-  const TimingWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const collectRefreshRate = useCallback((callback: (refreshRate: number | null) => void) => {
+    let frameCount = 0;
+    const startTime = performance.now();
+    const maxDuration = 20000;
+    let rafId: number;
+    let lastUpdateTime = startTime;
+    const updateInterval = 1000;
+
+    const calculateRefreshRate = () => {
+      const currentTime = performance.now();
+      const elapsedTime = currentTime - startTime;
+      if (elapsedTime > 0) {
+        const refreshRate = Math.round((frameCount * 1000) / elapsedTime);
+        return refreshRate;
+      }
+      return null;
+    };
+
+    const cleanup = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+
+    const countFrames = (timestamp: number) => {
+      frameCount++;
+      const elapsedTime = timestamp - startTime;
+
+      // Check if it's time for an update (once per second)
+      if (timestamp - lastUpdateTime >= updateInterval) {
+        callback(calculateRefreshRate());
+        lastUpdateTime = timestamp;
+      }
+
+      if (elapsedTime < maxDuration) {
+        rafId = requestAnimationFrame(countFrames);
+      } else {
+        cleanup();
+        callback(calculateRefreshRate());
+      }
+    };
+
+    rafId = requestAnimationFrame(countFrames);
+
+    return cleanup;
+  }, []);
+
+  const TimingWrapper: React.FC<{
+    children: React.ReactNode;
+    collectRefreshRate?: boolean;
+  }> = ({ children, collectRefreshRate: shouldcollect }) => {
     const wrapperStartTimeRef = useRef<number | null>(null);
+    const refreshRateRef = useRef<number | null>(null);
 
     useEffect(() => {
       wrapperStartTimeRef.current = performance.now();
+
+      if (shouldcollect) {
+        const cleanup = collectRefreshRate((rate) => {
+          refreshRateRef.current = rate;
+          updateStore({ _reactiveScreenRefreshRate: rate });
+        });
+
+        return cleanup;
+      }
     }, []);
 
     const childWithTimingProps = React.Children.map(children, (child) => {
@@ -224,7 +285,7 @@ export default function ExperimentRunner({
             : content.props || {};
 
         componentToRender = (
-          <TimingWrapper key={instructionPointer}>
+          <TimingWrapper key={instructionPointer} collectRefreshRate={content.collectRefreshRate}>
             <Component
               next={next}
               updateStore={updateStore}

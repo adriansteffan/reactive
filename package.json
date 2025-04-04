@@ -23,7 +23,12 @@
       "types": "./dist/mod.d.ts"
     },
     "./style.css": "./dist/style.css",
-    "./preset.css": "./dist/preset.css"
+    "./preset.css": "./dist/preset.css",
+    "./array": {
+      "import": "./dist/reactive.es.js",
+      "require": "./dist/reactive.umd.js",
+      "types": "./dist/mod.d.ts"
+    }
   },
   "author": "Adrian Steffan",
   "license": "MIT",

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { ExperimentConfig, Store } from '../utils/common';
+import { ExperimentConfig, Store, Param } from '../utils/common';
 import { useCallback, useEffect, useMemo, useRef, useState, ComponentType } from 'react';
 import {
   compileTimeline,
@@ -49,7 +49,7 @@ const defaultCustomQuestions: ComponentsMap = {
 interface RuntimeComponentContent {
   name?: string;
   type: string;
-  collectRefreshRate?: boolean; // New prop to trigger refresh rate collecting
+  collectRefreshRate?: boolean;
   props?: Record<string, any> | ((store: Store, data: RefinedTrialData[]) => Record<string, any>);
 }
 
@@ -75,7 +75,57 @@ export default function ExperimentRunner({
   }, [timeline]);
 
   const [instructionPointer, setInstructionPointer] = useState(0);
-  const [data, setData] = useState<RefinedTrialData[]>([]);
+  const [data, setData] = useState<RefinedTrialData[]>(() => {
+    const urlParams: Record<string, any> = {};
+    const searchParams = new URLSearchParams(window.location.search);
+    for (const [key, value] of searchParams.entries()) {
+      urlParams[key] = value;
+    }
+
+    const registry = Param.getRegistry() || [];
+
+    const params: Record<string, any> = {};
+
+    // First add URL params (these will be overwritten by registry entries if there are name collisions)
+    for (const [key, value] of Object.entries(urlParams)) {
+      params[key] = {
+        value,
+        registered: false,
+        defaultValue: undefined,
+        type: undefined,
+        description: undefined,
+      };
+    }
+
+    // Then add/overwrite with registry entries
+    for (const param of registry) {
+      params[param.name] = {
+        value:
+          param.value !== undefined ? param.value : urlParams[param.name],
+        registered: true,
+        defaultValue: param.defaultValue,
+        type: param.type,
+        description: param.description,
+      };
+    }
+
+    const initialData: ComponentResultData = {
+      index: -1,
+      trialNumber: -1,
+      start: performance.now(),
+      end: performance.now(),
+      duration: 0,
+      type: '',
+      name: '',
+      responseData: {
+        userAgent: navigator.userAgent,
+        params,
+      },
+    };
+    
+    return [initialData];
+  });
+
   const [totalTrialsCompleted, setTotalTrialsCompleted] = useState(0);
   const lastTrialEndTimeRef = useRef(performance.now());
   const experimentStoreRef = useRef<Store>({});

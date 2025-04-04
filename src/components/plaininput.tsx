@@ -1,5 +1,5 @@
-import { BaseComponentProps } from "../mod";
-import { useState } from "react";
+import { BaseComponentProps } from '../mod';
+import { useState } from 'react';
 
 function PlainInput({
   content,
@@ -8,7 +8,7 @@ function PlainInput({
   next,
   updateStore,
   animate = false,
-  storeupdate, // user defined function
+  storeupdate,
   placeholder = 'Enter your response here',
 }: BaseComponentProps & {
   content: React.ReactNode;
@@ -29,7 +29,7 @@ function PlainInput({
     if (storeupdate) {
       updateStore(storeupdate(inputValue));
     }
-    next({value: inputValue});
+    next({ value: inputValue });
   };
 
   return (
@@ -43,11 +43,11 @@ function PlainInput({
 
       <div className={`mt-8 ${animate ? 'animate-slide-down opacity-0' : ''}`}>
         <input
-          type="text"
+          type='text'
           value={inputValue}
           onChange={handleChange}
           placeholder={placeholder}
-          className="w-full px-4 py-3 border-2 border-black rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className='w-full px-4 py-3 border-2 border-black rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-blue-500'
         />
       </div>
 
@@ -67,6 +67,5 @@ function PlainInput({
     </div>
   );
 }
-
 
 export default PlainInput;

@@ -6,14 +6,14 @@ export default function ProlificEnding({
   data,
   updateStore
 }: { prolificCode?: string } & BaseComponentProps) {
-  let prolificCodeUsed = prolificCode ?? getParam('cc', undefined, 'string') ?? null;
+  let prolificCodeUsed = prolificCode ?? getParam('cc', '', 'string') ?? null;
 
   const content = (
     <div className='flex flex-col items-center'>
       <svg className='w-12 h-12' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
         <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
       </svg>
-      <p className='text-center'>
+      <p className=''>
         Thank you! Your data has been successfully submitted. <br /> You can go back to Prolific and
         enter the code {prolificCodeUsed} to finish the study. Alternatively, you can click on this
         link:{' '}

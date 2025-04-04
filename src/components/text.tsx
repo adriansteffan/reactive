@@ -1,3 +1,4 @@
+import React, { useEffect, useRef } from 'react';
 import { BaseComponentProps } from '../mod';
 
 function Text({
@@ -6,16 +7,58 @@ function Text({
   className = '',
   next,
   animate = false,
+  allowedKeys = false,
 }: {
   content: React.ReactNode;
   buttonText?: string;
   onButtonClick?: () => void;
   className?: string;
   animate?: boolean;
+  allowedKeys?: string[] | boolean;
 } & BaseComponentProps) {
+  const startTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    startTimeRef.current = performance.now();
+
+    const handleKeyPress = (event: KeyboardEvent) => {
+      const keypressTime = performance.now();
+
+      const isKeyAllowed =
+        allowedKeys === true || (Array.isArray(allowedKeys) && allowedKeys.includes(event.key));
+
+      if (isKeyAllowed) {
+        const reactionTime = keypressTime - startTimeRef.current;
+
+        next({
+          key: event.key,
+          time: keypressTime,
+          reactionTime: reactionTime,
+        });
+      }
+    };
+
+    if (allowedKeys) {
+      window.addEventListener('keydown', handleKeyPress);
+    }
+
+    return () => {
+      if (allowedKeys) {
+        window.removeEventListener('keydown', handleKeyPress);
+      }
+    };
+  }, [next, allowedKeys]);
 
   const handleClick = () => {
-    next({});
+    const clickTime = performance.now();
+
+    const reactionTime = clickTime - startTimeRef.current;
+
+    next({
+      key: 'button',
+      time: clickTime,
+      reactionTime: reactionTime,
+    });
   };
 
   return (

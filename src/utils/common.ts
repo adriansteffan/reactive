@@ -1,13 +1,4 @@
-import { Capacitor } from "@capacitor/core";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function shuffle(array: any[]) {
-  for (let i = array.length - 1; i >= 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
-}
+import { Capacitor } from '@capacitor/core';
 
 export function isFullscreen(): boolean {
   return !!(
@@ -25,7 +16,7 @@ export function isDesktop() {
 // Generic type for all data structures
 export interface TrialData {
   index: number;
-  trialNumber: number,
+  trialNumber: number;
   type: string;
   name: string;
   data: any;
@@ -44,7 +35,9 @@ export interface ExperimentConfig {
   showProgressBar: boolean;
 }
 
-export interface Store { [key: string]: any }
+export interface Store {
+  [key: string]: any;
+}
 
 export interface BaseComponentProps {
   next: (data?: object, actualStartTime?: number, actualStopTime?: number) => void;
@@ -54,38 +47,43 @@ export interface BaseComponentProps {
 }
 
 type ParamType = 'string' | 'number' | 'boolean' | 'array' | 'json';
+
 type ParamValue<T extends ParamType> = T extends 'number'
-  ? number | undefined
+  ? number
   : T extends 'boolean'
-    ? boolean | undefined
+    ? boolean
     : T extends 'array' | 'json'
-      ? any | undefined
-      : string | undefined;
+      ? any
+      : string;
+
+const sharedRegistry: any[] = [];
 
 export function getParam<T extends ParamType>(
   name: string,
-  defaultValue: ParamValue<T> | undefined,
+  defaultValue: ParamValue<T>,
   type: T = 'string' as T,
-): ParamValue<T> | undefined {
-  // First, check for the parameter in the base64-encoded JSON
-  const encodedJson = new URLSearchParams(window.location.search).get('_b');
-  if (encodedJson) {
-    try {
-      const jsonString = atob(encodedJson);
-      const decodedParams = JSON.parse(jsonString);
-      if (name in decodedParams) {
-        return decodedParams[name];
-      }
-    } catch {
-      // Silently fail if decoding or parsing fails, fallthrough to lower case
-    }
+  description?: string,
+): ParamValue<T> {
+
+  let registryEntry = sharedRegistry.find((p) => p.name === name);
+  
+  if (!registryEntry) {
+    registryEntry = {
+      name,
+      defaultValue,
+      type,
+      description,
+      value: undefined,
+    };
+    sharedRegistry.push(registryEntry);
   }
 
-  //Next, check for the parameter directly in the URL
-  // since this does not have the automatic type conversions of JSON.parse, we have to create helper functionss
   const conversions: Record<ParamType, (v: string) => any> = {
     string: (v) => v,
-    number: (v) => Number(v) || defaultValue,
+    number: (v) => {
+      const num = Number(v);
+      return isNaN(num) ? defaultValue : num;
+    },
     boolean: (v) => v.toLowerCase() === 'true',
     array: (v) => {
       try {
@@ -103,7 +101,7 @@ export function getParam<T extends ParamType>(
     },
   };
 
-  const convertValue = (value: any): ParamValue<T> | undefined => {
+  const convertValue = (value: any): ParamValue<T> => {
     if (
       (type === 'string' && typeof value === 'string') ||
       (type === 'number' && typeof value === 'number') ||
@@ -115,19 +113,53 @@ export function getParam<T extends ParamType>(
     }
 
     if (typeof value === 'string') {
-      if (value.toLowerCase() === 'undefined') return undefined;
+      if (value.toLowerCase() === 'undefined') return defaultValue;
       return conversions[type](value);
     }
 
     return defaultValue;
   };
 
+  // First, check for the parameter in the base64-encoded JSON
+  const encodedJson = new URLSearchParams(window.location.search).get('_b');
+  if (encodedJson) {
+    try {
+      const jsonString = atob(encodedJson);
+      const decodedParams = JSON.parse(jsonString);
+      if (name in decodedParams) {
+        const convertedValue = convertValue(decodedParams[name]);
+        registryEntry.value = convertedValue;
+        return convertedValue;
+      }
+    } catch {
+      // Silently fail if decoding or parsing fails, fallthrough to lower case
+    }
+  }
+
+  // Next, check for the parameter directly in the URL
   const value = new URLSearchParams(window.location.search).get(name);
-  if (value === undefined || value === null) return defaultValue;
-  return convertValue(value);
+  if (value === undefined || value === null) {
+    // If no value found, register default value
+    return defaultValue;
+  }
+  
+  const convertedValue = convertValue(value);
+  registryEntry.value = convertedValue;
+  return convertedValue;
 }
 
 
+const timelineRepresentation: {type: string, name?: string}[] = []
+
+// Param class that uses the same shared registry
+export class Param {
+  static getRegistry() {
+    return [...sharedRegistry];
+  }
+  static getTimelineRepresentation(){
+    return [...timelineRepresentation]
+  }
+}
 
 export type Platform = 'desktop' | 'mobile' | 'web';
 
@@ -140,3 +172,71 @@ export const getPlatform = (): Platform => {
     return 'web';
   }
 };
+
+export function subsetExperimentByParam(experiment: any[]) {
+  
+  timelineRepresentation.length = 0;
+  
+  experiment.forEach(item => {
+    timelineRepresentation.push({
+      type: item.type ?? 'NoTypeSpecified',
+      name: item.name
+    });
+  });
+  
+  const include = getParam('includeSubset', undefined);
+  const exclude = getParam('excludeSubset', undefined);
+  
+  let experimentFiltered = [...experiment];
+  
+  if (include) {
+    const includeItems = include.split(',');
+    experimentFiltered = experimentFiltered.filter((item, index) => {
+      const positionMatch = includeItems.some((val: string) => {
+        const num = parseInt(val, 10);
+        return !isNaN(num) && num - 1 === index;
+      });
+      const nameMatch = item.name && includeItems.includes(item.name);
+      return positionMatch || nameMatch;
+    });
+  }
+  
+  if (exclude) {
+    const excludeItems = exclude.split(',');
+    experimentFiltered = experimentFiltered.filter((item, index) => {
+      const positionMatch = excludeItems.some((val: string) => {
+        const num = parseInt(val, 10);
+        return !isNaN(num) && num - 1 === index;
+      });
+      const nameMatch = item.name && excludeItems.includes(item.name);
+      return !(positionMatch || nameMatch);
+    });
+  }
+  
+  return experimentFiltered;
+}
+
+export function canvasCountdown(seconds: number) {
+  if (seconds <= 0) {
+    return [];
+  }
+  return Array.from({ length: seconds }, (_, i) => {
+    const number = seconds - i;
+
+    return {
+      draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+        ctx.save();
+
+        ctx.fillStyle = 'black';
+        ctx.font = `bold ${Math.min(w, h) * 0.02 * 2}px sans-serif`; // Make countdown text larger
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(number.toString(), w / 2, h / 2);
+
+        ctx.restore();
+      },
+      displayDuration: 1000,
+      ignoreData: true,
+    };
+  });
+}

@@ -38,6 +38,8 @@ type CanvasBlockProps = {
   timeline: TimelineItem[];
   width?: number | string;
   height?: number | string;
+  styleCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
+  initCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
 } & BaseComponentProps;
 
 export default function CanvasBlock({
@@ -47,6 +49,8 @@ export default function CanvasBlock({
   width,
   height,
   store,
+  styleCanvas,
+  initCanvas,
 }: CanvasBlockProps) {
   const { instructions, markers } = useMemo(() => compileTimeline(timeline), [timeline]);
 
@@ -119,7 +123,17 @@ export default function CanvasBlock({
       if (!ctx) return;
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-      ctx.fillStyle = 'black';
+
+      if (styleCanvas) {
+        try {
+          styleCanvas(ctx, canvasWidth, canvasHeight);
+        } catch (e) {
+          console.error('Error during styleCanvas function:', e);
+        }
+      } else {
+        ctx.fillStyle = 'black';
+      }
+
       try {
         slide.draw(ctx, canvasWidth, canvasHeight);
       } catch (e) {
@@ -358,8 +372,8 @@ export default function CanvasBlock({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const vpWidth = isFullscreen() ? window.screen.width : window.innerWidth ;
-    const vpHeight = isFullscreen() ? window.screen.height: window.innerHeight;
+    const vpWidth = isFullscreen() ? window.screen.width : window.innerWidth;
+    const vpHeight = isFullscreen() ? window.screen.height : window.innerHeight;
     let computedWidth: number;
     let computedHeight: number;
     const parseNonRatioDimension = (
@@ -475,6 +489,14 @@ export default function CanvasBlock({
       ctx.scale(dpr, dpr);
     }
 
+    if (initCanvas && ctx) {
+      try {
+        initCanvas(ctx, finalWidth, finalHeight);
+      } catch (e) {
+        console.error('Error during canvas initialization:', e);
+      }
+    }
+
     window.addEventListener('keydown', handleKeyPress);
     processControlFlow();
     return () => {
@@ -491,4 +513,3 @@ export default function CanvasBlock({
     </div>
   );
 }
-

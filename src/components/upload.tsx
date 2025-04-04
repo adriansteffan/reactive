@@ -253,17 +253,14 @@ export default function Upload({
       const { backend, type } = getFileBackend(androidFolderName);
       
       if (type === 'web') {
-        // Web API case
         uploadData.mutate(payload);
       } else if (backend) {
         try {
-          // Get a unique directory name
+
           const uniqueSessionID = await getUniqueDirectoryName(backend, sessionIDUpload);
           
-          // Create the directory
           await backend.createDirectory(uniqueSessionID);
-          
-          // Save all files
+        
           for (const file of files) {
             await backend.saveFile(file.filename, file.content, uniqueSessionID);
           }

@@ -50,6 +50,7 @@ interface RuntimeComponentContent {
   name?: string;
   type: string;
   collectRefreshRate?: boolean;
+  hideSettings?: string[] | boolean;
   props?: Record<string, any> | ((store: Store, data: RefinedTrialData[]) => Record<string, any>);
 }
 

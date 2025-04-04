@@ -1,5 +1,9 @@
-import { BaseComponentProps, getParam } from '../utils/common';
+import { BaseComponentProps, getParam, registerComponentParams } from '../utils/common';
 import Text from '../components/text';
+
+registerComponentParams('ProlificEnding', [
+  { name: 'cc', defaultValue: '', type: 'string', description: 'Completion code of the Profilic experiment (more commonly supplied via the code)' },
+])
 
 export default function ProlificEnding({
   prolificCode,

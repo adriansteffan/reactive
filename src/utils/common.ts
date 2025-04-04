@@ -64,9 +64,8 @@ export function getParam<T extends ParamType>(
   type: T = 'string' as T,
   description?: string,
 ): ParamValue<T> {
-
   let registryEntry = sharedRegistry.find((p) => p.name === name);
-  
+
   if (!registryEntry) {
     registryEntry = {
       name,
@@ -142,22 +141,21 @@ export function getParam<T extends ParamType>(
     // If no value found, register default value
     return defaultValue;
   }
-  
+
   const convertedValue = convertValue(value);
   registryEntry.value = convertedValue;
   return convertedValue;
 }
 
-
-const timelineRepresentation: {type: string, name?: string}[] = []
+const timelineRepresentation: { type: string; name?: string }[] = [];
 
 // Param class that uses the same shared registry
 export class Param {
   static getRegistry() {
     return [...sharedRegistry];
   }
-  static getTimelineRepresentation(){
-    return [...timelineRepresentation]
+  static getTimelineRepresentation() {
+    return [...timelineRepresentation];
   }
 }
 
@@ -173,22 +171,45 @@ export const getPlatform = (): Platform => {
   }
 };
 
+const providedComponentParams: Record<string, any> = {};
+
+export function registerExperimentParams(experiment: any[]) {
+  experiment.forEach((item) => {
+    const params = providedComponentParams[item.type];
+    if (params) {
+      for (const param of params) {
+        if(!item.hideSettings || (item.hideSettings !== true && !item.hideSettings.includes(param.name))){
+          sharedRegistry.push(param);
+        }
+      }
+    }
+  });
+}
+
+export function registerComponentParams(
+  type: string,
+  params: { name: string; defaultValue: any; type: string; description?: string }[],
+) {
+  providedComponentParams[type] = params;
+}
+
 export function subsetExperimentByParam(experiment: any[]) {
-  
+  registerExperimentParams(experiment);
+
   timelineRepresentation.length = 0;
-  
-  experiment.forEach(item => {
+
+  experiment.forEach((item) => {
     timelineRepresentation.push({
       type: item.type ?? 'NoTypeSpecified',
-      name: item.name
+      name: item.name,
     });
   });
-  
+
   const include = getParam('includeSubset', undefined);
   const exclude = getParam('excludeSubset', undefined);
-  
+
   let experimentFiltered = [...experiment];
-  
+
   if (include) {
     const includeItems = include.split(',');
     experimentFiltered = experimentFiltered.filter((item, index) => {
@@ -200,7 +221,7 @@ export function subsetExperimentByParam(experiment: any[]) {
       return positionMatch || nameMatch;
     });
   }
-  
+
   if (exclude) {
     const excludeItems = exclude.split(',');
     experimentFiltered = experimentFiltered.filter((item, index) => {
@@ -212,7 +233,7 @@ export function subsetExperimentByParam(experiment: any[]) {
       return !(positionMatch || nameMatch);
     });
   }
-  
+
   return experimentFiltered;
 }
 

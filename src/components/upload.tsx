@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
-import { BaseComponentProps, FileUpload, getParam, getPlatform, Platform, Store, TrialData } from '../utils/common';
+import { BaseComponentProps, FileUpload, getParam, getPlatform, Platform, registerComponentParams, Store, TrialData } from '../utils/common';
 import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
@@ -17,6 +17,11 @@ interface UploadResponse {
   message?: string;
 }
 
+// TODO: deduplicate values with upload function below
+registerComponentParams('Upload', [
+  { name: 'upload', defaultValue: true, type: 'boolean', description: 'Upload the data at the end of the experiment?' },
+  { name: 'download', defaultValue: false, type: 'boolean', description: 'Locally download the data at the end of the experiment?' }
+])
 
 interface FileBackend {
   directoryExists(path: string): Promise<boolean>;

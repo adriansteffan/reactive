@@ -8,6 +8,7 @@ import { SettingsScreen } from './settingsscreen';
 import { Param } from '../utils/common';
 
 export default function ExperimentProvider({ children, disableSettings }: { children: ReactNode, disableSettings?: boolean }) {
+ 
   if (window.location.pathname.endsWith('/settings') && !disableSettings) {
     return (
       <SettingsScreen

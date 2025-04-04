@@ -22,7 +22,6 @@ export const SettingsScreen = ({
   const sortedParams = [...paramRegistry]
     .filter((param) => param.name !== 'includeSubset' && param.name !== 'excludeSubset')
     .sort((a, b) => a.name.localeCompare(b.name));
-  
 
   // Initialize param values from URL if present
   useEffect(() => {
@@ -118,10 +117,12 @@ export const SettingsScreen = ({
 
         // Set defaults for registered params that weren't in the URL
         paramRegistry.forEach((param) => {
-          if (!(param.name in initialValues) && param.defaultValue !== undefined) {
-            initialValues[param.name] = String(param.defaultValue);
-          } else if (!(param.name in initialValues)) {
-            initialValues[param.name] = '';
+          if (!(param.name in initialValues)) {
+            if (param.type === 'boolean' && param.defaultValue !== undefined) {
+              initialValues[param.name] = String(param.defaultValue);
+            } else {
+              initialValues[param.name] = '';
+            }
           }
         });
 
@@ -136,10 +137,14 @@ export const SettingsScreen = ({
 
     function processRegularParams(searchParams: URLSearchParams) {
       // Process registered params
+
       paramRegistry.forEach((param) => {
         const value = searchParams.get(param.name);
         if (value !== null) {
           initialValues[param.name] = value;
+        } else if (param.type === 'boolean' && param.defaultValue !== undefined) {
+          // For boolean params with defaults, explicitly set them
+          initialValues[param.name] = String(param.defaultValue);
         }
       });
 
@@ -215,6 +220,14 @@ export const SettingsScreen = ({
           const customParam = customParams.find((p) => p.name === key);
           const paramType = param?.type || customParam?.type || 'string';
 
+          if (
+            paramType === 'boolean' &&
+            param?.defaultValue !== undefined &&
+            String(param.defaultValue) === value
+          ) {
+            return;
+          }
+
           switch (paramType) {
             case 'number':
               paramsObj[key] = Number(value);
@@ -245,6 +258,15 @@ export const SettingsScreen = ({
 
       Object.entries(allParams).forEach(([key, value]) => {
         if (value !== '') {
+          const param = paramRegistry.find((p) => p.name === key);
+          // Skip boolean params that match their default value
+          if (
+            param?.type === 'boolean' &&
+            param.defaultValue !== undefined &&
+            String(param.defaultValue) === value
+          ) {
+            return;
+          }
           searchParams.set(key, String(value));
         }
       });
@@ -333,15 +355,19 @@ export const SettingsScreen = ({
     switch (type) {
       case 'boolean':
         return (
-          <select
-            className='mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md'
-            value={value}
-            onChange={(e) => handleParamChange(name, e.target.value)}
-          >
-            <option value=''>Select...</option>
-            <option value='true'>True</option>
-            <option value='false'>False</option>
-          </select>
+          <>
+            <button
+              onClick={() => handleParamChange(name, value === 'true' ? 'false' : 'true')}
+              className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${value === 'true' ? 'bg-blue-600' : 'bg-gray-200'}`}
+              role='switch'
+              aria-checked={value === 'true'}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${value === 'true' ? 'translate-x-5' : 'translate-x-0'}`}
+              />
+            </button>
+            <span className='ml-4 text-gray-500'>{value === 'true' ? 'True' : 'False'}</span>
+          </>
         );
 
       case 'number':
@@ -379,13 +405,20 @@ export const SettingsScreen = ({
             className='mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm'
             value={value}
             onChange={(e) => handleParamChange(name, e.target.value)}
-            placeholder={defaultValue !== undefined ? `Default: ${defaultValue}` : 'Enter value...'}
+            placeholder={
+              defaultValue !== undefined && defaultValue !== ''
+                ? `Default: ${defaultValue}`
+                : 'Enter value...'
+            }
           />
         );
     }
   };
 
-  const renderCustomParamInput = (param: {name: string, type: string | undefined, value: any}, index: number) => {
+  const renderCustomParamInput = (
+    param: { name: string; type: string | undefined; value: any },
+    index: number,
+  ) => {
     // Skip rendering for includeSubset and excludeSubset as they're handled separately
     if (param.name === 'includeSubset' || param.name === 'excludeSubset') {
       return null;
@@ -417,18 +450,22 @@ export const SettingsScreen = ({
           </select>
         </div>
 
-        {/* Parameter Value */}
         <div className='col-span-6'>
           {param.type === 'boolean' ? (
-            <select
-              className='block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md'
-              value={param.value}
-              onChange={(e) => handleCustomParamChange(index, 'value', e.target.value)}
-            >
-              <option value=''>Select...</option>
-              <option value='true'>True</option>
-              <option value='false'>False</option>
-            </select>
+            <>
+              <button
+                onClick={() =>
+                  handleCustomParamChange(index, 'value', param.value === 'true' ? 'false' : 'true')
+                }
+                className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${param.value === 'true' ? 'bg-blue-600' : 'bg-gray-200'}`}
+                role='switch'
+                aria-checked={param.value === 'true'}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${param.value === 'true' ? 'translate-x-5' : 'translate-x-0'}`}
+                />
+              </button>
+            </>
           ) : param.type === 'array' || param.type === 'json' ? (
             <textarea
               className='block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm'
@@ -488,8 +525,9 @@ export const SettingsScreen = ({
     <div className='max-w-4xl mx-auto p-6'>
       <h1 className='text-3xl font-bold mb-4'>Experiment Parameters</h1>
       <p className='text-gray-700 mb-6'>
-        Configure the experiment by setting parameter values below. Fields left empty will be assigned their default value. Once configured, you can copy
-        the URL to run the experiment with these settings.
+        Configure the experiment by setting parameter values below. Fields left empty will be
+        assigned their default value. Once configured, you can copy the URL to run the experiment
+        with these settings.
       </p>
 
       <div className='bg-white shadow overflow-hidden sm:rounded-md mb-8'>
@@ -516,7 +554,7 @@ export const SettingsScreen = ({
                     )}
                     {param.defaultValue !== undefined && (
                       <p className='mt-auto pt-2 text-xs text-gray-500'>
-                        Default: <code>{JSON.stringify(param.defaultValue)}</code>
+                        Default: <code> {JSON.stringify(param.defaultValue)}</code>
                       </p>
                     )}
                   </div>
@@ -622,53 +660,55 @@ export const SettingsScreen = ({
 
             <div className='border border-gray-200 rounded-md overflow-hidden'>
               <ul className='divide-y divide-gray-200'>
-                {timelineRepresentation.map((trial: { name?: string; type: string }, index: number) => (
-                  <li
-                    key={index}
-                    className='cursor-pointer px-4 py-3 hover:bg-gray-50'
-                    onClick={(e) => {
-                      // Check if the click was on or within the checkbox or label
-                      if (
-                        (e.target as any).type !== 'checkbox' &&
-                        !(e.target as any).closest('label')
-                      ) {
-                        toggleTrialSelection(index);
-                      }
-                    }}
-                  >
-                    <div className='flex items-center'>
-                      <div className='flex items-center flex-grow'>
-                        <input
-                          id={`trial-${index}`}
-                          type='checkbox'
-                          className='h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer'
-                          checked={selectedTrials.includes(`${index + 1}`)}
-                          onChange={() => toggleTrialSelection(index)}
-                        />
-                        <label
-                          htmlFor={`trial-${index}`}
-                          className='ml-3 flex-grow flex items-center cursor-pointer'
-                        >
-                          <div className='w-8 text-center text-xs text-gray-500 font-medium'>
-                            #{index + 1}
-                          </div>
-                          <div className='flex-grow'>
-                            {trial.name ? (
-                              <span className='font-medium text-gray-900'>{trial.name}</span>
-                            ) : (
-                              <span className='font-medium text-gray-500'>{trial.type}</span>
-                            )}
-                          </div>
-                          <div className='ml-2'>
-                            <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800'>
-                              {trial.type}
-                            </span>
-                          </div>
-                        </label>
+                {timelineRepresentation.map(
+                  (trial: { name?: string; type: string }, index: number) => (
+                    <li
+                      key={index}
+                      className='cursor-pointer px-4 py-3 hover:bg-gray-50'
+                      onClick={(e) => {
+                        // Check if the click was on or within the checkbox or label
+                        if (
+                          (e.target as any).type !== 'checkbox' &&
+                          !(e.target as any).closest('label')
+                        ) {
+                          toggleTrialSelection(index);
+                        }
+                      }}
+                    >
+                      <div className='flex items-center'>
+                        <div className='flex items-center flex-grow'>
+                          <input
+                            id={`trial-${index}`}
+                            type='checkbox'
+                            className='h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer'
+                            checked={selectedTrials.includes(`${index + 1}`)}
+                            onChange={() => toggleTrialSelection(index)}
+                          />
+                          <label
+                            htmlFor={`trial-${index}`}
+                            className='ml-3 flex-grow flex items-center cursor-pointer'
+                          >
+                            <div className='w-8 text-center text-xs text-gray-500 font-medium'>
+                              #{index + 1}
+                            </div>
+                            <div className='flex-grow'>
+                              {trial.name ? (
+                                <span className='font-medium text-gray-900'>{trial.name}</span>
+                              ) : (
+                                <span className='font-medium text-gray-500'>{trial.type}</span>
+                              )}
+                            </div>
+                            <div className='ml-2'>
+                              <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800'>
+                                {trial.type}
+                              </span>
+                            </div>
+                          </label>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  ),
+                )}
               </ul>
             </div>
           </div>

@@ -165,7 +165,7 @@ export default function ExperimentRunner({
       if (isRuntimeComponentContent(content)) {
         const trialData: ComponentResultData = {
           index: instructionPointer,
-          trialNumber: totalTrialsCompleted,
+          trialNumber: totalTrialsCompleted + 1,
           start: startTime,
           end: endTime,
           duration: endTime - startTime,

@@ -1,5 +1,5 @@
 import { BaseComponentProps } from '../mod';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface DeviceInfo {
   windowWidth: number;
@@ -29,7 +29,13 @@ function CheckDevice({
 } & BaseComponentProps) {
   const [showContent, setShowContent] = useState<boolean>(false);
 
+  const hasNavigatedRef = useRef(false);
+
   useEffect(() => {
+    if (hasNavigatedRef.current) {
+      return;
+    }
+
     const gatherDeviceInfo = async () => {
       const windowWidth = window.innerWidth;
       const windowHeight = window.innerHeight;
@@ -129,8 +135,9 @@ function CheckDevice({
 
       const checkResult = check ? check(deviceInfo, data, store) : true;
 
-      if (checkResult) {
-        next({});
+      if (checkResult && !hasNavigatedRef.current) {
+        hasNavigatedRef.current = true;
+        next(deviceInfo);
       } else {
         setShowContent(true);
       }

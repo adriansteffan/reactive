@@ -488,7 +488,7 @@ export const SettingsScreen = ({
     <div className='max-w-4xl mx-auto p-6'>
       <h1 className='text-3xl font-bold mb-4'>Experiment Parameters</h1>
       <p className='text-gray-700 mb-6'>
-        Configure the experiment by setting parameter values below. Once configured, you can copy
+        Configure the experiment by setting parameter values below. Fields left empty will be assigned their default value. Once configured, you can copy
         the URL to run the experiment with these settings.
       </p>
 
@@ -656,7 +656,7 @@ export const SettingsScreen = ({
                             {trial.name ? (
                               <span className='font-medium text-gray-900'>{trial.name}</span>
                             ) : (
-                              <span className='font-medium text-gray-900'>Trial #{index + 1}</span>
+                              <span className='font-medium text-gray-500'>{trial.type}</span>
                             )}
                           </div>
                           <div className='ml-2'>

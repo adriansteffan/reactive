@@ -4,11 +4,11 @@ import { ToastContainer } from 'react-toastify';
 const queryClient = new QueryClient();
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
-import { SettingsScreen } from './SettingsScreen';
+import { SettingsScreen } from './settingsscreen';
 import { Param } from '../utils/common';
 
-export default function ExperimentProvider({ children }: { children: ReactNode }) {
-  if (window.location.pathname.endsWith('/settings')) {
+export default function ExperimentProvider({ children, disableSettings }: { children: ReactNode, disableSettings?: boolean }) {
+  if (window.location.pathname.endsWith('/settings') && !disableSettings) {
     return (
       <SettingsScreen
         paramRegistry={Param.getRegistry()}

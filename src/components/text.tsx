@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { BaseComponentProps } from '../mod';
+import { BaseComponentProps, now } from '../mod';
 
 function Text({
   content,
@@ -19,10 +19,10 @@ function Text({
   const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
-    startTimeRef.current = performance.now();
+    startTimeRef.current = now();
 
     const handleKeyPress = (event: KeyboardEvent) => {
-      const keypressTime = performance.now();
+      const keypressTime = now();
 
       const isKeyAllowed =
         allowedKeys === true || (Array.isArray(allowedKeys) && allowedKeys.includes(event.key));
@@ -50,7 +50,7 @@ function Text({
   }, [next, allowedKeys]);
 
   const handleClick = () => {
-    const clickTime = performance.now();
+    const clickTime = now();
 
     const reactionTime = clickTime - startTimeRef.current;
 

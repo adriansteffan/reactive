@@ -2,7 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
-import { BaseComponentProps, FileUpload, getParam, getPlatform, Platform, registerComponentParams, Store, TrialData } from '../utils/common';
+import {
+  BaseComponentProps,
+  FileUpload,
+  getParam,
+  getPlatform,
+  Platform,
+  registerComponentParams,
+  Store,
+  TrialData,
+} from '../utils/common';
 import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
@@ -19,9 +28,91 @@ interface UploadResponse {
 
 // TODO: deduplicate values with upload function below
 registerComponentParams('Upload', [
-  { name: 'upload', defaultValue: true, type: 'boolean', description: 'Upload the data at the end of the experiment?' },
-  { name: 'download', defaultValue: false, type: 'boolean', description: 'Locally download the data at the end of the experiment?' }
-])
+  {
+    name: 'upload',
+    defaultValue: true,
+    type: 'boolean',
+    description: 'Upload the data at the end of the experiment?',
+  },
+  {
+    name: 'download',
+    defaultValue: false,
+    type: 'boolean',
+    description: 'Locally download the data at the end of the experiment?',
+  },
+]);
+
+type DataObject = {
+  [key: string]: string | number | boolean | null | undefined;
+};
+
+function escapeCsvValue(value: any): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const stringValue = String(value);
+
+  if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+    const escapedValue = stringValue.replace(/"/g, '""');
+    return `"${escapedValue}"`;
+  }
+
+  return stringValue;
+}
+
+function convertArrayOfObjectsToCSV(data: DataObject[]): string {
+  if (!data || data.length === 0) {
+    return '';
+  }
+
+  const headerSet = new Set<string>();
+  data.forEach((obj) => {
+    Object.keys(obj).forEach((key) => {
+      headerSet.add(key);
+    });
+  });
+  const headers = Array.from(headerSet);
+
+  const headerRow = headers.map((header) => escapeCsvValue(header)).join(',');
+
+  const dataRows = data.map((obj) => {
+    return headers
+      .map((header) => {
+        const value = obj[header];
+        return escapeCsvValue(value);
+      })
+      .join(',');
+  });
+
+  return [headerRow, ...dataRows].join('\n');
+}
+
+function combineTrialsToCsv(
+  data: any[],
+  filename: string,
+  names: string[],
+  fun?: (obj: any) => any,
+) {
+  const processedData = names
+    .flatMap((name) => {
+      const responseData = data.find((d) => d.name === name)?.responseData;
+      if (Array.isArray(responseData)) {
+        return responseData.map((i) => ({
+          block: name,
+          ...i,
+        }));
+      }
+      return [];
+    })
+    .map((x) => (fun ? fun(x) : x));
+
+  return {
+    filename,
+    encoding: 'utf8' as const,
+    content: convertArrayOfObjectsToCSV(processedData),
+  };
+}
 
 interface FileBackend {
   directoryExists(path: string): Promise<boolean>;
@@ -31,7 +122,7 @@ interface FileBackend {
 
 const createElectronFileBackend = (): FileBackend => {
   const electronAPI = (window as any).electronAPI;
-  
+
   return {
     directoryExists: async (path: string): Promise<boolean> => {
       const result = await electronAPI.directoryExists(path);
@@ -42,91 +133,86 @@ const createElectronFileBackend = (): FileBackend => {
     },
     saveFile: async (filename: string, content: string, directory: string): Promise<void> => {
       await electronAPI.saveFile(filename, content, directory);
-    }
+    },
   };
 };
 
-
 const createCapacitorFileBackend = (parentFolder?: string): FileBackend => {
- 
   const getPath = (path: string): string => {
     if (!parentFolder) {
       return path;
     }
     return path ? `${parentFolder}/${path}` : parentFolder;
   };
-  
+
   return {
     directoryExists: async (path: string): Promise<boolean> => {
       try {
-  
         if (parentFolder) {
           try {
             await Filesystem.readdir({
               path: parentFolder,
-              directory: Directory.Documents
+              directory: Directory.Documents,
             });
           } catch {
             // Parent folder doesn't exist, so subpath doesn't exist either
             return false;
           }
         }
-        
+
         const fullPath = getPath(path);
         const result = await Filesystem.readdir({
           path: fullPath,
-          directory: Directory.Documents
+          directory: Directory.Documents,
         });
-        return result.files.length >= 0; 
+        return result.files.length >= 0;
       } catch {
         return false;
       }
     },
-    
+
     createDirectory: async (path: string): Promise<void> => {
       try {
-       
         if (parentFolder) {
           try {
             await Filesystem.mkdir({
               path: parentFolder,
               directory: Directory.Documents,
-              recursive: false
+              recursive: false,
             });
           } catch (e) {
             // Parent directory might already exist, that's fine
           }
         }
-        
+
         const fullPath = getPath(path);
         await Filesystem.mkdir({
           path: fullPath,
           directory: Directory.Documents,
-          recursive: true
+          recursive: true,
         });
       } catch (e) {
         console.error('Error creating directory:', e);
         throw e;
       }
     },
-    
+
     saveFile: async (filename: string, content: string, directory: string): Promise<void> => {
-      
       const fullDirectory = getPath(directory);
-      
+
       await Filesystem.writeFile({
         path: `${fullDirectory}/${filename}`,
         data: content,
         directory: Directory.Documents,
         encoding: 'utf8' as Encoding,
       });
-    }
+    },
   };
 };
 
-const getFileBackend = (parentDir?: string): { backend: FileBackend | null, type: Platform } => {
+const getFileBackend = (parentDir?: string): { backend: FileBackend | null; type: Platform } => {
   const platform = getPlatform();
-  
+
   switch (platform) {
     case 'desktop':
       return { backend: createElectronFileBackend(), type: platform };
@@ -140,21 +226,27 @@ const getFileBackend = (parentDir?: string): { backend: FileBackend | null, type
 // Function to generate a unique directory name
 const getUniqueDirectoryName = async (
   backend: FileBackend,
-  baseSessionId: string
+  baseSessionId: string,
 ): Promise<string> => {
   let uniqueSessionID = baseSessionId;
-  
+
   if (await backend.directoryExists(uniqueSessionID)) {
     let counter = 1;
     uniqueSessionID = `${baseSessionId}_${counter}`;
-    
+
     while (await backend.directoryExists(uniqueSessionID)) {
       counter++;
       uniqueSessionID = `${baseSessionId}_${counter}`;
     }
   }
-  
+
   return uniqueSessionID;
+};
+
+type CSVBuilder = {
+  filename?: string;
+  trials?: string[];
+  fun?: (row: Record<string, any>) => Record<string, any>;
 };
 
 export default function Upload({
@@ -163,12 +255,16 @@ export default function Upload({
   store,
   sessionID,
   generateFiles,
+  sessionCSVBuilder,
+  trialCSVBuilders,
   uploadRaw = true,
   autoUpload = false,
   androidFolderName,
 }: BaseComponentProps & {
   sessionID?: string | null;
   generateFiles: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
+  sessionCSVBuilder: CSVBuilder;
+  trialCSVBuilders: CSVBuilder[];
   uploadRaw: boolean;
   autoUpload: boolean;
   androidFolderName?: string;
@@ -217,19 +313,18 @@ export default function Upload({
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, []);
-  
-  
+
   const handleUpload = useCallback(async () => {
     setUploadState('uploading');
-  
+
     if (uploadInitiatedRef.current) {
       return;
     }
-  
+
     uploadInitiatedRef.current = true;
-  
+
     const sessionIDUpload = sessionID ?? uuidv4();
-  
+
     const files: FileUpload[] = generateFiles ? generateFiles(sessionIDUpload, data, store) : [];
     if (uploadRaw) {
       files.push({
@@ -238,38 +333,112 @@ export default function Upload({
         encoding: 'utf8',
       });
     }
-  
+
+    if (sessionCSVBuilder) {
+      type ParamDetails = {
+        value?: any;
+        defaultValue: any;
+      };
+      let paramsDict: Record<string, any> = {};
+      const paramsSource: Record<string, ParamDetails | any> | undefined =
+        data?.[0]?.responseData?.params;
+      if (paramsSource && typeof paramsSource === 'object' && paramsSource !== null) {
+        paramsDict = Object.entries(paramsSource).reduce(
+          (
+            accumulator: Record<string, any>,
+            [paramName, paramDetails]: [string, ParamDetails | any],
+          ) => {
+            if (
+              paramDetails &&
+              typeof paramDetails === 'object' &&
+              'defaultValue' in paramDetails
+            ) {
+              const chosenValue = paramDetails.value ?? paramDetails.defaultValue;
+              accumulator[paramName] = chosenValue;
+            }
+            return accumulator;
+          },
+          {} as Record<string, any>,
+        );
+      }
+
+      let content = {
+        sessionID: sessionIDUpload,
+        userAgent: data[0].responseData.userAgent,
+        ...paramsDict,
+      };
+
+      if (
+        sessionCSVBuilder.trials &&
+        Array.isArray(sessionCSVBuilder.trials) &&
+        sessionCSVBuilder.trials.length > 0
+      ) {
+        for (const trialName of sessionCSVBuilder.trials) {
+          const matchingDataElement = data.find((element) => element.name === trialName);
+
+          if (matchingDataElement?.responseData) {
+            if (
+              typeof matchingDataElement.responseData === 'object' &&
+              matchingDataElement.responseData !== null
+            ) {
+              content = { ...content, ...matchingDataElement.responseData };
+            }
+          }
+        }
+      }
+
+      files.push({
+        content: convertArrayOfObjectsToCSV([
+          sessionCSVBuilder.fun ? sessionCSVBuilder.fun(content) : content,
+        ]),
+        filename: `${sessionIDUpload}${sessionCSVBuilder.filename}.csv`,
+        encoding: 'utf8' as const,
+      });
+    }
+
+    if (trialCSVBuilders) {
+      for (const builder of trialCSVBuilders) {
+        files.push(
+          combineTrialsToCsv(
+            data,
+            `${sessionIDUpload}${builder.filename}.csv`,
+            builder.trials ?? [],
+            builder.fun,
+          ),
+        );
+      }
+    }
+
     try {
       const payload: UploadPayload = {
         sessionId: sessionIDUpload,
-        files,
+        files: files.map((file) => ({ ...file, encoding: file.encoding ?? 'utf8' })),
       };
-  
+
       if (shouldDownload) {
         await downloadFiles(files);
       }
-  
+
       if (!shouldUpload) {
         next({});
         return;
       }
-  
+
       // Get the current platform and appropriate file backend
       const { backend, type } = getFileBackend(androidFolderName);
-      
+
       if (type === 'web') {
         uploadData.mutate(payload);
       } else if (backend) {
         try {
-
           const uniqueSessionID = await getUniqueDirectoryName(backend, sessionIDUpload);
-          
+
           await backend.createDirectory(uniqueSessionID);
-        
+
           for (const file of files) {
             await backend.saveFile(file.filename, file.content, uniqueSessionID);
           }
-          
+
           setUploadState('success');
           next({});
         } catch (error) {

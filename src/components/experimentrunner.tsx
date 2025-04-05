@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { ExperimentConfig, Store, Param } from '../utils/common';
+import { ExperimentConfig, Store, Param, now } from '../utils/common';
 import { useCallback, useEffect, useMemo, useRef, useState, ComponentType } from 'react';
 import {
   compileTimeline,
@@ -113,8 +113,8 @@ export default function ExperimentRunner({
     const initialData: ComponentResultData = {
       index: -1,
       trialNumber: -1,
-      start: performance.now(),
-      end: performance.now(),
+      start: now(),
+      end: now(),
       duration: 0,
       type: '',
       name: '',
@@ -128,7 +128,7 @@ export default function ExperimentRunner({
   });
 
   const [totalTrialsCompleted, setTotalTrialsCompleted] = useState(0);
-  const lastTrialEndTimeRef = useRef(performance.now());
+  const lastTrialEndTimeRef = useRef(now());
   const experimentStoreRef = useRef<Store>({});
 
   const componentsMap = { ...defaultComponents, ...components };
@@ -152,7 +152,7 @@ export default function ExperimentRunner({
     actualStartTime?: number,
     actualEndTime?: number,
   ): void {
-    const currentTime = performance.now();
+    const currentTime = now();
     const currentInstruction = trialByteCode.instructions[instructionPointer];
 
     // Use the provided startTime if available, otherwise use the lastTrialEndTimeRef
@@ -212,7 +212,7 @@ export default function ExperimentRunner({
 
         case 'ExecuteContent':
           foundNextContent = true;
-          lastTrialEndTimeRef.current = performance.now();
+          lastTrialEndTimeRef.current = now();
           setInstructionPointer(nextPointer);
           return;
 
@@ -230,14 +230,14 @@ export default function ExperimentRunner({
 
   const collectRefreshRate = useCallback((callback: (refreshRate: number | null) => void) => {
     let frameCount = 0;
-    const startTime = performance.now();
+    const startTime = now();
     const maxDuration = 20000;
     let rafId: number;
     let lastUpdateTime = startTime;
     const updateInterval = 1000;
 
     const calculateRefreshRate = () => {
-      const currentTime = performance.now();
+      const currentTime = now();
       const elapsedTime = currentTime - startTime;
       if (elapsedTime > 0) {
         const refreshRate = Math.round((frameCount * 1000) / elapsedTime);
@@ -283,7 +283,7 @@ export default function ExperimentRunner({
     const refreshRateRef = useRef<number | null>(null);
 
     useEffect(() => {
-      wrapperStartTimeRef.current = performance.now();
+      wrapperStartTimeRef.current = now();
 
       if (shouldcollect) {
         const cleanup = collectRefreshRate((rate) => {
@@ -302,7 +302,7 @@ export default function ExperimentRunner({
           actualStartTime?: number,
           actualEndTime?: number,
         ) => {
-          const currentTimeWrapper = performance.now();
+          const currentTimeWrapper = now();
 
           // Use the timings provided by the component if available, otherwise use the one by the wrapper
           const startTime =

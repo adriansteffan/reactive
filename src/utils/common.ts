@@ -1,5 +1,10 @@
 import { Capacitor } from '@capacitor/core';
 
+
+export function now(){
+  return Math.round(performance.now());
+}
+
 export function isFullscreen(): boolean {
   return !!(
     document.fullscreenElement ||
@@ -19,7 +24,7 @@ export interface TrialData {
   trialNumber: number;
   type: string;
   name: string;
-  data: any;
+  responseData: any;
   start: number;
   end: number;
   duration: number;
@@ -28,7 +33,7 @@ export interface TrialData {
 export interface FileUpload {
   filename: string;
   content: string;
-  encoding: 'base64' | 'utf8';
+  encoding?: 'base64' | 'utf8';
 }
 
 export interface ExperimentConfig {

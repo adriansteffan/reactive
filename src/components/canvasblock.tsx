@@ -11,7 +11,7 @@ import {
   RefinedTrialData,
   CanvasResultData,
 } from '../utils/bytecode';
-import { BaseComponentProps, isFullscreen } from '../utils/common';
+import { BaseComponentProps, isFullscreen, now } from '../utils/common';
 
 interface CanvasSlide {
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
@@ -22,6 +22,7 @@ interface CanvasSlide {
   ignoreData?: boolean;
   allowedKeys?: string[] | boolean;
   metadata?: Record<string, any>;
+  nestMetadata?: boolean;
 }
 
 type DynamicCanvasSlideGenerator = (data: RefinedTrialData[], store: Store) => CanvasSlide;
@@ -139,7 +140,7 @@ export default function CanvasBlock({
       } catch (e) {
         console.error('Error during slide draw function:', e);
       }
-      slideStartTimeRef.current = performance.now();
+      slideStartTimeRef.current = now();
       isDrawingVisibleRef.current = true;
       responseRegisteredRef.current = null;
       contentInstructionsCompletedRef.current += 1;
@@ -151,7 +152,7 @@ export default function CanvasBlock({
   let handleSlideEnd: () => void;
 
   const tick = useCallback(() => {
-    const now = performance.now();
+    const timeNow = now();
     const currentPointer = instructionPointerRef.current;
     if (currentPointer < 0 || currentPointer >= instructions.length) {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -175,7 +176,7 @@ export default function CanvasBlock({
 
     // if we know the screen refresh rate, add half the frame interval to the elapsed time to get more accurate time checking
     const elapsedSlideTime =
-      now -
+      timeNow -
       slideStartTimeRef.current +
       (frameIntervalRef.current !== null ? frameIntervalRef.current * 0.5 : 0);
 
@@ -297,7 +298,7 @@ export default function CanvasBlock({
 
   handleSlideEnd = useCallback(() => {
     const responseData = responseRegisteredRef.current;
-    const endTime = performance.now();
+    const endTime = now();
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = null;
     const currentPointer = instructionPointerRef.current;
@@ -313,16 +314,19 @@ export default function CanvasBlock({
     const slide = resolveSlideContent(instruction);
 
     if (slide && !slide.ignoreData) {
-      const trialData = {
+      let trialData = {
         index: instructionPointerRef.current,
         trialNumber: contentInstructionsCompletedRef.current - 1,
         start: slideStartTimeRef.current,
         end: endTime,
         duration: endTime - slideStartTimeRef.current,
-        metadata: slide.metadata ?? {},
         key: responseData ? responseData.key : null,
         reactionTime: responseData ? responseData.reactionTime : null,
       } as CanvasResultData;
+
+      if (slide.nestMetadata) {
+        trialData = { ...trialData, metadata: slide.metadata };
+      } else trialData = { ...slide.metadata, ...trialData };
 
       dataRef.current.push(trialData);
     }
@@ -334,7 +338,7 @@ export default function CanvasBlock({
 
   const handleKeyPress = useCallback(
     (event: KeyboardEvent) => {
-      const keypressTime = performance.now();
+      const keypressTime = now();
       const currentPointer = instructionPointerRef.current;
       if (currentPointer >= instructions.length || !isDrawingVisibleRef.current) return;
       const instruction = instructions[currentPointer];

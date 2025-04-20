@@ -51,7 +51,7 @@ interface RuntimeComponentContent {
   type: string;
   collectRefreshRate?: boolean;
   hideSettings?: string[] | boolean;
-  props?: Record<string, any> | ((store: Store, data: RefinedTrialData[]) => Record<string, any>);
+  props?: Record<string, any> | ((data: RefinedTrialData[], store: Store) => Record<string, any>);
 }
 
 function isRuntimeComponentContent(content: any): content is RuntimeComponentContent {
@@ -334,7 +334,7 @@ export default function ExperimentRunner({
       if (Component) {
         const componentProps =
           typeof content.props === 'function'
-            ? content.props(experimentStoreRef.current, data)
+            ? content.props(data, experimentStoreRef.current)
             : content.props || {};
 
         componentToRender = (

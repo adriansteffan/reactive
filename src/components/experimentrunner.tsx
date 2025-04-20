@@ -23,6 +23,7 @@ import CheckDevice from './checkdevice';
 
 import VoicerecorderQuestionComponent from './voicerecorder';
 import React from 'react';
+import StoreUI from './storeui';
 
 type ComponentsMap = {
   [key: string]: ComponentType<any>;
@@ -40,6 +41,7 @@ const defaultComponents: ComponentsMap = {
   RequestFilePermission,
   CanvasBlock,
   CheckDevice,
+  StoreUI
 };
 
 const defaultCustomQuestions: ComponentsMap = {

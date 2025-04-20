@@ -21,7 +21,9 @@ interface CanvasSlide {
   hideOnResponse?: boolean;
   ignoreData?: boolean;
   allowedKeys?: string[] | boolean;
-  metadata?: Record<string, any>;
+  metadata?:
+    | Record<string, any>
+    | ((data?: RefinedTrialData[], store?: Store) => Record<string, any>);
   nestMetadata?: boolean;
 }
 
@@ -324,9 +326,14 @@ export default function CanvasBlock({
         reactionTime: responseData ? responseData.reactionTime : null,
       } as CanvasResultData;
 
+      const metadata =
+        typeof slide.metadata === 'function'
+          ? slide.metadata(dataRef.current, storeRef.current)
+          : slide.metadata;
+
       if (slide.nestMetadata) {
-        trialData = { ...trialData, metadata: slide.metadata };
-      } else trialData = { ...slide.metadata, ...trialData };
+        trialData = { ...trialData, metadata: metadata };
+      } else trialData = { ...metadata, ...trialData };
 
       dataRef.current.push(trialData);
     }

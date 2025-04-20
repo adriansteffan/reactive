@@ -51,6 +51,10 @@ interface RuntimeComponentContent {
   type: string;
   collectRefreshRate?: boolean;
   hideSettings?: string[] | boolean;
+  metadata?:
+    | Record<string, any>
+    | ((data: RefinedTrialData[], store: Store) => Record<string, any>);
+  nestMetadata?: boolean;
   props?: Record<string, any> | ((data: RefinedTrialData[], store: Store) => Record<string, any>);
 }
 
@@ -101,8 +105,7 @@ export default function ExperimentRunner({
     // Then add/overwrite with registry entries
     for (const param of registry) {
       params[param.name] = {
-        value:
-          param.value !== undefined ? param.value : urlParams[param.name],
+        value: param.value !== undefined ? param.value : urlParams[param.name],
         registered: true,
         defaultValue: param.defaultValue,
         type: param.type,
@@ -123,7 +126,7 @@ export default function ExperimentRunner({
         params,
       },
     };
-    
+
     return [initialData];
   });
 
@@ -163,7 +166,7 @@ export default function ExperimentRunner({
     if (currentInstruction?.type === 'ExecuteContent') {
       const content = currentInstruction.content;
       if (isRuntimeComponentContent(content)) {
-        const trialData: ComponentResultData = {
+        let trialData: ComponentResultData = {
           index: instructionPointer,
           trialNumber: totalTrialsCompleted + 1,
           start: startTime,
@@ -173,6 +176,16 @@ export default function ExperimentRunner({
           name: content.name ?? '',
           responseData: componentResponseData,
         };
+
+        const metadata =
+          typeof content.metadata === 'function'
+            ? content.metadata(data, experimentStoreRef.current)
+            : content.metadata;
+
+        if (content.nestMetadata) {
+          trialData = { ...trialData, metadata: metadata };
+        } else trialData = { ...metadata, ...trialData };
+
         setData((prevData) => [...prevData, trialData]);
         setTotalTrialsCompleted((prevCount) => prevCount + 1);
       } else {

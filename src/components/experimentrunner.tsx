@@ -80,7 +80,7 @@ export default function ExperimentRunner({
   }, [timeline]);
 
   const [instructionPointer, setInstructionPointer] = useState(0);
-  const [data, setData] = useState<RefinedTrialData[]>(() => {
+  const dataRef = useRef<RefinedTrialData[]>((() => {
     const urlParams: Record<string, any> = {};
     const searchParams = new URLSearchParams(window.location.search);
     for (const [key, value] of searchParams.entries()) {
@@ -128,7 +128,7 @@ export default function ExperimentRunner({
     };
 
     return [initialData];
-  });
+  })());
 
   const [totalTrialsCompleted, setTotalTrialsCompleted] = useState(0);
   const lastTrialEndTimeRef = useRef(now());
@@ -179,14 +179,14 @@ export default function ExperimentRunner({
 
         const metadata =
           typeof content.metadata === 'function'
-            ? content.metadata(data, experimentStoreRef.current)
+            ? content.metadata(dataRef.current, experimentStoreRef.current)
             : content.metadata;
 
         if (content.nestMetadata) {
           trialData = { ...trialData, metadata: metadata };
         } else trialData = { ...metadata, ...trialData };
-
-        setData((prevData) => [...prevData, trialData]);
+        
+        dataRef.current = [...dataRef.current, trialData];
         setTotalTrialsCompleted((prevCount) => prevCount + 1);
       } else {
         console.log(
@@ -204,7 +204,7 @@ export default function ExperimentRunner({
 
       switch (nextInstruction.type) {
         case 'IfGoto':
-          if (nextInstruction.cond(experimentStoreRef.current, data)) {
+          if (nextInstruction.cond(experimentStoreRef.current, dataRef.current)) {
             const markerIndex = trialByteCode.markers[nextInstruction.marker];
             if (markerIndex !== undefined) {
               nextPointer = markerIndex;
@@ -219,7 +219,7 @@ export default function ExperimentRunner({
           break;
 
         case 'UpdateStore':
-          updateStore(nextInstruction.fun(experimentStoreRef.current, data));
+          updateStore(nextInstruction.fun(experimentStoreRef.current, dataRef.current));
           nextPointer++;
           break;
 
@@ -347,7 +347,7 @@ export default function ExperimentRunner({
       if (Component) {
         const componentProps =
           typeof content.props === 'function'
-            ? content.props(data, experimentStoreRef.current)
+            ? content.props(dataRef.current, experimentStoreRef.current)
             : content.props || {};
 
         componentToRender = (
@@ -356,7 +356,7 @@ export default function ExperimentRunner({
               next={next}
               updateStore={updateStore}
               store={experimentStoreRef.current}
-              data={data}
+              data={dataRef.current}
               {...(content.type === 'Quest' ? { customQuestions: customQuestionsMap } : {})}
               {...componentProps}
             />

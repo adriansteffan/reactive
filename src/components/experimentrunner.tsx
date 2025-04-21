@@ -377,7 +377,7 @@ export default function ExperimentRunner({
   }
 
   return (
-    <div className='w-full'>
+    <div className='w-full h-full'>
       <div
         className={` ${
           config.showProgressBar ? '' : 'hidden '

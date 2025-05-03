@@ -88,22 +88,39 @@ function convertArrayOfObjectsToCSV(data: DataObject[]): string {
   return [headerRow, ...dataRows].join('\n');
 }
 
+// TODO: for better cohesion move this into the components on registration
+const defaultFlatteningFunctions = {
+  'CanvasBlock': (item: TrialData) => {
+    const responseData = item.responseData;
+    if (Array.isArray(responseData)) {
+      return responseData.map((i) => ({
+        block: item.name,
+        ...i,
+      }));
+    }
+    return [];
+  }
+}
+
+const transform = ({responseData, ...obj}: any) => ({ ...obj, ...Object.entries(responseData || {}).reduce((acc, [k, v]) => ({...acc, [`data_${k}`]: v}), {}) });
+
 function combineTrialsToCsv(
   data: any[],
   filename: string,
   names: string[],
+  flatteningFunctions: Record<string, (item: any) => any[]>,
   fun?: (obj: any) => any,
 ) {
+
   const processedData = names
     .flatMap((name) => {
-      const responseData = data.find((d) => d.name === name)?.responseData;
-      if (Array.isArray(responseData)) {
-        return responseData.map((i) => ({
-          block: name,
-          ...i,
-        }));
-      }
-      return [];
+      const matchingItems = data.filter((d) => d.name === name);
+      
+      return matchingItems.flatMap((item) => {
+        const flattener = item.type && flatteningFunctions[item.type];
+        
+        return flattener ? flattener(item) : transform(item);
+      });
     })
     .map((x) => (fun ? fun(x) : x));
 
@@ -256,7 +273,7 @@ export default function Upload({
   sessionID,
   generateFiles,
   sessionCSVBuilder,
-  trialCSVBuilders,
+  trialCSVBuilder,
   uploadRaw = true,
   autoUpload = false,
   androidFolderName,
@@ -264,7 +281,7 @@ export default function Upload({
   sessionID?: string | null;
   generateFiles: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
   sessionCSVBuilder: CSVBuilder;
-  trialCSVBuilders: CSVBuilder[];
+  trialCSVBuilder: {flatteners: Record<string, ((item: TrialData) => Record<string, any>[])>, builders: CSVBuilder[]};
   uploadRaw: boolean;
   autoUpload: boolean;
   androidFolderName?: string;
@@ -396,13 +413,14 @@ export default function Upload({
       });
     }
 
-    if (trialCSVBuilders) {
-      for (const builder of trialCSVBuilders) {
+    if (trialCSVBuilder) {
+      for (const builder of trialCSVBuilder.builders) {
         files.push(
           combineTrialsToCsv(
             data,
             `${sessionIDUpload}${builder.filename}.csv`,
             builder.trials ?? [],
+            {...defaultFlatteningFunctions, ...trialCSVBuilder.flatteners},
             builder.fun,
           ),
         );

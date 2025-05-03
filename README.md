@@ -21,12 +21,20 @@ Then follow the instructions shown there and in the created `README.md`
 
 ### Usage
 
-For now, refer to the `App.tsx` in the template project to find out how to define an experiment, and add custom trials and questions!
+For now, refer to the `Experiment.tsx` in the template project to find out how to define an experiment, and add custom trials and questions!
 
 Premade components available so far:
 
 * Text: A simple display of Text and a Button
 * MicCheck: used to test the voice recording feature and choose a preferred microphone to use
+* CanvasBlock: TODO DOC
+* IF_BLOCK: TODO DOC
+* IF_GOTO: TODO DOC
+* MARKER: TODO DOC
+* UPDATE_STORE: TODO DOC
+* StoreUI: TODO DOC
+* DeviceCheck: TODO DOC
+* ProlificEnd: TODO DOC
 * Quest: SurveyJS questionnaires
     * ... all questiontypes supported by SurveyJS can be used
     * voicerecorder: a custom question type that allows participants to record voice

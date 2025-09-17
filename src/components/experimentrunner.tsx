@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import '../index.css';
 import { ExperimentConfig, Store, Param, now } from '../utils/common';
 import { useCallback, useEffect, useMemo, useRef, useState, ComponentType } from 'react';
 import {

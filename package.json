@@ -1,6 +1,6 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,7 +23,6 @@
       "types": "./dist/mod.d.ts"
     },
     "./style.css": "./dist/style.css",
-    "./preset.css": "./dist/preset.css",
     "./array": {
       "import": "./dist/reactive.es.js",
       "require": "./dist/reactive.umd.js",

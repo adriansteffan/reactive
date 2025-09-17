@@ -1,6 +1,6 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.0.32",
+  "version": "0.0.34",
   "type": "module",
   "scripts": {
     "dev": "vite",

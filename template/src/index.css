@@ -6,3 +6,7 @@
   --font-*: initial;
   --font-atkinson: Atkinson Hyperlegible, sans-serif;
 }
+
+// needed for tailwind prose to not break in Tailwind v4 due to tree shaking
+@source '../node_modules/@adriansteffan/reactive/dist/**/*.{js,jsx,ts,tsx}';
+@source '../node_modules/@adriansteffan/reactive/src/**/*.{js,jsx,ts,tsx}';

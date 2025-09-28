@@ -108,27 +108,80 @@ function combineTrialsToCsv(
   data: any[],
   filename: string,
   names: string[],
-  flatteningFunctions: Record<string, (item: any) => any[]>,
+  flatteningFunctions: Record<string, (item: any) => any[] | Record<string, any[]>>,
   fun?: (obj: any) => any,
-) {
+): FileUpload | FileUpload[] {
 
-  const processedData = names
-    .flatMap((name) => {
-      const matchingItems = data.filter((d) => d.name === name);
-      
-      return matchingItems.flatMap((item) => {
-        const flattener = item.type && flatteningFunctions[item.type];
-        
-        return flattener ? flattener(item) : transform(item);
+  // Collect all flattener results first
+  const allResults: (any[] | Record<string, any[]>)[] = names.flatMap((name) => {
+    const matchingItems = data.filter((d) => d.name === name);
+
+    return matchingItems.map((item) => {
+      const flattener = item.type && flatteningFunctions[item.type];
+      return flattener ? flattener(item) : [transform(item)];
+    });
+  });
+
+  // Check if any result is a multi-table object (has string keys with array values)
+  const hasMultiTable = allResults.some((result) =>
+    result &&
+    typeof result === 'object' &&
+    !Array.isArray(result) &&
+    Object.keys(result).some(key => Array.isArray(result[key]))
+  );
+
+  if (!hasMultiTable) {
+    // all results are arrays, combine them into one CSV
+    const processedData = allResults
+      .flatMap((result) => Array.isArray(result) ? result : [])
+      .map((x) => (fun ? fun(x) : x));
+
+    return {
+      filename,
+      encoding: 'utf8' as const,
+      content: convertArrayOfObjectsToCSV(processedData),
+    };
+  }
+
+  // handle multi-table results
+  // Collect all table keys from all results
+  const allTableKeys = new Set<string>();
+  allResults.forEach((result) => {
+    if (result && typeof result === 'object' && !Array.isArray(result)) {
+      Object.keys(result).forEach(key => {
+        if (Array.isArray(result[key])) {
+          allTableKeys.add(key);
+        }
       });
-    })
-    .map((x) => (fun ? fun(x) : x));
+    }
+  });
 
-  return {
-    filename,
-    encoding: 'utf8' as const,
-    content: convertArrayOfObjectsToCSV(processedData),
-  };
+  // Create separate CSV files for each table key
+  const files: FileUpload[] = [];
+
+  for (const tableKey of allTableKeys) {
+    const tableData = allResults.flatMap((result) => {
+      if (Array.isArray(result)) {
+        // If this result is a simple array, include it in all tables for backward compatibility
+        return result;
+      } else if (result && typeof result === 'object' && result[tableKey]) {
+        // If this result has data for this table key, include it
+        return result[tableKey];
+      }
+      return [];
+    }).map((x) => (fun ? fun(x) : x));
+
+    // Remove file extension from filename and add table key
+    const baseFilename = filename.replace(/\.csv$/, '');
+
+    files.push({
+      filename: `${baseFilename}_${tableKey}.csv`,
+      encoding: 'utf8' as const,
+      content: convertArrayOfObjectsToCSV(tableData),
+    });
+  }
+
+  return files.length === 1 ? files[0] : files;
 }
 
 interface FileBackend {
@@ -281,7 +334,7 @@ export default function Upload({
   sessionID?: string | null;
   generateFiles: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
   sessionCSVBuilder: CSVBuilder;
-  trialCSVBuilder: {flatteners: Record<string, ((item: TrialData) => Record<string, any>[])>, builders: CSVBuilder[]};
+  trialCSVBuilder: {flatteners: Record<string, ((item: TrialData) => Record<string, any>[] | Record<string, Record<string, any>[]>)>, builders: CSVBuilder[]};
   uploadRaw: boolean;
   autoUpload: boolean;
   androidFolderName?: string;
@@ -415,15 +468,19 @@ export default function Upload({
 
     if (trialCSVBuilder) {
       for (const builder of trialCSVBuilder.builders) {
-        files.push(
-          combineTrialsToCsv(
-            data,
-            `${sessionIDUpload}${builder.filename}.csv`,
-            builder.trials ?? [],
-            {...defaultFlatteningFunctions, ...trialCSVBuilder.flatteners},
-            builder.fun,
-          ),
+        const result = combineTrialsToCsv(
+          data,
+          `${sessionIDUpload}${builder.filename}.csv`,
+          builder.trials ?? [],
+          {...defaultFlatteningFunctions, ...trialCSVBuilder.flatteners},
+          builder.fun,
         );
+
+        if (Array.isArray(result)) {
+          files.push(...result);
+        } else {
+          files.push(result);
+        }
       }
     }
 

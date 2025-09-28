@@ -112,15 +112,32 @@ function combineTrialsToCsv(
   fun?: (obj: any) => any,
 ): FileUpload | FileUpload[] {
 
-  // Collect all flattener results first
+  // Collect all flattener results first, filtering out completely empty results
   const allResults: (any[] | Record<string, any[]>)[] = names.flatMap((name) => {
     const matchingItems = data.filter((d) => d.name === name);
 
     return matchingItems.map((item) => {
       const flattener = item.type && flatteningFunctions[item.type];
-      return flattener ? flattener(item) : [transform(item)];
+      const result = flattener ? flattener(item) : [transform(item)];
+
+      // Filter out completely empty results
+      if (Array.isArray(result) && result.length === 0) {
+        return null; // Signal this trial should be completely skipped
+      }
+
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        // Check if all arrays in the object are empty
+        const hasAnyData = Object.values(result).some(val =>
+          Array.isArray(val) && val.length > 0
+        );
+        if (!hasAnyData) {
+          return null; // Signal this trial should be completely skipped
+        }
+      }
+
+      return result;
     });
-  });
+  }).filter(result => result !== null);
 
   // Check if any result is a multi-table object (has string keys with array values)
   const hasMultiTable = allResults.some((result) =>
@@ -135,6 +152,11 @@ function combineTrialsToCsv(
     const processedData = allResults
       .flatMap((result) => Array.isArray(result) ? result : [])
       .map((x) => (fun ? fun(x) : x));
+
+    // Skip creating CSV if all flatteners returned empty arrays
+    if (processedData.length === 0) {
+      return [];
+    }
 
     return {
       filename,
@@ -171,6 +193,11 @@ function combineTrialsToCsv(
       return [];
     }).map((x) => (fun ? fun(x) : x));
 
+    // Skip creating CSV if all flatteners returned empty arrays for this table
+    if (tableData.length === 0) {
+      continue;
+    }
+
     // Remove file extension from filename and add table key
     const baseFilename = filename.replace(/\.csv$/, '');
 
@@ -179,6 +206,11 @@ function combineTrialsToCsv(
       encoding: 'utf8' as const,
       content: convertArrayOfObjectsToCSV(tableData),
     });
+  }
+
+  // Return empty array if no files were created
+  if (files.length === 0) {
+    return [];
   }
 
   return files.length === 1 ? files[0] : files;
@@ -477,7 +509,10 @@ export default function Upload({
         );
 
         if (Array.isArray(result)) {
-          files.push(...result);
+          // Only push files if the array is not empty
+          if (result.length > 0) {
+            files.push(...result);
+          }
         } else {
           files.push(result);
         }

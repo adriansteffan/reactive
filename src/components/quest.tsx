@@ -1,8 +1,8 @@
 import { useCallback, createElement, ComponentType } from 'react';
-import { defaultV2Css, Model, Question, Serializer } from 'survey-core';
+import { defaultCss, Model, Question, Serializer } from 'survey-core';
 import { ReactQuestionFactory, Survey, SurveyQuestionElementBase } from 'survey-react-ui';
 import { ContrastLight } from 'survey-core/themes';
-import 'survey-core/defaultV2.min.css';
+import 'survey-core/survey-core.min.css';
 
 type ComponentsMap = {
   [key: string]: ComponentType<any>;
@@ -67,7 +67,7 @@ function Quest({
 
   const survey = new Model({
     ...surveyJson,
-    css: { ...defaultV2Css, root: 'sd-root-modern custom-root' },
+    css: { ...defaultCss, root: 'sd-root-modern custom-root' },
   });
   survey.applyTheme(ContrastLight);
 

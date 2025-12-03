@@ -73,14 +73,7 @@ function Quest({
 
   const saveResults = useCallback(
     (sender: any) => {
-      const resultData: Record<string, any> = {};
-      for (const key in sender.data) {
-        const question = sender.getQuestionByName(key);
-        if (question) {
-          resultData[key] = question.value;
-        }
-      }
-      next(resultData);
+      next({ ...sender.data });
     },
     [next],
   );

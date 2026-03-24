@@ -3,6 +3,63 @@ import { defaultCss, Model, Question, Serializer } from 'survey-core';
 import { ReactQuestionFactory, Survey, SurveyQuestionElementBase } from 'survey-react-ui';
 import { ContrastLight } from 'survey-core/themes';
 import 'survey-core/survey-core.min.css';
+import { registerSimulation } from '../utils/simulation';
+
+registerSimulation('Quest', (trialProps, _experimentState, simulators, participant) => {
+  const responseData: Record<string, any> = {};
+  let totalDuration = 0;
+  const pages = trialProps.surveyJson?.pages || [{ elements: trialProps.surveyJson?.elements || [] }];
+  for (const page of pages) {
+    for (const el of page.elements || []) {
+      if (!el.name) continue;
+      const result = simulators.answerQuestion(el, participant);
+      participant = result.participantState;
+      responseData[el.name] = result.value;
+      totalDuration += result.duration ?? 0;
+    }
+  }
+  return { responseData, participantState: participant, duration: totalDuration };
+}, {
+  answerQuestion: (question: any, participant: any) => {
+    let value;
+    switch (question.type) {
+      case 'rating': {
+        const min = question.rateMin ?? 1, max = question.rateMax ?? 5;
+        value = min + Math.floor(Math.random() * (max - min + 1));
+        break;
+      }
+      case 'boolean': value = Math.random() > 0.5; break;
+      case 'text': case 'comment': value = 'simulated_response'; break;
+      case 'radiogroup': case 'dropdown': {
+        const c = question.choices?.[Math.floor(Math.random() * (question.choices?.length || 0))];
+        value = c !== undefined ? (typeof c === 'object' ? c.value : c) : null;
+        break;
+      }
+      case 'checkbox': {
+        if (question.choices?.length) {
+          const n = 1 + Math.floor(Math.random() * question.choices.length);
+          value = [...question.choices]
+            .sort(() => Math.random() - 0.5).slice(0, n)
+            .map((c: any) => typeof c === 'object' ? c.value : c);
+        }
+        break;
+      }
+      case 'matrix': {
+        if (question.rows?.length && question.columns?.length) {
+          value = Object.fromEntries(
+            question.rows.map((r: any) => {
+              const col = question.columns[Math.floor(Math.random() * question.columns.length)];
+              return [typeof r === 'object' ? r.value : r, typeof col === 'object' ? col.value : col];
+            }),
+          );
+        }
+        break;
+      }
+      default: value = null;
+    }
+    return { value, participantState: participant, duration: 1000 + Math.random() * 4000 };
+  },
+});
 
 type ComponentsMap = {
   [key: string]: ComponentType<any>;

@@ -1,5 +1,6 @@
 import { BaseComponentProps } from '../mod';
 import React, { useState, useEffect } from 'react';
+import { registerSimulation } from '../utils/simulation';
 
 interface BaseFieldConfig {
   type: 'string' | 'integer' | 'float' | 'boolean';
@@ -33,6 +34,19 @@ interface BooleanFieldConfig extends BaseFieldConfig {
 
 type FieldConfig = StringFieldConfig | NumberFieldConfig | BooleanFieldConfig;
 
+function buildFieldValues(fields: FieldConfig[], store?: Record<string, any>): Record<string, any> {
+  const values: Record<string, any> = {};
+  fields.forEach(field => {
+    values[field.storeKey] = store?.[field.storeKey] !== undefined ? store[field.storeKey] : field.defaultValue;
+  });
+  return values;
+}
+
+registerSimulation('StoreUI', (trialProps, experimentState, _simulators, participant) => {
+  const values = buildFieldValues(trialProps.fields || [], experimentState.store);
+  return { responseData: values, participantState: participant, storeUpdates: values };
+}, {});
+
 interface StoreUIProps extends BaseComponentProps {
   title?: string;
   description?: string;
@@ -56,17 +70,7 @@ function StoreUI({
   
   
   useEffect(() => {
-    const initialValues: Record<string, any> = {};
-    
-    fields.forEach(field => {
-      
-      initialValues[field.storeKey] = 
-        store?.[field.storeKey] !== undefined 
-          ? store[field.storeKey] 
-          : field.defaultValue;
-    });
-    
-    setValues(initialValues);
+    setValues(buildFieldValues(fields, store));
    
     const initialTouched: Record<string, boolean> = {};
     fields.forEach(field => {

@@ -42,6 +42,105 @@ Premade components available so far:
 
 
 
+## Simulation
+
+Reactive includes a simulation system that lets you run experiments headlessly, generating synthetic data from simulated participants. This is useful for some basic computational modeling, verifying data pipelines, and sample size planning.
+
+### Quick start
+
+Define your participant generator in `Experiment.tsx`:
+
+```tsx
+export const simulationConfig = {
+  participants: {
+    generator: (i) => ({ id: i, nickname: `participant_${i}` }),
+    count: 10,
+  },
+};
+```
+
+Run the simulation:
+
+```
+npm run simulate
+```
+
+This starts the backend, simulates all participants through the experiment, uploads data via the real backend (just like real participants would), and shuts down.
+
+### How it works
+
+Each built-in component (Text, Quest, CanvasBlock, Upload, etc.) registers a **simulate function** and **default simulators**. The simulate function contains the trial logic. The simulators are replaceable decision functions that model participant behavior at each interaction point.
+
+For example, Quest's simulate function iterates through questions and calls `simulators.answerQuestion()` for each one. The default `answerQuestion` picks random valid answers. You can override it to model specific participant behavior.
+
+### Overriding simulators on a trial
+
+Add a `simulators` property to any timeline item to override specific decision functions:
+
+```tsx
+{
+  type: 'PlainInput',
+  props: { content: <p>What is your name?</p> },
+  simulators: {
+    respond: (_trialProps, participant) => ({
+      value: participant.nickname,
+      participantState: participant,
+    }),
+  },
+}
+```
+
+The override is merged with the registered defaults — you only need to specify the decision functions you want to change.
+
+### Custom components
+
+Register a simulation for your custom components using `registerSimulation`:
+
+```tsx
+registerSimulation('MyTrial',
+  // Simulate function: uses shared trial logic + decision functions
+  (trialProps, experimentState, simulators, participant) => {
+    const choice = simulators.decide(trialProps, participant);
+    return { responseData: { choice: choice.value }, participantState: choice.participantState };
+  },
+  // Default simulators: one per decision point
+  {
+    decide: (_trialProps, participant) => ({
+      value: 'default_choice',
+      participantState: participant,
+    }),
+  },
+);
+```
+
+The simulate function orchestrates the trial logic. The decision functions are the parts where a human would interact — these are what users override to model different participant behaviors.
+
+### Hybrid mode
+
+During development, you can auto-advance simulated trials while manually interacting with others. Add `?hybridSimulation=true` to the URL during development:
+
+```
+http://localhost:5173?hybridSimulation=true
+```
+
+Trials with `simulators` or `simulate: true` defined on them will auto-advance. Trials without them render normally for human interaction.
+
+Hybrid mode is enabled by default during development. For production, set `VITE_DISABLE_HYBRID_SIMULATION=true` to disable it regardless of URL parameters.
+
+### Built-in simulator decision functions
+
+| Component | Decision functions | Default behavior |
+|---|---|---|
+| Text | `respond` | Click button, random reaction time |
+| PlainInput | `respond` | Returns `'simulated_input'` |
+| Quest | `answerQuestion` | Random valid answer per question type |
+| CanvasBlock | `respondToSlide` | Random key from `allowedKeys`, random RT |
+| Upload | *(none)* | Builds CSVs and POSTs to backend |
+| StoreUI | *(none)* | Uses field default values |
+| CheckDevice | *(none)* | Returns simulated device info |
+| EnterFullscreen, ExitFullscreen, MicrophoneCheck, ProlificEnding, RequestFilePermission | *(none)* | No-op, advances immediately |
+
+
 ## Development
 
 
@@ -56,11 +155,15 @@ Then create a global link (only needs to run once during setup);
 npm link
 ```
 
-Then set up a local testing project:
+Then set up a local testing project (run from the parent directory so it's created as a sibling):
 
 ```
-npx @adriansteffan/reactive
-npm uninstall @adriansteffan/reactive && npm link @adriansteffan/reactive
+cd ..
+node reactive/bin/setup.js
+cd <project-name>
+npm pkg set dependencies.@adriansteffan/reactive="*"
+npm i && npm i --prefix backend
+npm link @adriansteffan/reactive
 ```
 
 

@@ -1,7 +1,10 @@
 import { BaseComponentProps, getPlatform } from '../utils/common';
 import { useEffect, useState } from 'react';
+import { registerSimulation, noopSimulate } from '../utils/simulation';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
+
+registerSimulation('RequestFilePermission', noopSimulate, {});
 
 export default function RequestFilePermission({ next }: BaseComponentProps) {
   const [permissionStatus, setPermissionStatus] = useState('checking');

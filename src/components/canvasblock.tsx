@@ -4,6 +4,8 @@ import { useRef, useEffect, useMemo, useCallback } from 'react';
 
 import {
   compileTimeline,
+  advanceToNextContent,
+  applyMetadata,
   TimelineItem,
   UnifiedBytecodeInstruction,
   ExecuteContentInstruction,
@@ -12,6 +14,18 @@ import {
   CanvasResultData,
 } from '../utils/bytecode';
 import { BaseComponentProps, isFullscreen, now } from '../utils/common';
+import { registerSimulation, ParticipantState } from '../utils/simulation';
+
+export type SlideSimulatorResult = {
+  key: string | null;
+  reactionTime: number | null;
+  participantState: ParticipantState;
+};
+
+export type SlideSimulator = (
+  slide: Record<string, any>,
+  participant: ParticipantState,
+) => SlideSimulatorResult;
 
 interface CanvasSlide {
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
@@ -25,6 +39,7 @@ interface CanvasSlide {
     | Record<string, any>
     | ((data?: RefinedTrialData[], store?: Store) => Record<string, any>);
   nestMetadata?: boolean;
+  simulate?: SlideSimulator;
 }
 
 type DynamicCanvasSlideGenerator = (data: RefinedTrialData[], store: Store) => CanvasSlide;
@@ -227,74 +242,41 @@ export default function CanvasBlock({
   }, [instructions, resolveSlideContent, clearCanvas]);
 
   const processControlFlow = useCallback(() => {
-    let foundContentToExecute = false;
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     animationFrameRef.current = null;
 
-    while (!foundContentToExecute && instructionPointerRef.current < instructions.length) {
-      const currentInstruction = instructions[instructionPointerRef.current];
+    const pointer = advanceToNextContent(
+      { instructions, markers },
+      instructionPointerRef.current,
+      () => storeRef.current,
+      () => dataRef.current,
+      (s) => { storeRef.current = s; },
+    );
+    instructionPointerRef.current = pointer;
 
-      switch (currentInstruction.type) {
-        case 'IfGoto':
-          if (currentInstruction.cond(storeRef.current, dataRef.current)) {
-            const markerIndex = markers[currentInstruction.marker];
-            if (markerIndex !== undefined) {
-              instructionPointerRef.current = markerIndex;
-            } else {
-              console.error(`Marker ${currentInstruction.marker} not found`);
-              instructionPointerRef.current++;
-            }
-          } else {
-            instructionPointerRef.current++;
-          }
-          continue;
-
-        case 'UpdateStore': {
-          storeRef.current = {
-            ...storeRef.current,
-            ...currentInstruction.fun(storeRef.current, dataRef.current),
-          };
-          instructionPointerRef.current++;
-          continue;
-        }
-        case 'ExecuteContent': {
-          foundContentToExecute = true;
-          if (canvasRef.current) {
-            const currentSlide = resolveSlideContent(currentInstruction);
-            if (currentSlide) {
-              drawSlideInternal(currentSlide);
-              const displayDuration = currentSlide.displayDuration ?? Infinity;
-              const responseTimeLimit = currentSlide.responseTimeLimit ?? Infinity;
-              if (displayDuration !== Infinity || responseTimeLimit !== Infinity) {
-                animationFrameRef.current = requestAnimationFrame(tick);
-              }
-            } else {
-              console.error(
-                'Failed to resolve slide content during control flow:',
-                currentInstruction,
-              );
-              instructionPointerRef.current++;
-              foundContentToExecute = false;
-              continue;
-            }
-          } else {
-            console.error('Canvas element not found during control flow.');
-            return;
-          }
-          break;
-        }
-        default:
-          console.warn('Unknown instruction type during control flow:', currentInstruction);
-          instructionPointerRef.current++;
-          continue;
-      }
-    }
-
-    if (!foundContentToExecute && instructionPointerRef.current >= instructions.length) {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
+    if (pointer >= instructions.length) {
       updateStore(storeRef.current);
       next(dataRef.current);
+      return;
+    }
+
+    if (!canvasRef.current) {
+      console.error('Canvas element not found during control flow.');
+      return;
+    }
+
+    const currentSlide = resolveSlideContent(instructions[pointer]);
+    if (currentSlide) {
+      drawSlideInternal(currentSlide);
+      const displayDuration = currentSlide.displayDuration ?? Infinity;
+      const responseTimeLimit = currentSlide.responseTimeLimit ?? Infinity;
+      if (displayDuration !== Infinity || responseTimeLimit !== Infinity) {
+        animationFrameRef.current = requestAnimationFrame(tick);
+      }
+    } else {
+      console.error('Failed to resolve slide content during control flow:', instructions[pointer]);
+      instructionPointerRef.current++;
+      processControlFlow();
     }
   }, [instructions, markers, resolveSlideContent, drawSlideInternal, tick, next]);
 
@@ -326,14 +308,7 @@ export default function CanvasBlock({
         reactionTime: responseData ? responseData.reactionTime : null,
       } as CanvasResultData;
 
-      const metadata =
-        typeof slide.metadata === 'function'
-          ? slide.metadata(dataRef.current, storeRef.current)
-          : slide.metadata;
-
-      if (slide.nestMetadata) {
-        trialData = { ...trialData, metadata: metadata };
-      } else trialData = { ...metadata, ...trialData };
+      trialData = applyMetadata(trialData, slide, dataRef.current, storeRef.current);
 
       dataRef.current.push(trialData);
     }
@@ -524,3 +499,70 @@ export default function CanvasBlock({
     </div>
   );
 }
+
+// --- Default simulator ---
+
+registerSimulation('CanvasBlock', (trialProps, experimentState, simulators, participant) => {
+  const timeline = trialProps.timeline;
+  if (!timeline) return { responseData: [], participantState: participant };
+
+  const bytecode = compileTimeline(timeline);
+  const innerData: CanvasResultData[] = [];
+  let innerStore: Store = { ...(experimentState.store || {}) };
+  let currentTime = 0;
+  let slideNumber = 0;
+
+  const getStore = () => innerStore;
+  const getData = () => innerData as RefinedTrialData[];
+  const onUpdateStore = (s: Store) => { innerStore = s; };
+
+  let pointer = advanceToNextContent(bytecode, 0, getStore, getData, onUpdateStore);
+
+  while (pointer < bytecode.instructions.length) {
+    let slide = (bytecode.instructions[pointer] as ExecuteContentInstruction).content;
+    if (typeof slide === 'function') slide = slide(innerData, innerStore);
+
+    const sim = slide.simulate || simulators.respondToSlide;
+    const result = sim(slide, participant);
+    participant = result.participantState;
+
+    if (!slide.ignoreData) {
+      const duration = slide.displayDuration || result.reactionTime || 1000;
+
+      let td: CanvasResultData = {
+        index: pointer,
+        trialNumber: slideNumber,
+        start: currentTime,
+        end: currentTime + duration,
+        duration,
+        key: result.key,
+        reactionTime: result.reactionTime,
+      };
+
+      td = applyMetadata(td, slide, innerData, innerStore);
+
+      innerData.push(td);
+      currentTime += duration;
+    }
+
+    slideNumber++;
+    pointer = advanceToNextContent(bytecode, pointer + 1, getStore, getData, onUpdateStore);
+  }
+
+  return { responseData: innerData, participantState: participant, storeUpdates: innerStore, duration: currentTime };
+}, {
+  respondToSlide: (slide: any, participant: any) => {
+    const keys = slide.allowedKeys;
+    if (keys === true) {
+      return { key: ' ', reactionTime: 200 + Math.random() * 600, participantState: participant };
+    }
+    if (Array.isArray(keys) && keys.length > 0) {
+      return {
+        key: keys[Math.floor(Math.random() * keys.length)],
+        reactionTime: 200 + Math.random() * 600,
+        participantState: participant,
+      };
+    }
+    return { key: null, reactionTime: null, participantState: participant };
+  },
+});

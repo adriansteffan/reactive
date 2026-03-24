@@ -207,3 +207,53 @@ export function compileTimeline(timeline: TimelineItem[]): {
 
   return { instructions, markers };
 }
+
+/**
+ * Walks bytecode from `fromPointer`, processing IfGoto and UpdateStore instructions,
+ * and returns the pointer of the next ExecuteContent (or past-end if none found).
+ */
+export function applyMetadata<T extends Record<string, any>>(
+  trialData: T,
+  content: { metadata?: any; nestMetadata?: boolean },
+  data: RefinedTrialData[],
+  store: Store,
+): T {
+  const metadata = typeof content.metadata === 'function' ? content.metadata(data, store) : content.metadata;
+  if (content.nestMetadata) return { ...trialData, metadata };
+  if (metadata) return { ...metadata, ...trialData };
+  return trialData;
+}
+
+export function advanceToNextContent(
+  bytecode: { instructions: UnifiedBytecodeInstruction[]; markers: Record<string, number> },
+  fromPointer: number,
+  getStore: () => Store,
+  getData: () => RefinedTrialData[],
+  onUpdateStore: (newStore: Store) => void,
+): number {
+  let pointer = fromPointer;
+  while (pointer < bytecode.instructions.length) {
+    const instr = bytecode.instructions[pointer];
+    switch (instr.type) {
+      case 'ExecuteContent':
+        return pointer;
+      case 'IfGoto':
+        if (instr.cond(getStore(), getData())) {
+          const target = bytecode.markers[instr.marker];
+          if (target !== undefined) {
+            pointer = target;
+            continue;
+          }
+        }
+        pointer++;
+        break;
+      case 'UpdateStore':
+        onUpdateStore(instr.fun(getStore(), getData()));
+        pointer++;
+        break;
+      default:
+        pointer++;
+    }
+  }
+  return pointer;
+}

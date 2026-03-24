@@ -1,5 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import { BaseComponentProps, now } from '../mod';
+import { registerSimulation } from '../utils/simulation';
+
+registerSimulation('Text', (trialProps, _experimentState, simulators, participant) => {
+  const result = simulators.respond(trialProps, participant);
+  return { responseData: result.value, participantState: result.participantState, duration: result.value.reactionTime };
+}, {
+  respond: (_input: any, participant: any) => ({
+    value: { key: 'button', reactionTime: 500 + Math.random() * 1500 },
+    participantState: participant,
+  }),
+});
 
 function Text({
   content,

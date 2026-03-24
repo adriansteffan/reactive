@@ -13,8 +13,54 @@ import {
   TrialData,
 } from '../utils/common';
 import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
-
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { buildUploadFiles, convertArrayOfObjectsToCSV, CSVBuilder } from '../utils/upload';
+import { registerSimulation, getBackendUrl, getInitialParticipant } from '../utils/simulation';
+
+registerSimulation('Upload', async (trialProps, experimentState, _simulators, participant) => {
+  const sessionID = trialProps.sessionID || `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const files = buildUploadFiles({
+    sessionID,
+    data: experimentState.data || [],
+    store: experimentState.store,
+    generateFiles: trialProps.generateFiles,
+    sessionCSVBuilder: trialProps.sessionCSVBuilder,
+    trialCSVBuilder: trialProps.trialCSVBuilder,
+    uploadRaw: trialProps.uploadRaw ?? true,
+  });
+
+  const initialParticipant = getInitialParticipant();
+  if (initialParticipant) {
+    files.push({
+      filename: `${sessionID}_participant_initial.csv`,
+      content: convertArrayOfObjectsToCSV([initialParticipant]),
+      encoding: 'utf8',
+    });
+    files.push({
+      filename: `${sessionID}_participant_final.csv`,
+      content: convertArrayOfObjectsToCSV([participant]),
+      encoding: 'utf8',
+    });
+  }
+
+  const backendUrl = getBackendUrl();
+  if (backendUrl) {
+    const payload = {
+      sessionId: sessionID,
+      files: files.map((f) => ({ ...f, encoding: f.encoding ?? 'utf8' })),
+    };
+    const res = await fetch(`${backendUrl}/data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error(`Simulation upload failed: ${res.status} ${res.statusText}`);
+    }
+  }
+
+  return { responseData: { files }, participantState: participant };
+}, {});
 
 interface UploadPayload {
   sessionId: string;
@@ -42,179 +88,6 @@ registerComponentParams('Upload', [
   },
 ]);
 
-type DataObject = {
-  [key: string]: string | number | boolean | null | undefined;
-};
-
-function escapeCsvValue(value: any): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  const stringValue = String(value);
-
-  if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
-    const escapedValue = stringValue.replace(/"/g, '""');
-    return `"${escapedValue}"`;
-  }
-
-  return stringValue;
-}
-
-function convertArrayOfObjectsToCSV(data: DataObject[]): string {
-  if (!data || data.length === 0) {
-    return '';
-  }
-
-  const headerSet = new Set<string>();
-  data.forEach((obj) => {
-    Object.keys(obj).forEach((key) => {
-      headerSet.add(key);
-    });
-  });
-  const headers = Array.from(headerSet);
-
-  const headerRow = headers.map((header) => escapeCsvValue(header)).join(',');
-
-  const dataRows = data.map((obj) => {
-    return headers
-      .map((header) => {
-        const value = obj[header];
-        return escapeCsvValue(value);
-      })
-      .join(',');
-  });
-
-  return [headerRow, ...dataRows].join('\n');
-}
-
-// TODO: for better cohesion move this into the components on registration
-const defaultFlatteningFunctions = {
-  'CanvasBlock': (item: TrialData) => {
-    const responseData = item.responseData;
-    if (Array.isArray(responseData)) {
-      return responseData.map((i) => ({
-        block: item.name,
-        ...i,
-      }));
-    }
-    return [];
-  }
-}
-
-const transform = ({responseData, ...obj}: any) => ({ ...obj, ...Object.entries(responseData || {}).reduce((acc, [k, v]) => ({...acc, [`data_${k}`]: v}), {}) });
-
-function combineTrialsToCsv(
-  data: any[],
-  filename: string,
-  names: string[],
-  flatteningFunctions: Record<string, (item: any) => any[] | Record<string, any[]>>,
-  fun?: (obj: any) => any,
-): FileUpload | FileUpload[] {
-
-  // Collect all flattener results first, filtering out completely empty results
-  const allResults: (any[] | Record<string, any[]>)[] = names.flatMap((name) => {
-    const matchingItems = data.filter((d) => d.name === name);
-
-    return matchingItems.map((item) => {
-      const flattener = item.type && flatteningFunctions[item.type];
-      const result = flattener ? flattener(item) : [transform(item)];
-
-      // Filter out completely empty results
-      if (Array.isArray(result) && result.length === 0) {
-        return null; // Signal this trial should be completely skipped
-      }
-
-      if (result && typeof result === 'object' && !Array.isArray(result)) {
-        // Check if all arrays in the object are empty
-        const hasAnyData = Object.values(result).some(val =>
-          Array.isArray(val) && val.length > 0
-        );
-        if (!hasAnyData) {
-          return null; // Signal this trial should be completely skipped
-        }
-      }
-
-      return result;
-    });
-  }).filter(result => result !== null);
-
-  // Check if any result is a multi-table object (has string keys with array values)
-  const hasMultiTable = allResults.some((result) =>
-    result &&
-    typeof result === 'object' &&
-    !Array.isArray(result) &&
-    Object.keys(result).some(key => Array.isArray(result[key]))
-  );
-
-  if (!hasMultiTable) {
-    // all results are arrays, combine them into one CSV
-    const processedData = allResults
-      .flatMap((result) => Array.isArray(result) ? result : [])
-      .map((x) => (fun ? fun(x) : x));
-
-    // Skip creating CSV if all flatteners returned empty arrays
-    if (processedData.length === 0) {
-      return [];
-    }
-
-    return {
-      filename,
-      encoding: 'utf8' as const,
-      content: convertArrayOfObjectsToCSV(processedData),
-    };
-  }
-
-  // handle multi-table results
-  // Collect all table keys from all results
-  const allTableKeys = new Set<string>();
-  allResults.forEach((result) => {
-    if (result && typeof result === 'object' && !Array.isArray(result)) {
-      Object.keys(result).forEach(key => {
-        if (Array.isArray(result[key])) {
-          allTableKeys.add(key);
-        }
-      });
-    }
-  });
-
-  // Create separate CSV files for each table key
-  const files: FileUpload[] = [];
-
-  for (const tableKey of allTableKeys) {
-    const tableData = allResults.flatMap((result) => {
-      if (Array.isArray(result)) {
-        // If this result is a simple array, include it in all tables for backward compatibility
-        return result;
-      } else if (result && typeof result === 'object' && result[tableKey]) {
-        // If this result has data for this table key, include it
-        return result[tableKey];
-      }
-      return [];
-    }).map((x) => (fun ? fun(x) : x));
-
-    // Skip creating CSV if all flatteners returned empty arrays for this table
-    if (tableData.length === 0) {
-      continue;
-    }
-
-    // Remove file extension from filename and add table key
-    const baseFilename = filename.replace(/\.csv$/, '');
-
-    files.push({
-      filename: `${baseFilename}_${tableKey}.csv`,
-      encoding: 'utf8' as const,
-      content: convertArrayOfObjectsToCSV(tableData),
-    });
-  }
-
-  // Return empty array if no files were created
-  if (files.length === 0) {
-    return [];
-  }
-
-  return files.length === 1 ? files[0] : files;
-}
 
 interface FileBackend {
   directoryExists(path: string): Promise<boolean>;
@@ -345,12 +218,6 @@ const getUniqueDirectoryName = async (
   return uniqueSessionID;
 };
 
-type CSVBuilder = {
-  filename?: string;
-  trials?: string[];
-  fun?: (row: Record<string, any>) => Record<string, any>;
-};
-
 export default function Upload({
   data,
   next,
@@ -427,97 +294,15 @@ export default function Upload({
 
     const sessionIDUpload = sessionID ?? uuidv4();
 
-    const files: FileUpload[] = generateFiles ? generateFiles(sessionIDUpload, data, store) : [];
-    if (uploadRaw) {
-      files.push({
-        filename: `${sessionIDUpload}.raw.json`,
-        content: JSON.stringify(data),
-        encoding: 'utf8',
-      });
-    }
-
-    if (sessionCSVBuilder) {
-      type ParamDetails = {
-        value?: any;
-        defaultValue: any;
-      };
-      let paramsDict: Record<string, any> = {};
-      const paramsSource: Record<string, ParamDetails | any> | undefined =
-        data?.[0]?.responseData?.params;
-      if (paramsSource && typeof paramsSource === 'object' && paramsSource !== null) {
-        paramsDict = Object.entries(paramsSource).reduce(
-          (
-            accumulator: Record<string, any>,
-            [paramName, paramDetails]: [string, ParamDetails | any],
-          ) => {
-            if (
-              paramDetails &&
-              typeof paramDetails === 'object' &&
-              'defaultValue' in paramDetails
-            ) {
-              const chosenValue = paramDetails.value ?? paramDetails.defaultValue;
-              accumulator[paramName] = chosenValue;
-            }
-            return accumulator;
-          },
-          {} as Record<string, any>,
-        );
-      }
-
-      let content = {
-        sessionID: sessionIDUpload,
-        userAgent: data[0].responseData.userAgent,
-        ...paramsDict,
-      };
-
-      if (
-        sessionCSVBuilder.trials &&
-        Array.isArray(sessionCSVBuilder.trials) &&
-        sessionCSVBuilder.trials.length > 0
-      ) {
-        for (const trialName of sessionCSVBuilder.trials) {
-          const matchingDataElement = data.find((element) => element.name === trialName);
-
-          if (matchingDataElement?.responseData) {
-            if (
-              typeof matchingDataElement.responseData === 'object' &&
-              matchingDataElement.responseData !== null
-            ) {
-              content = { ...content, ...matchingDataElement.responseData };
-            }
-          }
-        }
-      }
-
-      files.push({
-        content: convertArrayOfObjectsToCSV([
-          sessionCSVBuilder.fun ? sessionCSVBuilder.fun(content) : content,
-        ]),
-        filename: `${sessionIDUpload}${sessionCSVBuilder.filename}.csv`,
-        encoding: 'utf8' as const,
-      });
-    }
-
-    if (trialCSVBuilder) {
-      for (const builder of trialCSVBuilder.builders) {
-        const result = combineTrialsToCsv(
-          data,
-          `${sessionIDUpload}${builder.filename}.csv`,
-          builder.trials ?? [],
-          {...defaultFlatteningFunctions, ...trialCSVBuilder.flatteners},
-          builder.fun,
-        );
-
-        if (Array.isArray(result)) {
-          // Only push files if the array is not empty
-          if (result.length > 0) {
-            files.push(...result);
-          }
-        } else {
-          files.push(result);
-        }
-      }
-    }
+    const files = buildUploadFiles({
+      sessionID: sessionIDUpload,
+      data,
+      store,
+      generateFiles,
+      sessionCSVBuilder,
+      trialCSVBuilder,
+      uploadRaw,
+    });
 
     try {
       const payload: UploadPayload = {

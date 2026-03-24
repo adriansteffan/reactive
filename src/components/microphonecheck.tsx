@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { VoiceRecorder } from './voicerecorder';
+import { registerSimulation, noopSimulate } from '../utils/simulation';
+
+registerSimulation('MicrophoneCheck', noopSimulate, {});
 
 interface MicrophoneDevice {
   deviceId: string;

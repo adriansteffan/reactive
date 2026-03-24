@@ -1,14 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import '../index.css';
-import { ExperimentConfig, Store, Param, now } from '../utils/common';
+import { ExperimentConfig, Store, Param, now, getParam } from '../utils/common';
 import { useCallback, useEffect, useMemo, useRef, useState, ComponentType } from 'react';
 import {
   compileTimeline,
+  advanceToNextContent,
+  applyMetadata,
   TimelineItem,
   RefinedTrialData,
   ComponentResultData,
 } from '../utils/bytecode';
+import {
+  ParticipantState,
+  SimulateFunction,
+  resolveSimulation,
+} from '../utils/simulation';
+import { useHybridSimulationDisabled } from './experimentprovider';
 
 import Upload from './upload';
 import Text from './text';
@@ -59,6 +67,8 @@ interface RuntimeComponentContent {
     | ((data: RefinedTrialData[], store: Store) => Record<string, any>);
   nestMetadata?: boolean;
   props?: Record<string, any> | ((data: RefinedTrialData[], store: Store) => Record<string, any>);
+  simulate?: SimulateFunction | boolean;
+  simulators?: Record<string, any>;
 }
 
 function isRuntimeComponentContent(content: any): content is RuntimeComponentContent {
@@ -72,12 +82,15 @@ export default function ExperimentRunner({
   },
   components = {},
   questions = {},
+  hybridParticipant,
 }: {
   timeline: TimelineItem[];
   config?: ExperimentConfig;
   components?: ComponentsMap;
   questions?: ComponentsMap;
+  hybridParticipant?: ParticipantState;
 }) {
+  const disableHybridSimulation = useHybridSimulationDisabled();
   const trialByteCode = useMemo(() => {
     return compileTimeline(timeline);
   }, [timeline]);
@@ -137,6 +150,15 @@ export default function ExperimentRunner({
   const lastTrialEndTimeRef = useRef(now());
   const experimentStoreRef = useRef<Store>({});
 
+  const simulationMode =
+    (!disableHybridSimulation && getParam('hybridSimulation', false, 'boolean'))
+      ? 'hybrid' as const
+      : 'none' as const;
+
+  const participantRef = useRef<ParticipantState>(hybridParticipant || {});
+  // Guards against duplicate simulation in React strict mode
+  const lastSimulatedPointerRef = useRef(-1);
+
   const componentsMap = { ...defaultComponents, ...components };
   const customQuestionsMap: ComponentsMap = { ...defaultCustomQuestions, ...questions };
 
@@ -180,14 +202,7 @@ export default function ExperimentRunner({
           responseData: componentResponseData,
         };
 
-        const metadata =
-          typeof content.metadata === 'function'
-            ? content.metadata(dataRef.current, experimentStoreRef.current)
-            : content.metadata;
-
-        if (content.nestMetadata) {
-          trialData = { ...trialData, metadata: metadata };
-        } else trialData = { ...metadata, ...trialData };
+        trialData = applyMetadata(trialData, content, dataRef.current, experimentStoreRef.current);
         
         dataRef.current = [...dataRef.current, trialData];
         setTotalTrialsCompleted((prevCount) => prevCount + 1);
@@ -199,49 +214,17 @@ export default function ExperimentRunner({
       }
     }
 
-    let nextPointer = instructionPointer + 1;
-    let foundNextContent = false;
-
-    while (nextPointer < trialByteCode.instructions.length) {
-      const nextInstruction = trialByteCode.instructions[nextPointer];
-
-      switch (nextInstruction.type) {
-        case 'IfGoto':
-          if (nextInstruction.cond(experimentStoreRef.current, dataRef.current)) {
-            const markerIndex = trialByteCode.markers[nextInstruction.marker];
-            if (markerIndex !== undefined) {
-              nextPointer = markerIndex;
-              continue;
-            } else {
-              console.error(`Marker ${nextInstruction.marker} not found`);
-              nextPointer++;
-            }
-          } else {
-            nextPointer++;
-          }
-          break;
-
-        case 'UpdateStore':
-          updateStore(nextInstruction.fun(experimentStoreRef.current, dataRef.current));
-          nextPointer++;
-          break;
-
-        case 'ExecuteContent':
-          foundNextContent = true;
-          lastTrialEndTimeRef.current = now();
-          setInstructionPointer(nextPointer);
-          return;
-
-        default:
-          console.error('Unknown instruction type encountered:', nextInstruction);
-          nextPointer++;
-          break;
-      }
+    const nextPointer = advanceToNextContent(
+      trialByteCode,
+      instructionPointer + 1,
+      () => experimentStoreRef.current,
+      () => dataRef.current,
+      (s) => updateStore(s),
+    );
+    if (nextPointer < trialByteCode.instructions.length) {
+      lastTrialEndTimeRef.current = now();
     }
-
-    if (!foundNextContent) {
-      setInstructionPointer(nextPointer);
-    }
+    setInstructionPointer(nextPointer);
   }
 
   const collectRefreshRate = useCallback((callback: (refreshRate: number | null) => void) => {
@@ -341,8 +324,39 @@ export default function ExperimentRunner({
 
   const currentInstruction = trialByteCode.instructions[instructionPointer];
 
+  const shouldSimulate = useMemo(() => {
+    if (simulationMode === 'none') return false;
+    if (currentInstruction?.type !== 'ExecuteContent') return false;
+    const content = currentInstruction.content;
+    if (!isRuntimeComponentContent(content)) return false;
+    if (content.simulate === false) return false;
+    return !!content.simulate || !!content.simulators;
+  }, [instructionPointer, simulationMode, currentInstruction]);
+
+  useEffect(() => {
+    if (!shouldSimulate) return;
+    if (lastSimulatedPointerRef.current === instructionPointer) return;
+    lastSimulatedPointerRef.current = instructionPointer;
+
+    (async () => {
+      const content = (currentInstruction as any).content;
+      const { trialProps, simulateFn, simulators } = resolveSimulation(content, dataRef.current, experimentStoreRef.current);
+
+      const result = await simulateFn(
+        trialProps,
+        { data: dataRef.current, store: experimentStoreRef.current },
+        simulators,
+        participantRef.current,
+      );
+
+      participantRef.current = result.participantState;
+      if (result.storeUpdates) updateStore(result.storeUpdates);
+      next(result.responseData);
+    })();
+  }, [shouldSimulate, instructionPointer]);
+
   let componentToRender = null;
-  if (currentInstruction?.type === 'ExecuteContent') {
+  if (currentInstruction?.type === 'ExecuteContent' && !shouldSimulate) {
     const content = currentInstruction.content;
     if (isRuntimeComponentContent(content)) {
       const Component = componentsMap[content.type];

@@ -1,5 +1,20 @@
 import { BaseComponentProps } from '../mod';
 import { useEffect, useRef, useState } from 'react';
+import { registerSimulation } from '../utils/simulation';
+
+registerSimulation('CheckDevice', (_trialProps, _experimentState, _simulators, participant) => {
+  const deviceInfo = {
+    windowWidth: 1920, windowHeight: 1080, screenWidth: 1920, screenHeight: 1080,
+    browser: 'Simulated', browserVersion: '1.0', isMobile: false,
+    operatingSystem: 'Simulated', hasWebAudio: true, hasFullscreen: true,
+    hasWebcam: true, hasMicrophone: true,
+  };
+  return {
+    responseData: deviceInfo,
+    participantState: participant,
+    storeUpdates: { _reactiveDeviceInfo: deviceInfo },
+  };
+}, {});
 
 interface DeviceInfo {
   windowWidth: number;

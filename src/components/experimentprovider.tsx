@@ -3,11 +3,14 @@ import { ToastContainer } from 'react-toastify';
 
 const queryClient = new QueryClient();
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactNode } from 'react';
+import { createContext, ReactNode, useContext } from 'react';
 import { SettingsScreen } from './settingsscreen';
 import { Param } from '../utils/common';
 
-export default function ExperimentProvider({ children, disableSettings }: { children: ReactNode, disableSettings?: boolean }) {
+const HybridSimulationContext = createContext(false);
+export const useHybridSimulationDisabled = () => useContext(HybridSimulationContext);
+
+export default function ExperimentProvider({ children, disableSettings, disableHybridSimulation }: { children: ReactNode, disableSettings?: boolean, disableHybridSimulation?: boolean }) {
  
   if (window.location.pathname.endsWith('/settings') && !disableSettings) {
     return (
@@ -20,7 +23,9 @@ export default function ExperimentProvider({ children, disableSettings }: { chil
 
   return (
     <QueryClientProvider client={queryClient}>
+      <HybridSimulationContext.Provider value={!!disableHybridSimulation}>
       {children}
+      </HybridSimulationContext.Provider>
       <ToastContainer
         position='top-center'
         autoClose={3000}

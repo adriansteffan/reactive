@@ -1,10 +1,12 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'; // Import useState
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { BaseComponentProps, getPlatform, isFullscreen } from '../utils/common';
+import { registerSimulation, noopSimulate } from '../utils/simulation';
 import Text from '../components/text';
-
 import { StatusBar } from '@capacitor/status-bar';
 import { ImmersiveMode } from '@adriansteffan/immersive-mode';
 import { Capacitor } from '@capacitor/core';
+
+registerSimulation('EnterFullscreen', noopSimulate, {});
 
 export default function EnterFullscreen({
   content,
@@ -28,7 +30,7 @@ export default function EnterFullscreen({
 
   const [isWaiting, setIsWaiting] = useState(false);
   const listenerFallbackActive = useRef(false);
-  const timeoutId = useRef<NodeJS.Timeout | null>(null);
+  const timeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelPendingTimeout = useCallback(() => {
       if (timeoutId.current) {

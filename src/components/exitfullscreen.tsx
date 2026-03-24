@@ -1,8 +1,11 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { BaseComponentProps, getPlatform, isFullscreen } from '../utils/common';
+import { registerSimulation, noopSimulate } from '../utils/simulation';
 import { StatusBar } from '@capacitor/status-bar';
 import { ImmersiveMode } from '@adriansteffan/immersive-mode';
 import { Capacitor } from '@capacitor/core';
+
+registerSimulation('ExitFullscreen', noopSimulate, {});
 
 export default function ExitFullscreen({
   next,
@@ -12,7 +15,7 @@ export default function ExitFullscreen({
 } & BaseComponentProps) {
   
   const listenerFallbackActive = useRef(false);
-  const timeoutId = useRef<NodeJS.Timeout | null>(null);
+  const timeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelPendingTimeout = useCallback(() => {
     if (timeoutId.current) {

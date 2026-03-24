@@ -85,6 +85,65 @@ To update the app, simply stop the running containers, run a `git pull` and buil
 The server will create a "data" directory in the root directory of the cloned repo,
 
 
+## Simulation
+
+You can simulate your experiment headlessly to generate synthetic data, test your data pipeline, or plan sample sizes.
+
+### Setup
+
+Define your participant generator and simulation config in `Experiment.tsx`:
+
+```tsx
+export const simulationConfig = {
+  participants: {
+    generator: (i) => ({ id: i, nickname: `participant_${i}` }),
+    count: 10,
+  },
+};
+```
+
+### Running
+
+```
+npm run simulate
+```
+
+This starts the backend, simulates all participants through the experiment, and shuts down. The simulated data ends up in `backend/data/`.
+
+### Customizing participant behavior
+
+Each trial component has default decision functions that model participant behavior. Override them per-trial using the `simulators` property on a timeline item:
+
+```tsx
+{
+  type: 'PlainInput',
+  props: { content: <p>What is your name?</p> },
+  simulators: {
+    respond: (_trialProps, participant) => ({
+      value: participant.nickname,
+      participantState: participant,
+    }),
+  },
+}
+```
+
+### Custom components
+
+Register simulations for your custom trial components using `registerSimulation`. See the `CustomTrial` example in `Experiment.tsx` and the [reactive README](https://github.com/adriansteffan/reactive) for details.
+
+### Hybrid mode
+
+During development, auto-advance simulated trials while manually interacting with others:
+
+Add `?hybridSimulation=true` to the URL:
+
+```
+http://localhost:5173?hybridSimulation=true
+```
+
+Trials with `simulators` or `simulate: true` defined will auto-advance. Others render normally for human interaction. Hybrid mode is enabled by default during development. For production, set `VITE_DISABLE_HYBRID_SIMULATION=true` to disable it.
+
+
 ## Target: Windows or MacOS
 
 ### Development

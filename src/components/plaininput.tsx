@@ -1,5 +1,22 @@
 import { BaseComponentProps } from '../mod';
 import { useState } from 'react';
+import { registerSimulation } from '../utils/simulation';
+
+registerSimulation('PlainInput', (trialProps, _experimentState, simulators, participant) => {
+  const result = simulators.respond(trialProps, participant);
+  const typingDuration = String(result.value).length * (50 + Math.random() * 100);
+  return {
+    responseData: { value: result.value },
+    participantState: result.participantState,
+    storeUpdates: trialProps.storeupdate ? trialProps.storeupdate(result.value) : undefined,
+    duration: typingDuration,
+  };
+}, {
+  respond: (_input: any, participant: any) => ({
+    value: 'simulated_input',
+    participantState: participant,
+  }),
+});
 
 function PlainInput({
   content,

@@ -1,5 +1,8 @@
 import { BaseComponentProps, getParam, registerComponentParams } from '../utils/common';
 import Text from '../components/text';
+import { registerSimulation, noopSimulate } from '../utils/simulation';
+
+registerSimulation('ProlificEnding', noopSimulate, {});
 
 registerComponentParams('ProlificEnding', [
   { name: 'cc', defaultValue: '', type: 'string', description: 'Completion code of the Profilic experiment (more commonly supplied via the code)' },

@@ -8,7 +8,7 @@ import {
   advanceToNextContent,
   applyMetadata,
   TimelineItem,
-  RefinedTrialData,
+  TrialResult,
   ComponentResultData,
 } from '../utils/bytecode';
 import {
@@ -64,9 +64,9 @@ interface RuntimeComponentContent {
   hideSettings?: string[] | boolean;
   metadata?:
     | Record<string, any>
-    | ((data: RefinedTrialData[], store: Store) => Record<string, any>);
+    | ((data: TrialResult[], store: Store) => Record<string, any>);
   nestMetadata?: boolean;
-  props?: Record<string, any> | ((data: RefinedTrialData[], store: Store) => Record<string, any>);
+  props?: Record<string, any> | ((data: TrialResult[], store: Store) => Record<string, any>);
   simulate?: SimulateFunction | boolean;
   simulators?: Record<string, any>;
 }
@@ -96,7 +96,7 @@ export default function ExperimentRunner({
   }, [timeline]);
 
   const [instructionPointer, setInstructionPointer] = useState(0);
-  const dataRef = useRef<RefinedTrialData[]>((() => {
+  const dataRef = useRef<TrialResult[]>((() => {
     const urlParams: Record<string, any> = {};
     const searchParams = new URLSearchParams(window.location.search);
     for (const [key, value] of searchParams.entries()) {
@@ -396,8 +396,9 @@ export default function ExperimentRunner({
       <div
         className={` ${
           config.showProgressBar ? '' : 'hidden '
-        } px-4 mt-4 sm:mt-12 max-w-2xl mx-auto flex-1 h-6 bg-gray-200 rounded-full overflow-hidden`}
+        } px-4 mt-4 sm:mt-12 max-w-2xl mx-auto`}
       >
+        <div className='flex-1 h-6 bg-gray-200 rounded-full overflow-hidden'>
         <div
           className={`h-full bg-gray-200 rounded-full duration-300 ${
             progress > 0 ? ' border-black border-2' : ''
@@ -410,6 +411,7 @@ export default function ExperimentRunner({
             transition: 'width 300ms ease-in-out',
           }}
         />
+        </div>
       </div>
       {componentToRender}
     </div>

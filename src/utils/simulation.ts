@@ -4,7 +4,7 @@ import {
   compileTimeline,
   advanceToNextContent,
   applyMetadata,
-  RefinedTrialData,
+  TrialResult,
   ComponentResultData,
   TimelineItem,
   Store,
@@ -23,7 +23,7 @@ export type SimulatorResult = {
 export type SimulateFunction = (
   trialProps: Record<string, any>,
   experimentState: {
-    data: RefinedTrialData[];
+    data: TrialResult[];
     store: Store;
   },
   simulators: Record<string, any>,
@@ -55,7 +55,7 @@ export const noopSimulate: SimulateFunction = (_trialProps, _experimentState, _s
   participantState: participant,
 });
 
-export function resolveSimulation(content: any, data: RefinedTrialData[], store: Store) {
+export function resolveSimulation(content: any, data: TrialResult[], store: Store) {
   const trialProps =
     typeof content.props === 'function' ? content.props(data, store) : content.props || {};
   const registration = simulationRegistry[content.type];
@@ -80,12 +80,12 @@ export function getInitialParticipant() { return _initialParticipant; }
 export async function simulateParticipant(
   timeline: TimelineItem[],
   participant: ParticipantState,
-): Promise<RefinedTrialData[]> {
+): Promise<TrialResult[]> {
   _initialParticipant = { ...participant };
   let currentParticipantState = { ...participant };
   const bytecode = compileTimeline(timeline);
   let store: Store = {};
-  const data: RefinedTrialData[] = [
+  const data: TrialResult[] = [
     {
       index: -1,
       trialNumber: -1,

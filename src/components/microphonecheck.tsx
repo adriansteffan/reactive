@@ -156,7 +156,7 @@ const MicrophoneCheck = ({ next }: { next: (data: object) => void }) => {
           <div className='mt-16 flex justify-center'>
             <button
               onClick={() => next({})}
-              className='bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
+              className='bg-white cursor-pointer px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
             >
               Next
             </button>

@@ -21,16 +21,16 @@ export type CanvasResultData = BaseTrialData & {
   reactionTime: number | null;
 };
 
-export type RefinedTrialData = ComponentResultData | CanvasResultData;
+export type TrialResult = ComponentResultData | CanvasResultData;
 
 export interface MarkerItem {
   type: 'MARKER';
   id: string;
 }
 
-export type ConditionalFunction = (data?: RefinedTrialData[], store?: Store) => boolean;
+export type ConditionalFunction = (data?: TrialResult[], store?: Store) => boolean;
 
-export type StoreUpdateFunction = (data?: RefinedTrialData[], store?: Store) => Record<string, any>;
+export type StoreUpdateFunction = (data?: TrialResult[], store?: Store) => Record<string, any>;
 
 export interface IfGotoItem {
   type: 'IF_GOTO';
@@ -65,12 +65,12 @@ export interface ExecuteContentInstruction {
 }
 export interface IfGotoInstruction {
   type: 'IfGoto';
-  cond: (store: Store, data: RefinedTrialData[]) => boolean;
+  cond: (store: Store, data: TrialResult[]) => boolean;
   marker: string;
 }
 export interface UpdateStoreInstruction {
   type: 'UpdateStore';
-  fun: (store: Store, data: RefinedTrialData[]) => Store;
+  fun: (store: Store, data: TrialResult[]) => Store;
 }
 export type UnifiedBytecodeInstruction =
   | ExecuteContentInstruction
@@ -95,16 +95,16 @@ export function compileTimeline(timeline: TimelineItem[]): {
 
   function adaptCondition(
     userCondition: ConditionalFunction,
-  ): (store: Store, data: RefinedTrialData[]) => boolean {
-    return (runtimeStore: Store, runtimeData: RefinedTrialData[]): boolean => {
+  ): (store: Store, data: TrialResult[]) => boolean {
+    return (runtimeStore: Store, runtimeData: TrialResult[]): boolean => {
       return userCondition(runtimeData, runtimeStore);
     };
   }
 
   function adaptUpdate(
     userUpdateFunction: StoreUpdateFunction,
-  ): (store: Store, data: RefinedTrialData[]) => Store {
-    return (runtimeStore: Store, runtimeData: RefinedTrialData[]): Store => {
+  ): (store: Store, data: TrialResult[]) => Store {
+    return (runtimeStore: Store, runtimeData: TrialResult[]): Store => {
       const updates = userUpdateFunction(runtimeData, runtimeStore);
       if (typeof updates === 'object' && updates !== null) {
         return {
@@ -215,7 +215,7 @@ export function compileTimeline(timeline: TimelineItem[]): {
 export function applyMetadata<T extends Record<string, any>>(
   trialData: T,
   content: { metadata?: any; nestMetadata?: boolean },
-  data: RefinedTrialData[],
+  data: TrialResult[],
   store: Store,
 ): T {
   const metadata = typeof content.metadata === 'function' ? content.metadata(data, store) : content.metadata;
@@ -228,7 +228,7 @@ export function advanceToNextContent(
   bytecode: { instructions: UnifiedBytecodeInstruction[]; markers: Record<string, number> },
   fromPointer: number,
   getStore: () => Store,
-  getData: () => RefinedTrialData[],
+  getData: () => TrialResult[],
   onUpdateStore: (newStore: Store) => void,
 ): number {
   let pointer = fromPointer;

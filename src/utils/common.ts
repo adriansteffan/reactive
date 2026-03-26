@@ -68,13 +68,14 @@ export function getParam<T extends ParamType>(
   defaultValue: ParamValue<T>,
   type: T = 'string' as T,
   description?: string,
+  uiDefault?: string,
 ): ParamValue<T> {
   let registryEntry = sharedRegistry.find((p) => p.name === name);
 
   if (!registryEntry) {
     registryEntry = {
       name,
-      defaultValue,
+      defaultValue: uiDefault !== undefined ? uiDefault : defaultValue,
       type,
       description,
       value: undefined,

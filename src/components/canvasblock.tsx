@@ -10,7 +10,7 @@ import {
   UnifiedBytecodeInstruction,
   ExecuteContentInstruction,
   Store,
-  RefinedTrialData,
+  TrialResult,
   CanvasResultData,
 } from '../utils/bytecode';
 import { BaseComponentProps, isFullscreen, now } from '../utils/common';
@@ -37,12 +37,12 @@ interface CanvasSlide {
   allowedKeys?: string[] | boolean;
   metadata?:
     | Record<string, any>
-    | ((data?: RefinedTrialData[], store?: Store) => Record<string, any>);
+    | ((data?: TrialResult[], store?: Store) => Record<string, any>);
   nestMetadata?: boolean;
   simulate?: SlideSimulator;
 }
 
-type DynamicCanvasSlideGenerator = (data: RefinedTrialData[], store: Store) => CanvasSlide;
+type DynamicCanvasSlideGenerator = (data: TrialResult[], store: Store) => CanvasSlide;
 
 function isDynamicCanvasSlideGenerator(content: any): content is DynamicCanvasSlideGenerator {
   return typeof content === 'function';
@@ -77,7 +77,7 @@ export default function CanvasBlock({
   const isDrawingVisibleRef = useRef<boolean>(true);
   const responseRegisteredRef = useRef<null | Record<string, any>>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataRef = useRef<RefinedTrialData[]>([]);
+  const dataRef = useRef<TrialResult[]>([]);
   const storeRef = useRef<Store>(store ?? {});
   const animationFrameRef = useRef<number | null>(null);
   const contentInstructionsCompletedRef = useRef(0);
@@ -513,7 +513,7 @@ registerSimulation('CanvasBlock', (trialProps, experimentState, simulators, part
   let slideNumber = 0;
 
   const getStore = () => innerStore;
-  const getData = () => innerData as RefinedTrialData[];
+  const getData = () => innerData as TrialResult[];
   const onUpdateStore = (s: Store) => { innerStore = s; };
 
   let pointer = advanceToNextContent(bytecode, 0, getStore, getData, onUpdateStore);

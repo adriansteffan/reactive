@@ -95,7 +95,6 @@ export default function ExperimentRunner({
     return compileTimeline(timeline);
   }, [timeline]);
 
-  const [instructionPointer, setInstructionPointer] = useState(0);
   const dataRef = useRef<TrialResult[]>((() => {
     const urlParams: Record<string, any> = {};
     const searchParams = new URLSearchParams(window.location.search);
@@ -149,6 +148,16 @@ export default function ExperimentRunner({
   const [totalTrialsCompleted, setTotalTrialsCompleted] = useState(0);
   const lastTrialEndTimeRef = useRef(now());
   const experimentStoreRef = useRef<Store>({});
+
+  const [instructionPointer, setInstructionPointer] = useState(() =>
+    advanceToNextContent(
+      trialByteCode,
+      0,
+      () => experimentStoreRef.current,
+      () => dataRef.current,
+      (s) => { experimentStoreRef.current = { ...experimentStoreRef.current, ...s }; },
+    )
+  );
 
   const simulationMode =
     (!disableHybridSimulation && getParam('hybridSimulation', false, 'boolean'))

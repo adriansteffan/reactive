@@ -21,6 +21,16 @@ export function registerFlattener(
   flattenerRegistry[type].push({ csv, flatten });
 }
 
+// Reusable flattener for components whose responseData is an array of objects.
+// Each array element becomes a CSV row. Non-array responseData produces an empty result.
+export function arrayFlattener(item: TrialData): any[] {
+  const responseData = item.responseData;
+  if (Array.isArray(responseData)) {
+    return responseData.map((i) => ({ block: item.name, ...i }));
+  }
+  return [];
+}
+
 export function escapeCsvValue(value: any): string {
   if (value === null || value === undefined) {
     return '';

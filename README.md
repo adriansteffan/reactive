@@ -231,6 +231,16 @@ registerFlattener('MyGame', 'games', (item) => {
 
 Each row automatically gets standard trial fields prefixed with `trial_` (`trial_index`, `trial_name`, `trial_start`, etc.) plus any metadata from the timeline item. The flattener output overwrites these if keys collide.
 
+### Array flattener
+
+For components whose `responseData` is an array of objects (like CanvasBlock), use the built-in `arrayFlattener` instead of writing your own. Each array element becomes a CSV row with a `block` column set to the trial name:
+
+```tsx
+import { registerFlattener, arrayFlattener } from '@adriansteffan/reactive';
+
+registerFlattener('MyBlockTrial', 'blocks', arrayFlattener);
+```
+
 ### Multi-CSV components
 
 Call `registerFlattener` multiple times for one component to produce multiple CSV files:

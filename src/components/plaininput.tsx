@@ -1,6 +1,9 @@
 import { BaseComponentProps } from '../mod';
 import { useState } from 'react';
 import { registerSimulation } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
+
+registerFlattener('PlainInput', 'session');
 
 registerSimulation('PlainInput', (trialProps, _experimentState, simulators, participant) => {
   const result = simulators.respond(trialProps, participant);

@@ -1,11 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { BaseComponentProps, getPlatform, isFullscreen } from '../utils/common';
 import { registerSimulation, noopSimulate } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
 import Text from '../components/text';
 import { StatusBar } from '@capacitor/status-bar';
 import { ImmersiveMode } from '@adriansteffan/immersive-mode';
 import { Capacitor } from '@capacitor/core';
 
+registerFlattener('EnterFullscreen', 'session');
 registerSimulation('EnterFullscreen', noopSimulate, {});
 
 export default function EnterFullscreen({

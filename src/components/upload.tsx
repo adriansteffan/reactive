@@ -14,7 +14,7 @@ import {
 } from '../utils/common';
 import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { buildUploadFiles, convertArrayOfObjectsToCSV, CSVBuilder } from '../utils/upload';
+import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../utils/upload';
 import { registerSimulation, getBackendUrl, getInitialParticipant } from '../utils/simulation';
 
 registerSimulation('Upload', async (trialProps, experimentState, _simulators, participant) => {
@@ -24,8 +24,7 @@ registerSimulation('Upload', async (trialProps, experimentState, _simulators, pa
     data: experimentState.data || [],
     store: experimentState.store,
     generateFiles: trialProps.generateFiles,
-    sessionCSVBuilder: trialProps.sessionCSVBuilder,
-    trialCSVBuilder: trialProps.trialCSVBuilder,
+    sessionData: trialProps.sessionData,
     uploadRaw: trialProps.uploadRaw ?? true,
   });
 
@@ -72,21 +71,21 @@ interface UploadResponse {
   message?: string;
 }
 
-// TODO: deduplicate values with upload function below
-registerComponentParams('Upload', [
+const UPLOAD_PARAMS = [
   {
     name: 'upload',
     defaultValue: true,
-    type: 'boolean',
+    type: 'boolean' as const,
     description: 'Upload the data at the end of the experiment?',
   },
   {
     name: 'download',
     defaultValue: false,
-    type: 'boolean',
+    type: 'boolean' as const,
     description: 'Locally download the data at the end of the experiment?',
   },
-]);
+];
+registerComponentParams('Upload', UPLOAD_PARAMS);
 
 
 interface FileBackend {
@@ -224,18 +223,16 @@ export default function Upload({
   store,
   sessionID,
   generateFiles,
-  sessionCSVBuilder,
-  trialCSVBuilder,
+  sessionData,
   uploadRaw = true,
   autoUpload = false,
   androidFolderName,
 }: BaseComponentProps & {
   sessionID?: string | null;
-  generateFiles: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
-  sessionCSVBuilder: CSVBuilder;
-  trialCSVBuilder: {flatteners: Record<string, ((item: TrialData) => Record<string, any>[] | Record<string, Record<string, any>[]>)>, builders: CSVBuilder[]};
-  uploadRaw: boolean;
-  autoUpload: boolean;
+  generateFiles?: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
+  sessionData?: Record<string, any>;
+  uploadRaw?: boolean;
+  autoUpload?: boolean;
   androidFolderName?: string;
 }) {
   const [uploadState, setUploadState] = useState<'initial' | 'uploading' | 'success' | 'error'>(
@@ -243,8 +240,10 @@ export default function Upload({
   );
   const uploadInitiatedRef = useRef(false);
 
-  const shouldUpload = getParam('upload', true, 'boolean');
-  const shouldDownload = getParam('download', false, 'boolean');
+  const uploadParam = UPLOAD_PARAMS.find(p => p.name === 'upload')!;
+  const downloadParam = UPLOAD_PARAMS.find(p => p.name === 'download')!;
+  const shouldUpload = getParam(uploadParam.name, uploadParam.defaultValue, uploadParam.type);
+  const shouldDownload = getParam(downloadParam.name, downloadParam.defaultValue, downloadParam.type);
 
   const uploadData = useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -299,8 +298,7 @@ export default function Upload({
       data,
       store,
       generateFiles,
-      sessionCSVBuilder,
-      trialCSVBuilder,
+      sessionData,
       uploadRaw,
     });
 

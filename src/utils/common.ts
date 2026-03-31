@@ -24,6 +24,8 @@ export interface TrialData {
   trialNumber: number;
   type: string;
   name: string;
+  /** Populated from the timeline item's csv field. Overrides the component type's default CSV target from the flattener registry. */
+  csv?: string | string[];
   responseData: any;
   start: number;
   end: number;

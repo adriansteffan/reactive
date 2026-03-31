@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef } from 'react';
-import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation } from '@adriansteffan/reactive';
+import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation, registerFlattener } from '@adriansteffan/reactive';
 
 
 const config: ExperimentConfig = { showProgressBar: true };
@@ -33,6 +33,10 @@ const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number
     </>
   );
 };
+
+// Register a flattener to control how this trial's data appears in the CSV.
+// 'customtrial' is the default CSV file name — override per-item with the csv field.
+registerFlattener('CustomTrial', 'customtrial');
 
 // Register a simulation for the custom trial.
 // The decision function determines how fast the participant clicks.

@@ -141,6 +141,132 @@ Hybrid mode is enabled by default during development. For production, set `VITE_
 | EnterFullscreen, ExitFullscreen, MicrophoneCheck, ProlificEnding, RequestFilePermission | *(none)* | No-op, advances immediately |
 
 
+## Data Saving
+
+Reactive automatically builds CSV files from experiment data using a registry-based system. Each component type registers a default CSV target, and the Upload component discovers these at the end of the experiment.
+
+### How it works
+
+Each component type registers where its data should go via `registerFlattener`:
+
+```tsx
+registerFlattener('PlainInput', 'session');           // merge into session CSV
+registerFlattener('CanvasBlock', 'canvas', flattenFn); // own CSV with custom flattener
+registerFlattener('ProlificEnding', null);             // no CSV output
+```
+
+Built-in components come pre-registered. The Upload component produces CSVs automatically with no props needed:
+
+```tsx
+{ name: 'upload', type: 'Upload' }
+```
+
+### Built-in defaults
+
+| Component | Default CSV | Notes |
+|---|---|---|
+| PlainInput, Quest, CheckDevice, EnterFullscreen, ExitFullscreen, MicrophoneCheck | `session` | Merged into single session row, namespaced by trial name |
+| Text | `text` | One row per Text component |
+| CanvasBlock | `canvas` | One row per slide, with built-in flattener |
+| StoreUI | `storeui` | One row per StoreUI occurrence |
+| ProlificEnding, Upload | *(none)* | No CSV output |
+
+### Output files
+
+For a session `abc123`, the Upload component produces:
+- `abc123.raw.json` — full raw data
+- `session.abc123.{timestamp}.csv` — one row with params, userAgent, and all session-level trial data namespaced by trial name (e.g. `nickname_value`, `devicecheck_browser`)
+- `canvas.abc123.{timestamp}.csv` — multi-row CSV from CanvasBlock trials
+- One CSV per additional group (text, storeui, or any custom group)
+
+### Per-item CSV override
+
+Override the default target on any timeline item:
+
+```tsx
+{ name: 'practice', type: 'CanvasBlock', csv: 'practice', ... }  // separate from main canvas
+{ name: 'main',     type: 'CanvasBlock', ... }                   // uses default 'canvas'
+```
+
+Route a trial to multiple CSVs with an array:
+
+```tsx
+{ name: 'survey', type: 'Quest', csv: ['session', 'survey'], ... }  // both session row and own file
+```
+
+### Adding session-level data
+
+Use `sessionData` on Upload to inject extra fields into the session CSV:
+
+```tsx
+// Static
+{
+  type: 'Upload',
+  props: {
+    sessionData: { group: 'control', experimentVersion: 2 },
+  },
+}
+
+// Dynamic (computed from store/data)
+{
+  type: 'Upload',
+  props: (data, store) => ({
+    sessionData: { group: store.assignedGroup, condition: store.condition },
+  }),
+}
+```
+
+### Custom flatteners
+
+Register a flattener for custom components to control how `responseData` becomes CSV rows:
+
+```tsx
+registerFlattener('MyGame', 'games', (item) => {
+  return item.responseData.moves.map((move) => ({
+    moveType: move.type,
+    score: move.score,
+  }));
+});
+```
+
+Each row automatically gets standard trial fields prefixed with `trial_` (`trial_index`, `trial_name`, `trial_start`, etc.) plus any metadata from the timeline item. The flattener output overwrites these if keys collide.
+
+### Multi-CSV components
+
+Call `registerFlattener` multiple times for one component to produce multiple CSV files:
+
+```tsx
+registerFlattener('SportsGame', 'sports_actions', (item) => flattenActions(item.responseData));
+registerFlattener('SportsGame', 'sports_players', (item) => flattenPlayers(item.responseData));
+registerFlattener('SportsGame', 'sports_matches', (item) => flattenMatches(item.responseData));
+```
+
+### Upload props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `sessionID` | `string` | random UUID | Custom session identifier used in filenames and folder names |
+| `sessionData` | `Record<string, any>` | — | Extra key-value pairs added to the session CSV row |
+| `generateFiles` | `(sessionID, data, store) => FileUpload[]` | — | Produce custom files alongside auto-generated CSVs |
+| `uploadRaw` | `boolean` | `true` | Include raw JSON dump of all trial data |
+| `autoUpload` | `boolean` | `false` | Upload immediately on mount instead of showing a submit button |
+
+### Metadata
+
+Add `metadata` to timeline items to include extra columns in every CSV row that trial produces:
+
+```tsx
+{
+  name: 'block1',
+  type: 'CanvasBlock',
+  metadata: { difficulty: 'hard', block: 2 },
+  props: { ... },
+}
+```
+
+For session-level items, metadata is namespaced by trial name (e.g. `block1_difficulty`). For non-session items, metadata columns appear unprefixed.
+
+
 ## Development
 
 

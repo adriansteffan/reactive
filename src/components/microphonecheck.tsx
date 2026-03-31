@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { VoiceRecorder } from './voicerecorder';
 import { registerSimulation, noopSimulate } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
 
+registerFlattener('MicrophoneCheck', 'session');
 registerSimulation('MicrophoneCheck', noopSimulate, {});
 
 interface MicrophoneDevice {

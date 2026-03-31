@@ -138,6 +138,7 @@ export async function simulateParticipant(
       duration,
       type: content.type,
       name: content.name ?? '',
+      ...(content.csv !== undefined ? { csv: content.csv } : {}),
       responseData: result.responseData,
     };
 

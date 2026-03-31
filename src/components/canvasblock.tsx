@@ -15,6 +15,15 @@ import {
 } from '../utils/bytecode';
 import { BaseComponentProps, isFullscreen, now } from '../utils/common';
 import { registerSimulation, ParticipantState } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
+
+registerFlattener('CanvasBlock', 'canvas', (item) => {
+  const responseData = item.responseData;
+  if (Array.isArray(responseData)) {
+    return responseData.map((i) => ({ block: item.name, ...i }));
+  }
+  return [];
+});
 
 export type SlideSimulatorResult = {
   key: string | null;

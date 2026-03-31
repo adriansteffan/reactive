@@ -60,6 +60,7 @@ const defaultCustomQuestions: ComponentsMap = {
 interface RuntimeComponentContent {
   name?: string;
   type: string;
+  csv?: string | string[];
   collectRefreshRate?: boolean;
   hideSettings?: string[] | boolean;
   metadata?:
@@ -208,6 +209,7 @@ export default function ExperimentRunner({
           duration: endTime - startTime,
           type: content.type,
           name: content.name ?? '',
+          ...(content.csv !== undefined ? { csv: content.csv } : {}),
           responseData: componentResponseData,
         };
 

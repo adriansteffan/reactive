@@ -1,6 +1,9 @@
 import { BaseComponentProps } from '../mod';
 import { useEffect, useRef, useState } from 'react';
 import { registerSimulation } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
+
+registerFlattener('CheckDevice', 'session');
 
 registerSimulation('CheckDevice', (_trialProps, _experimentState, _simulators, participant) => {
   const deviceInfo = {

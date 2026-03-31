@@ -4,6 +4,9 @@ import { ReactQuestionFactory, Survey, SurveyQuestionElementBase } from 'survey-
 import { ContrastLight } from 'survey-core/themes';
 import 'survey-core/survey-core.min.css';
 import { registerSimulation } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
+
+registerFlattener('Quest', 'session');
 
 registerSimulation('Quest', (trialProps, _experimentState, simulators, participant) => {
   const responseData: Record<string, any> = {};

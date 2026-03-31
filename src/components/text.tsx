@@ -1,6 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { BaseComponentProps, now } from '../mod';
 import { registerSimulation } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
+
+registerFlattener('Text', 'text');
 
 registerSimulation('Text', (trialProps, _experimentState, simulators, participant) => {
   const result = simulators.respond(trialProps, participant);

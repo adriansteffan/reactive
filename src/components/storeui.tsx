@@ -1,6 +1,9 @@
 import { BaseComponentProps } from '../mod';
 import React, { useState, useEffect } from 'react';
 import { registerSimulation } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
+
+registerFlattener('StoreUI', 'storeui');
 
 interface BaseFieldConfig {
   type: 'string' | 'integer' | 'float' | 'boolean';

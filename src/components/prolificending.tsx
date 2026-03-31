@@ -1,7 +1,9 @@
 import { BaseComponentProps, getParam, registerComponentParams } from '../utils/common';
 import Text from '../components/text';
 import { registerSimulation, noopSimulate } from '../utils/simulation';
+import { registerFlattener } from '../utils/upload';
 
+registerFlattener('ProlificEnding', null);
 registerSimulation('ProlificEnding', noopSimulate, {});
 
 registerComponentParams('ProlificEnding', [

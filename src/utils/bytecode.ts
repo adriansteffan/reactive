@@ -11,6 +11,8 @@ type BaseTrialData = {
 export type ComponentResultData = BaseTrialData & {
   type: string;
   name: string;
+  /** Per-trial override for which CSV file(s) this trial's data goes into. When set on a timeline item, overrides the component type's default from the flattener registry. */
+  csv?: string | string[];
   responseData?: any;
   metadata?: Record<string, any>;
 };

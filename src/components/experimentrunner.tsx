@@ -33,6 +33,8 @@ import CheckDevice from './checkdevice';
 import VoicerecorderQuestionComponent from './voicerecorder';
 import React from 'react';
 import StoreUI from './storeui';
+import { Tutorial } from './tutorial';
+import { RandomDotKinematogram } from './randomdotkinetogram';
 
 type ComponentsMap = {
   [key: string]: ComponentType<any>;
@@ -50,7 +52,9 @@ const defaultComponents: ComponentsMap = {
   RequestFilePermission,
   CanvasBlock,
   CheckDevice,
-  StoreUI
+  StoreUI,
+  Tutorial,
+  RandomDotKinematogram,
 };
 
 const defaultCustomQuestions: ComponentsMap = {

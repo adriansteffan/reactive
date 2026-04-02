@@ -11,3 +11,7 @@ export { default as ExperimentRunner } from './experimentrunner';
 export { default as RequestFilePermission } from './mobilefilepermission';
 export { default as CanvasBlock } from './canvasblock';
 export { default as CheckDevice } from './checkdevice';
+export { Tutorial, useTutorialSlide } from './tutorial';
+export type { TutorialProps } from './tutorial';
+export { RandomDotKinematogram, RDKCanvas } from './randomdotkinetogram';
+export type { RDKCanvasProps, RDKCanvasHandle, RDKProps, NoiseMovement } from './randomdotkinetogram';

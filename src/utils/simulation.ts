@@ -151,7 +151,9 @@ export async function simulateParticipant(
 
 
 export interface RunSimulationConfig {
-  participants: ParticipantState[] | { generator: (index: number) => ParticipantState; count: number };
+  participants: ParticipantState[] | { generator: (index: number) => ParticipantState; count: number } | (() => ParticipantState[]);
+  /** Seed for reproducible simulations. Each participant gets seed + workerIndex. */
+  seed?: number;
   backendPort?: number;
   concurrency?: number;
 }
@@ -162,9 +164,11 @@ export async function orchestrateSimulation(config: RunSimulationConfig, scriptP
   const port = config.backendPort ?? 8001;
   const backendUrl = `http://localhost:${port}/backend`;
 
-  const participantCount = Array.isArray(config.participants)
-    ? config.participants.length
-    : config.participants.count;
+  const participantCount = typeof config.participants === 'function'
+    ? config.participants().length
+    : Array.isArray(config.participants)
+      ? config.participants.length
+      : config.participants.count;
 
   const backend = spawn('npx', ['tsx', 'src/backend.ts'], {
     cwd: './backend',
@@ -212,6 +216,7 @@ export async function orchestrateSimulation(config: RunSimulationConfig, scriptP
           ...process.env,
           _REACTIVE_WORKER_INDEX: String(i),
           _REACTIVE_BACKEND_URL: backendUrl,
+          ...(config.seed !== undefined ? { _REACTIVE_SIMULATION_SEED: String(config.seed) } : {}),
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });

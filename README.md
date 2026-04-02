@@ -38,6 +38,8 @@ Premade components available so far:
 * Quest: SurveyJS questionnaires
     * ... all questiontypes supported by SurveyJS can be used
     * voicerecorder: a custom question type that allows participants to record voice
+* Tutorial: A paginated slide deck with navigation, dot indicators, and optional interactive slides via `useTutorialSlide`
+* RandomDotKinematogram: A random dot kinematogram (RDK) stimulus for motion perception experiments
 * Upload: Uploads the collected data on a button press by the participant 
 
 
@@ -52,10 +54,10 @@ Define your participant generator in `Experiment.tsx`:
 
 ```tsx
 export const simulationConfig = {
-  participants: {
-    generator: (i) => ({ id: i, nickname: `participant_${i}` }),
-    count: 10,
-  },
+  seed: 42, // optional: makes simulations fully reproducible
+  participants: () => sampleParticipants('sobol', 10, {
+    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  }).map((p, i) => ({ ...p, id: i })),
 };
 ```
 
@@ -127,6 +129,64 @@ Trials with `simulators` or `simulate: true` defined on them will auto-advance. 
 
 Hybrid mode is enabled by default during development. For production, set `VITE_DISABLE_HYBRID_SIMULATION=true` to disable it regardless of URL parameters.
 
+### Reproducible simulations
+
+Add `seed` to your simulation config to make runs fully reproducible:
+
+```tsx
+export const simulationConfig = {
+  seed: 42,
+  participants: () => sampleParticipants('sobol', 100, {
+    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+    agreeableness: { distribution: 'normal', mean: 3.0, sd: 1.0 },
+    age: { distribution: 'uniform', min: 18, max: 65 },
+  }).map((p, i) => ({ ...p, id: i })),
+};
+```
+
+Each simulated participant runs in its own subprocess. The `seed` controls two separate phases:
+
+- **Participant generation**: The `participants` factory function is called with the base `seed` (same for all workers), so every worker generates the same participant list.
+- **Simulation behavior**: Module-level randomness (group assignment, trial order) and simulator callbacks are seeded with `seed + participantIndex`, so each participant gets a unique but reproducible random stream.
+
+Without `seed`, simulations use random entropy and will vary between runs. When seeded, `Math.random()` is also patched to use the seeded PRNG, so existing code and third-party libraries are automatically reproducible.
+
+**Note:** Do not close over module-level random values into the factory function — module-level code runs with a per-worker seed, so captured values would differ between workers. Keep all participant generation logic inside the factory.
+
+```tsx
+// Good: all randomness is inside the factory
+participants: () => {
+  const base = sampleParticipants('random', 100, {
+    openness: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  });
+  return base.map((p, i) => ({
+    ...p,
+    curiosity: p.openness * 0.7 + normal(0, 0.3),
+    id: i,
+  }));
+},
+
+// Bad: module-level value captured into factory
+const noise = normal(0, 1); // different per worker!
+participants: () => [{ trait: noise }],
+```
+
+To model distinct populations, combine them inside the factory:
+
+```tsx
+participants: () => {
+  const smokers = sampleParticipants('sobol', 50, {
+    alertness: { distribution: 'normal', mean: 2.8, sd: 0.7 },
+  }).map((p) => ({ ...p, smoker: true }));
+
+  const nonSmokers = sampleParticipants('sobol', 50, {
+    alertness: { distribution: 'normal', mean: 3.6, sd: 0.5 },
+  }).map((p) => ({ ...p, smoker: false }));
+
+  return [...smokers, ...nonSmokers].map((p, i) => ({ ...p, id: i }));
+},
+```
+
 ### Built-in simulator decision functions
 
 | Component | Decision functions | Default behavior |
@@ -135,6 +195,8 @@ Hybrid mode is enabled by default during development. For production, set `VITE_
 | PlainInput | `respond` | Returns `'simulated_input'` |
 | Quest | `answerQuestion` | Random valid answer per question type |
 | CanvasBlock | `respondToSlide` | Random key from `allowedKeys`, random RT |
+| Tutorial | `respondToSlide` | Advances through slides, no interaction data |
+| RandomDotKinematogram | `respond` | Random key from `validKeys`, random RT (may timeout) |
 | Upload | *(none)* | Builds CSVs and POSTs to backend |
 | StoreUI | *(none)* | Uses field default values |
 | CheckDevice | *(none)* | Returns simulated device info |
@@ -169,7 +231,9 @@ Built-in components come pre-registered. The Upload component produces CSVs auto
 | Text | `text` | One row per Text component |
 | CanvasBlock | `canvas` | One row per slide, with built-in flattener |
 | StoreUI | `storeui` | One row per StoreUI occurrence |
-| ProlificEnding, Upload | *(none)* | No CSV output |
+| Tutorial | `session` | Merged into session row |
+| RandomDotKinematogram | `rdk` | One row per RDK trial |
+| ProlificEnding, Upload, RequestFilePermission | *(none)* | No CSV output |
 
 ### Output files
 
@@ -275,6 +339,121 @@ Add `metadata` to timeline items to include extra columns in every CSV row that 
 ```
 
 For session-level items, metadata is namespaced by trial name (e.g. `block1_difficulty`). For non-session items, metadata columns appear unprefixed.
+
+
+## Utilities
+
+Reactive exports helper functions for common experiment-building tasks.
+
+```tsx
+import { shuffle, sample, chunk, pipe, normal, uniform, poisson, seedDistributions, sobol, halton, sampleParticipants } from '@adriansteffan/reactive';
+```
+
+### Array functions
+
+These are available both as standalone functions and as Array prototype extensions (after calling `registerArrayExtensions()`).
+
+| Function | Signature | Description |
+|---|---|---|
+| `shuffle` | `shuffle(arr)` | Returns a new array with elements randomly reordered (Fisher-Yates) |
+| `sample` | `sample(arr, n?)` | Returns `n` random elements from the array (default 1, with replacement) |
+| `chunk` | `chunk(arr, n)` | Splits the array into `n` roughly equal chunks |
+| `pipe` | `pipe(arr, fn)` | Passes the array to `fn` and returns the result |
+
+As prototype methods:
+
+```tsx
+import { registerArrayExtensions } from '@adriansteffan/reactive';
+registerArrayExtensions();
+
+const trials = [1, 2, 3, 4, 5].shuffle();
+const picked = trials.sample(2);
+const blocks = trials.chunk(3);
+```
+
+### Distributions
+
+Random number generators backed by [@stdlib](https://github.com/stdlib-js/stdlib), useful for writing realistic simulations.
+
+| Function | Signature | Description |
+|---|---|---|
+| `uniform` | `uniform(a, b)` | Sample from a continuous uniform distribution over `[a, b)` |
+| `normal` | `normal(mu, sigma)` | Sample from a normal (Gaussian) distribution with mean `mu` and standard deviation `sigma` |
+| `poisson` | `poisson(lambda)` | Sample from a Poisson distribution with rate `lambda` |
+
+All built-in simulation functions use these distributions internally.
+
+#### Global seeding
+
+Call `seedDistributions` to seed all three generators from a single seed, making simulation runs fully reproducible:
+
+```tsx
+import { seedDistributions } from '@adriansteffan/reactive';
+
+seedDistributions(42);
+// All subsequent calls to normal(), uniform(), poisson() produce the same sequence
+```
+
+Without seeding, the generators use random entropy (non-reproducible, same as `Math.random()`).
+
+### Quasi-Monte Carlo sequences
+
+Low-discrepancy sequences for more uniform coverage of parameter spaces than pseudorandom sampling. Useful for generating participant parameters in simulations.
+
+Both `sobol` and `halton` take a count and an array of dimension specs. Each dimension describes a distribution to sample from.
+
+| Function | Signature | Description |
+|---|---|---|
+| `sobol` | `sobol(count, specs)` | Generate `count` points using a Sobol sequence. Supports 1–21 dimensions. |
+| `halton` | `halton(count, specs)` | Generate `count` points using a Halton sequence (auto-selects prime bases). |
+
+Each dimension spec is one of:
+
+| Distribution | Spec | Description |
+|---|---|---|
+| Uniform | `{ distribution: 'uniform', min, max }` | Uniform over `[min, max)` |
+| Normal | `{ distribution: 'normal', mean, sd }` | Gaussian with given mean and standard deviation |
+| Poisson | `{ distribution: 'poisson', mean }` | Poisson with given mean (discrete) |
+
+For a single dimension, both return a flat `number[]`. For multiple dimensions, they return `number[][]`.
+
+```tsx
+import { sobol, halton } from '@adriansteffan/reactive';
+
+// Uniform
+sobol(5, [{ distribution: 'uniform', min: 200, max: 800 }]);
+
+// Normal: 10 reaction times ~ N(500, 100)
+sobol(10, [{ distribution: 'normal', mean: 500, sd: 100 }]);
+
+// Poisson: 8 counts ~ Poisson(5)
+sobol(8, [{ distribution: 'poisson', mean: 5 }]);
+
+// Multi-dimensional: uniform RT + normally distributed threshold
+sobol(5, [
+  { distribution: 'uniform', min: 200, max: 800 },
+  { distribution: 'normal', mean: 0.5, sd: 0.1 },
+]);
+
+// Halton — same API, different sequence
+halton(5, [{ distribution: 'uniform', min: 200, max: 800 }]);
+```
+
+#### Sampling participants
+
+`sampleParticipants` wraps the QMC sequences into a convenient API for generating participant parameter sets. Each key in the spec becomes a named field on the returned objects.
+
+```tsx
+import { sampleParticipants } from '@adriansteffan/reactive';
+
+const participants = sampleParticipants('sobol', 100, {
+  needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  agreeableness: { distribution: 'normal', mean: 3.0, sd: 1.0 },
+}).map((p, i) => ({ ...p, id: i }));
+// → [{ needForCognition: 3.5, agreeableness: 3.0, id: 0 }, ...]
+```
+
+The first argument is the sampling method: `'sobol'`, `'halton'`, or `'random'`.
 
 
 ## Development

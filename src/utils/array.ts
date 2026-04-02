@@ -1,3 +1,5 @@
+import { uniform } from './distributions';
+
 declare global {
   interface Array<T> {
     /**
@@ -36,7 +38,7 @@ export function sample<T>(array: T[], n: number = 1): T[] {
   }
   
   for (let i = 0; i < n; i++) {
-    const randomIndex = Math.floor(Math.random() * array.length);
+    const randomIndex = Math.floor(uniform(0, 1) * array.length);
     result.push(array[randomIndex]);
   }
   
@@ -50,7 +52,7 @@ export function shuffle<T>(array: T[]): T[] {
   const result = [...array];
   
   for (let i = result.length - 1; i >= 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(uniform(0, 1) * (i + 1));
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;

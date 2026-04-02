@@ -16,9 +16,10 @@ import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../utils/upload';
 import { registerSimulation, getBackendUrl, getInitialParticipant } from '../utils/simulation';
+import { uniform } from '../utils/distributions';
 
 registerSimulation('Upload', async (trialProps, experimentState, _simulators, participant) => {
-  const sessionID = trialProps.sessionID || `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const sessionID = trialProps.sessionID || `sim_${Date.now()}_${Math.floor(uniform(0, 36 ** 6)).toString(36)}`;
   const files = buildUploadFiles({
     sessionID,
     data: experimentState.data || [],

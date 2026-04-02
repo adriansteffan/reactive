@@ -2,12 +2,13 @@ import { BaseComponentProps } from '../mod';
 import { useState } from 'react';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
+import { uniform } from '../utils/distributions';
 
 registerFlattener('PlainInput', 'session');
 
 registerSimulation('PlainInput', (trialProps, _experimentState, simulators, participant) => {
   const result = simulators.respond(trialProps, participant);
-  const typingDuration = String(result.value).length * (50 + Math.random() * 100);
+  const typingDuration = String(result.value).length * uniform(50, 150);
   return {
     responseData: { value: result.value },
     participantState: result.participantState,

@@ -16,6 +16,7 @@ import {
 import { BaseComponentProps, isFullscreen, now } from '../utils/common';
 import { registerSimulation, ParticipantState } from '../utils/simulation';
 import { registerFlattener, arrayFlattener } from '../utils/upload';
+import { uniform } from '../utils/distributions';
 
 registerFlattener('CanvasBlock', 'canvas', arrayFlattener);
 
@@ -557,12 +558,12 @@ registerSimulation('CanvasBlock', (trialProps, experimentState, simulators, part
   respondToSlide: (slide: any, participant: any) => {
     const keys = slide.allowedKeys;
     if (keys === true) {
-      return { key: ' ', reactionTime: 200 + Math.random() * 600, participantState: participant };
+      return { key: ' ', reactionTime: uniform(200, 800), participantState: participant };
     }
     if (Array.isArray(keys) && keys.length > 0) {
       return {
-        key: keys[Math.floor(Math.random() * keys.length)],
-        reactionTime: 200 + Math.random() * 600,
+        key: keys[Math.floor(uniform(0, keys.length))],
+        reactionTime: uniform(200, 800),
         participantState: participant,
       };
     }

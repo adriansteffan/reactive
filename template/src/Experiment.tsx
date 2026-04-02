@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef } from 'react';
-import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation, registerFlattener } from '@adriansteffan/reactive';
+import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation, registerFlattener, sampleParticipants } from '@adriansteffan/reactive';
 
 
 const config: ExperimentConfig = { showProgressBar: true };
@@ -165,13 +165,11 @@ export default function Experiment() {
 
 // --- Simulation config ---
 // Define how simulated participants are generated.
-// Each participant is an object whose properties are available in simulator decision functions.
+// Use a factory function for participants: the framework seeds it with the base seed,
+// so every worker generates the same participant list regardless of its per-worker seed.
 export const simulationConfig = {
-  participants: {
-    generator: (i: number) => ({
-      id: i,
-      nickname: `participant_${i}`,
-    }),
-    count: 10,
-  },
+  seed: 42,
+  participants: () => sampleParticipants('sobol', 10, {
+    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  }).map((p, i) => ({ ...p, id: i, nickname: `participant_${i}` })),
 };

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { BaseComponentProps, now } from '../mod';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
+import { uniform } from '../utils/distributions';
 
 registerFlattener('Text', 'text');
 
@@ -10,7 +11,7 @@ registerSimulation('Text', (trialProps, _experimentState, simulators, participan
   return { responseData: result.value, participantState: result.participantState, duration: result.value.reactionTime };
 }, {
   respond: (_input: any, participant: any) => ({
-    value: { key: 'button', reactionTime: 500 + Math.random() * 1500 },
+    value: { key: 'button', reactionTime: uniform(500, 2000) },
     participantState: participant,
   }),
 });

@@ -11,6 +11,7 @@ import type { CSSProperties } from 'react';
 import { BaseComponentProps, shuffle } from '../mod';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
+import { uniform } from '../utils/distributions';
 
 registerFlattener('RandomDotKinematogram', 'rdk');
 
@@ -63,10 +64,10 @@ registerSimulation('RandomDotKinematogram', (trialProps, _experimentState, simul
 }, {
   respond: (trialProps: any, participant: any) => {
     const merged = { ...RDK_DEFAULTS, ...trialProps };
-    const rawRt = 200 + Math.random() * 600;
+    const rawRt = uniform(200, 800);
     const maxRt = merged.duration ?? RDK_DEFAULTS.duration;
     const responded = merged.validKeys.length > 0 && rawRt <= maxRt;
-    const key = responded ? merged.validKeys[Math.floor(Math.random() * merged.validKeys.length)] : null;
+    const key = responded ? merged.validKeys[Math.floor(uniform(0, merged.validKeys.length))] : null;
     const rt = responded ? rawRt : null;
     const correctKeys = Array.isArray(merged.correctResponse)
       ? merged.correctResponse.map((c: string) => c.toLowerCase())

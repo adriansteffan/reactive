@@ -5,6 +5,7 @@ import { ContrastLight } from 'survey-core/themes';
 import 'survey-core/survey-core.min.css';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
+import { uniform } from '../utils/distributions';
 
 registerFlattener('Quest', 'session');
 
@@ -28,21 +29,21 @@ registerSimulation('Quest', (trialProps, _experimentState, simulators, participa
     switch (question.type) {
       case 'rating': {
         const min = question.rateMin ?? 1, max = question.rateMax ?? 5;
-        value = min + Math.floor(Math.random() * (max - min + 1));
+        value = min + Math.floor(uniform(0, max - min + 1));
         break;
       }
-      case 'boolean': value = Math.random() > 0.5; break;
+      case 'boolean': value = uniform(0, 1) > 0.5; break;
       case 'text': case 'comment': value = 'simulated_response'; break;
       case 'radiogroup': case 'dropdown': {
-        const c = question.choices?.[Math.floor(Math.random() * (question.choices?.length || 0))];
+        const c = question.choices?.[Math.floor(uniform(0, question.choices?.length || 0))];
         value = c !== undefined ? (typeof c === 'object' ? c.value : c) : null;
         break;
       }
       case 'checkbox': {
         if (question.choices?.length) {
-          const n = 1 + Math.floor(Math.random() * question.choices.length);
+          const n = 1 + Math.floor(uniform(0, question.choices.length));
           value = [...question.choices]
-            .sort(() => Math.random() - 0.5).slice(0, n)
+            .sort(() => uniform(0, 1) - 0.5).slice(0, n)
             .map((c: any) => typeof c === 'object' ? c.value : c);
         }
         break;
@@ -51,7 +52,7 @@ registerSimulation('Quest', (trialProps, _experimentState, simulators, participa
         if (question.rows?.length && question.columns?.length) {
           value = Object.fromEntries(
             question.rows.map((r: any) => {
-              const col = question.columns[Math.floor(Math.random() * question.columns.length)];
+              const col = question.columns[Math.floor(uniform(0, question.columns.length))];
               return [typeof r === 'object' ? r.value : r, typeof col === 'object' ? col.value : col];
             }),
           );
@@ -60,7 +61,7 @@ registerSimulation('Quest', (trialProps, _experimentState, simulators, participa
       }
       default: value = null;
     }
-    return { value, participantState: participant, duration: 1000 + Math.random() * 4000 };
+    return { value, participantState: participant, duration: uniform(1000, 5000) };
   },
 });
 

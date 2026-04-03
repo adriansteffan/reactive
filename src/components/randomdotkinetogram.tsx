@@ -11,7 +11,7 @@ import type { CSSProperties } from 'react';
 import { BaseComponentProps, shuffle } from '../mod';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
-import { uniform } from '../utils/distributions';
+import { simulateDDMTrial, mapDDMChoice } from '../utils/ddm';
 
 registerFlattener('RandomDotKinematogram', 'rdk');
 
@@ -48,39 +48,49 @@ const RDK_DEFAULTS = {
 };
 
 registerSimulation('RandomDotKinematogram', (trialProps, _experimentState, simulators, participant) => {
-  const result = simulators.respond(trialProps, participant);
-  const fixation = trialProps.fixationTime ?? RDK_DEFAULTS.fixationTime;
-  const trialDuration = trialProps.duration ?? RDK_DEFAULTS.duration;
-  const responseEndsTrial = trialProps.responseEndsTrial ?? RDK_DEFAULTS.responseEndsTrial;
-  const rt = result.value.rt;
-  // If the participant responded and responseEndsTrial is true, the trial ends at the response.
-  // Otherwise, the full duration plays out.
+  const merged: any = { ...RDK_DEFAULTS, ...trialProps };
+  const result = simulators.respond(merged, participant);
+  const { rt, response } = result.value;
+
+  const fixation = merged.fixationTime ?? RDK_DEFAULTS.fixationTime;
+  const trialDuration = merged.duration ?? RDK_DEFAULTS.duration;
+  const responseEndsTrial = merged.responseEndsTrial ?? RDK_DEFAULTS.responseEndsTrial;
   const elapsed = (responseEndsTrial && rt != null) ? rt : trialDuration;
+
+  const correctKeys = Array.isArray(merged.correctResponse)
+    ? merged.correctResponse.map((c: string) => c.toLowerCase())
+    : merged.correctResponse ? [merged.correctResponse.toLowerCase()] : null;
+
   return {
-    responseData: result.value,
+    responseData: {
+      ...merged,
+      rt,
+      response,
+      correct: response && correctKeys ? correctKeys.includes(response.toLowerCase()) : null,
+      framesDisplayed: 0,
+      measuredRefreshRate: null,
+    },
     participantState: result.participantState,
     duration: fixation + elapsed,
   };
 }, {
   respond: (trialProps: any, participant: any) => {
-    const merged = { ...RDK_DEFAULTS, ...trialProps };
-    const rawRt = uniform(200, 800);
-    const maxRt = merged.duration ?? RDK_DEFAULTS.duration;
-    const responded = merged.validKeys.length > 0 && rawRt <= maxRt;
-    const key = responded ? merged.validKeys[Math.floor(uniform(0, merged.validKeys.length))] : null;
-    const rt = responded ? rawRt : null;
-    const correctKeys = Array.isArray(merged.correctResponse)
-      ? merged.correctResponse.map((c: string) => c.toLowerCase())
-      : merged.correctResponse ? [merged.correctResponse.toLowerCase()] : null;
+    const ddm = simulateDDMTrial({
+      driftRate: 0.00074 * (trialProps.coherence ?? RDK_DEFAULTS.coherence),
+      boundaries: 0.0555,
+      startingPoint: 0,
+      noiseLevel: 0.00316,
+      sensoryDelay: { type: 'uniform', min: 150, max: 250 },
+      motorDelay: { type: 'uniform', min: 130, max: 210 },
+      timeLimit: trialProps.duration ?? RDK_DEFAULTS.duration,
+      stimOffset: trialProps.stimulusDuration ?? trialProps.duration ?? RDK_DEFAULTS.duration,
+      postStimStrategy: { type: 'continue' },
+    });
+
+    const key = mapDDMChoice(ddm.choice, trialProps.validKeys, trialProps.correctResponse);
+
     return {
-      value: {
-        ...merged,
-        rt,
-        response: key,
-        correct: key && correctKeys ? correctKeys.includes(key) : null,
-        framesDisplayed: 0,
-        measuredRefreshRate: null,
-      },
+      value: { rt: key ? ddm.rt : null, response: key },
       participantState: participant,
     };
   },

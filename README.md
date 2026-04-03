@@ -455,6 +455,41 @@ const participants = sampleParticipants('sobol', 100, {
 
 The first argument is the sampling method: `'sobol'`, `'halton'`, or `'random'`.
 
+### Drift Diffusion Model (DDM)
+
+`simulateDDMTrial` simulates a single 2AFC trial. Parameters can be fixed numbers or distributions (`{ type: 'normal', mean, sd }` / `{ type: 'uniform', min, max }`) for inter-trial variability.
+
+```tsx
+import { simulateDDMTrial, mapDDMChoice } from '@adriansteffan/reactive';
+
+const result = simulateDDMTrial({
+  driftRate: 0.003,
+  boundaries: 0.1,        // symmetric: +0.1 / -0.1
+  startingPoint: 0,
+  noiseLevel: 0.003,
+  sensoryDelay: { type: 'uniform', min: 100, max: 200 },
+  motorDelay: { type: 'uniform', min: 50, max: 100 },
+  timeLimit: 2000,
+  stimOffset: 1000,
+  postStimStrategy: { type: 'continue' },
+});
+// → { choice: 0 | 1 | null, rt, finalEvidence, isContaminated }
+
+// Map DDM choice to a key press (null-safe)
+mapDDMChoice(result.choice, ['f', 'j'], 'f');
+```
+
+`boundaries` can also be a `[lower, upper]` tuple for asymmetric boundaries. `choice` is `null` on timeout.
+
+After the stimulus disappears (`stimOffset`), the `postStimStrategy` takes over:
+- `{ type: 'continue' }` — keep accumulating (optional `residualDrift`, `noiseMultiplier`)
+- `{ type: 'snapshot' }` — forced choice by boundary proximity
+- `{ type: 'collapse', collapseDef: { rate, delay? } }` — boundaries shrink, drift drops to 0
+
+Boundaries can also collapse during viewing via `stimulusCollapse: { rate, delay? }`.
+
+The RDK component uses this as its default simulator with parameters from Ratcliff & McKoon (2008), converted to ms time steps.
+
 
 ## Development
 

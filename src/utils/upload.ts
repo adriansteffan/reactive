@@ -119,13 +119,13 @@ function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<stri
   }
 
   // 'session' group: one row per participant with metadata + responseData namespaced by trial name
+  const row: Record<string, any> = {
+    sessionID,
+    userAgent: data?.[0]?.responseData?.userAgent,
+    ...extractParams(data),
+    ...sessionData,
+  };
   if (groups['session']) {
-    const row: Record<string, any> = {
-      sessionID,
-      userAgent: data?.[0]?.responseData?.userAgent,
-      ...extractParams(data),
-      ...sessionData,
-    };
     for (const { item } of groups['session']) {
       const prefix = item.name || item.type;
       // Add user-provided metadata (non-builtin top-level keys), namespaced by trial name
@@ -139,12 +139,14 @@ function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<stri
         }
       }
     }
+    delete groups['session'];
+  }
+  if (Object.keys(row).length > 1) {
     files.push({
       filename: `session.${sessionID}.${Date.now()}.csv`,
       content: convertArrayOfObjectsToCSV([row]),
       encoding: 'utf8' as const,
     });
-    delete groups['session'];
   }
 
   // All other groups: multi-row CSVs using registered flatteners (or raw responseData spread).

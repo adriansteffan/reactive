@@ -4,7 +4,7 @@ import { BaseComponentProps } from '../mod';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
 
-registerFlattener('Tutorial', 'session');
+registerFlattener('Tutorial', null);
 
 registerSimulation('Tutorial', (trialProps, _experimentState, simulators, participant) => {
   const slideCount = trialProps.slides?.length ?? 0;

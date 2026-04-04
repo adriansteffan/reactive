@@ -128,7 +128,8 @@ export function getParam<T extends ParamType>(
   };
 
   // First, check for the parameter in the base64-encoded JSON
-  const encodedJson = new URLSearchParams(window.location.search).get('_b');
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const encodedJson = searchParams.get('_b');
   if (encodedJson) {
     try {
       const jsonString = atob(encodedJson);
@@ -144,7 +145,7 @@ export function getParam<T extends ParamType>(
   }
 
   // Next, check for the parameter directly in the URL
-  const value = new URLSearchParams(window.location.search).get(name);
+  const value = searchParams.get(name);
   if (value === undefined || value === null) {
     // If no value found, register default value
     return defaultValue;

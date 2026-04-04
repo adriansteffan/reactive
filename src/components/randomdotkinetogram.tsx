@@ -76,10 +76,10 @@ registerSimulation('RandomDotKinematogram', (trialProps, _experimentState, simul
 }, {
   respond: (trialProps: any, participant: any) => {
     const ddm = simulateDDMTrial({
-      driftRate: 0.00074 * (trialProps.coherence ?? RDK_DEFAULTS.coherence),
-      boundaries: 0.0555,
+      driftRate: { type: 'normal', mean: 0.005 * (trialProps.coherence ?? RDK_DEFAULTS.coherence), sd: 0.0012 },
+      boundaries: 0.75,
       startingPoint: 0,
-      noiseLevel: 0.00316,
+      noiseLevel: 0.02,
       sensoryDelay: { type: 'uniform', min: 150, max: 250 },
       motorDelay: { type: 'uniform', min: 130, max: 210 },
       timeLimit: trialProps.duration ?? RDK_DEFAULTS.duration,

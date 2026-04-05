@@ -98,9 +98,13 @@ export const Tutorial = ({
   const canProgress = progressMap[page] !== false;
 
   const prevCanProgress = useRef(canProgress);
-  const [pulseKey, setPulseKey] = useState(0);
+  const [pulse, setPulse] = useState(false);
   useEffect(() => {
-    if (canProgress && !prevCanProgress.current) setPulseKey((k) => k + 1);
+    if (canProgress && !prevCanProgress.current) {
+      setPulse(true);
+      const timer = setTimeout(() => setPulse(false), 300);
+      return () => clearTimeout(timer);
+    }
     prevCanProgress.current = canProgress;
   }, [canProgress]);
 
@@ -226,12 +230,11 @@ export const Tutorial = ({
 
           <div style={{ justifySelf: 'start', marginLeft: '1rem' }}>
             <motion.button
-              key={pulseKey}
               onClick={goNextIfCan}
               tabIndex={-1}
               onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 0.3 }}
+              animate={{ scale: pulse ? 1.2 : 1 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 15 }}
               className={(canProgress ? NAV_BTN_ACTIVE : NAV_BTN_DISABLED) + (page === slides.length - 1 ? ' px-8' : '')}
             >
               {page === slides.length - 1 ? finishText : '→'}

@@ -193,6 +193,7 @@ export const Tutorial = ({
               onClick={goBack}
               className={NAV_BTN_ACTIVE}
               tabIndex={-1}
+              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
               style={{ visibility: page > 0 ? 'visible' : 'hidden' }}
             >
               ←
@@ -220,6 +221,7 @@ export const Tutorial = ({
             <button
               onClick={goNextIfCan}
               tabIndex={-1}
+              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
               className={(canProgress ? NAV_BTN_ACTIVE : NAV_BTN_DISABLED) + (page === slides.length - 1 ? ' px-8' : '')}
             >
               {page === slides.length - 1 ? finishText : '→'}

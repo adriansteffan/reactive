@@ -165,7 +165,7 @@ export const Tutorial = ({
         }}
       >
         <div style={{ flex: 1, position: 'relative' }}>
-          <AnimatePresence mode='sync'>
+          <AnimatePresence mode='popLayout'>
             <motion.div
               key={page}
               initial={{ opacity: 0 }}

@@ -9,6 +9,7 @@ import {
   TimelineItem,
   Store,
 } from './bytecode';
+import { Param } from './common';
 
 
 export type ParticipantState = Record<string, any>;
@@ -94,7 +95,18 @@ export async function simulateParticipant(
       duration: 0,
       type: '',
       name: '',
-      responseData: { userAgent: 'simulated', params: {} },
+      responseData: {
+        userAgent: 'simulated',
+        params: Object.fromEntries(
+          (Param.getRegistry() || []).map((p: any) => [p.name, {
+            value: p.value !== undefined ? p.value : p.defaultValue,
+            registered: true,
+            defaultValue: p.defaultValue,
+            type: p.type,
+            description: p.description,
+          }]),
+        ),
+      },
     },
   ];
   

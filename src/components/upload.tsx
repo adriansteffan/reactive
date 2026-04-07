@@ -231,6 +231,7 @@ export default function Upload({
   androidFolderName,
   className,
   containerClass,
+  centered,
   content,
   uploadingContent,
   errorContent,
@@ -243,6 +244,7 @@ export default function Upload({
   androidFolderName?: string;
   className?: string;
   containerClass?: string;
+  centered?: boolean;
   content?: React.ReactNode;
   uploadingContent?: React.ReactNode;
   errorContent?: React.ReactNode;
@@ -384,7 +386,7 @@ export default function Upload({
   const btnClass = `cursor-pointer ${th.buttonBg} px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`;
 
   return (
-    <div className={containerClass ?? th.containerBg} style={{ position: 'fixed', inset: 0 }}>
+    <div className={`${centered ? 'flex items-center justify-center' : ''} ${containerClass ?? th.containerBg}`} style={{ position: 'fixed', inset: 0 }}>
     <div className={`flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10 h-full ${th.text} ${className ?? ''}`}>
       {uploadState == 'initial' && !autoUpload && (
         <>

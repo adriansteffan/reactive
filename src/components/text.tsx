@@ -19,9 +19,10 @@ registerSimulation('Text', (trialProps, _experimentState, simulators, participan
 
 function Text({
   content,
-  buttonText = 'Click me',
+  buttonText = 'Continue',
   className = '',
   containerClass,
+  centered = false,
   next,
   animate = false,
   allowedKeys = false,
@@ -31,6 +32,7 @@ function Text({
   onButtonClick?: () => void;
   className?: string;
   containerClass?: string;
+  centered?: boolean;
   animate?: boolean;
   allowedKeys?: string[] | boolean;
 } & BaseComponentProps) {
@@ -86,7 +88,7 @@ function Text({
   };
 
   return (
-    <div className={`min-h-screen ${containerClass ?? th.containerBg}`}>
+    <div className={`min-h-screen ${centered ? 'flex items-center justify-center' : ''} ${containerClass ?? th.containerBg}`}>
       <div className={`max-w-prose mx-auto ${className} pt-20 pb-20 px-4 `}>
       <article
         className={`prose prose-2xl ${th.prose} text-xl ${th.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${th.text} leading-relaxed

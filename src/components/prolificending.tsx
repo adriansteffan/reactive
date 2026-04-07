@@ -14,10 +14,11 @@ export default function ProlificEnding({
   prolificCode,
   className,
   containerClass,
+  centered,
   animate,
   data,
   updateStore
-}: { prolificCode?: string; className?: string; containerClass?: string; animate?: boolean } & BaseComponentProps) {
+}: { prolificCode?: string; className?: string; containerClass?: string; centered?: boolean; animate?: boolean } & BaseComponentProps) {
   let prolificCodeUsed = prolificCode ?? getParam('cc', '', 'string') ?? null;
 
   const content = (
@@ -40,5 +41,5 @@ export default function ProlificEnding({
     </div>
   );
 
-  return <Text data={data} updateStore={updateStore} className={className} containerClass={containerClass} animate={animate} content={content} buttonText='' next={() => {}} />;
+  return <Text data={data} updateStore={updateStore} className={className} containerClass={containerClass} centered={centered} animate={animate} content={content} buttonText='' next={() => {}} />;
 }

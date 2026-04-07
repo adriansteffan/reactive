@@ -16,6 +16,7 @@ export default function EnterFullscreen({
   buttonText,
   className,
   containerClass,
+  centered,
   animate,
   next,
   data,
@@ -27,6 +28,7 @@ export default function EnterFullscreen({
   buttonText?: string;
   className?: string;
   containerClass?: string;
+  centered?: boolean;
   animate?: boolean;
   delayMs?: number;
 } & BaseComponentProps) {
@@ -142,6 +144,7 @@ export default function EnterFullscreen({
       updateStore={updateStore}
       className={className}
       containerClass={containerClass}
+      centered={centered}
       animate={animate}
       content={contentWrap}
       buttonText={buttonText ?? 'Enter Fullscreen Mode'}

@@ -193,7 +193,7 @@ export const Tutorial = ({
 
         <div
           style={{
-            padding: '1.5rem',
+            padding: '1.5rem 1.5rem 3rem',
             display: 'grid',
             gridTemplateColumns: '1fr auto 1fr',
             alignItems: 'center',

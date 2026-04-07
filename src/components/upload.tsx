@@ -380,8 +380,8 @@ export default function Upload({
   }, [uploadState]);
 
   return (
-    <div className={`min-h-screen ${containerClass ?? ''}`}>
-    <div className={`flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10 ${className ?? ''}`}>
+    <div className={containerClass ?? ''} style={{ position: 'fixed', inset: 0 }}>
+    <div className={`flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10 h-full ${className ?? ''}`}>
       {uploadState == 'initial' && !autoUpload && (
         <>
           {content ?? <p>Thank you for participating! Please click the button below to submit your data.</p>}

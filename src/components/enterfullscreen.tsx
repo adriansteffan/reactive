@@ -130,7 +130,7 @@ export default function EnterFullscreen({
 
  
   if (isWaiting) {
-    return null;
+    return <div className={`min-h-screen ${containerClass ?? ''}`} />;
   }
 
   return (

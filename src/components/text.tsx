@@ -36,6 +36,10 @@ function Text({
   const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
     startTimeRef.current = now();
 
     const handleKeyPress = (event: KeyboardEvent) => {

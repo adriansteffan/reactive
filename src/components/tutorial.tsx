@@ -152,8 +152,8 @@ export const Tutorial = ({
   useEffect(() => {
     if (nextKey === false && backKey === false) return;
     const onKey = (e: KeyboardEvent) => {
-      if (nextKey && e.key === nextKey) goNextIfCan();
-      if (backKey && e.key === backKey) goBack();
+      if (nextKey && e.key === nextKey) { e.preventDefault(); goNextIfCan(); }
+      if (backKey && e.key === backKey) { e.preventDefault(); goBack(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { post } from '../utils/request';
@@ -228,6 +228,11 @@ export default function Upload({
   uploadRaw = true,
   autoUpload = false,
   androidFolderName,
+  className,
+  containerClass,
+  content,
+  uploadingContent,
+  errorContent,
 }: BaseComponentProps & {
   sessionID?: string | null;
   generateFiles?: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
@@ -235,6 +240,11 @@ export default function Upload({
   uploadRaw?: boolean;
   autoUpload?: boolean;
   androidFolderName?: string;
+  className?: string;
+  containerClass?: string;
+  content?: React.ReactNode;
+  uploadingContent?: React.ReactNode;
+  errorContent?: React.ReactNode;
 }) {
   const [uploadState, setUploadState] = useState<'initial' | 'uploading' | 'success' | 'error'>(
     'initial',
@@ -370,12 +380,11 @@ export default function Upload({
   }, [uploadState]);
 
   return (
-    <div className='flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10'>
+    <div className={`min-h-screen ${containerClass ?? ''}`}>
+    <div className={`flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10 ${className ?? ''}`}>
       {uploadState == 'initial' && !autoUpload && (
         <>
-          <p className=''>
-            Thank you for participating! Please click the button below to submit your data.
-          </p>
+          {content ?? <p>Thank you for participating! Please click the button below to submit your data.</p>}
           <button
             onClick={handleUpload}
             className='mt-8 cursor-pointer bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
@@ -386,18 +395,20 @@ export default function Upload({
       )}
       {uploadState == 'uploading' && (
         <>
-          <div className='w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin'></div>
-          <p className=''>Uploading your data...</p>
+          {uploadingContent ?? <>
+            <div className='w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin'></div>
+            <p>Uploading your data...</p>
+          </>}
         </>
       )}
       {uploadState == 'success' && <></>}
 
       {uploadState == 'error' && (
         <>
-          <div className='text-red-500 mb-4'>
-            <p className=''>Sorry, there was an error uploading your data.</p>
+          {errorContent ?? <div className='text-red-500 mb-4'>
+            <p>Sorry, there was an error uploading your data.</p>
             <p>Please try again or contact the researcher.</p>
-          </div>
+          </div>}
           <button
             onClick={handleUpload}
             className='cursor-pointer bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
@@ -406,6 +417,7 @@ export default function Upload({
           </button>
         </>
       )}
+    </div>
     </div>
   );
 }

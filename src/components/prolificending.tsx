@@ -12,9 +12,11 @@ registerComponentParams('ProlificEnding', [
 
 export default function ProlificEnding({
   prolificCode,
+  className,
+  containerClass,
   data,
   updateStore
-}: { prolificCode?: string } & BaseComponentProps) {
+}: { prolificCode?: string; className?: string; containerClass?: string } & BaseComponentProps) {
   let prolificCodeUsed = prolificCode ?? getParam('cc', '', 'string') ?? null;
 
   const content = (
@@ -37,5 +39,5 @@ export default function ProlificEnding({
     </div>
   );
 
-  return <Text data={data} updateStore={updateStore} content={content} buttonText='' next={() => {}} />;
+  return <Text data={data} updateStore={updateStore} className={className} containerClass={containerClass} content={content} buttonText='' next={() => {}} />;
 }

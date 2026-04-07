@@ -69,6 +69,8 @@ export interface TutorialProps extends BaseComponentProps {
   nextKey?: string | false;
   /** Key to go back (default: 'ArrowLeft', set to false to disable) */
   backKey?: string | false;
+  /** Slide-down + fade-in entrance animation (default: false) */
+  animate?: boolean;
   /** Color mode for dot indicators (default: 'light') */
   theme?: 'light' | 'dark';
 }
@@ -86,6 +88,7 @@ export const Tutorial = ({
   fadeDuration = 0.3,
   finishText = 'Start',
   containerClass,
+  animate = false,
   nextKey = 'ArrowRight',
   backKey = 'ArrowLeft',
   theme = 'light',
@@ -159,7 +162,7 @@ export const Tutorial = ({
   return (
     <LayoutGroup>
       <div
-        className={containerClass}
+        className={`${containerClass ?? ''} ${animate ? 'animate-slide-down opacity-0' : ''}`}
         style={{
           width: '100vw',
           height: '100vh',

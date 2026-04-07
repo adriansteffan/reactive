@@ -1,5 +1,0 @@
-- generic [active] [ref=e1]:
-  - heading "WITHOUT containerClass (should show white + dots):" [level=3] [ref=e2]
-  - paragraph [ref=e6]: Survey content here
-  - heading "WITH containerClass (should show dark bg, NO dots):" [level=3] [ref=e7]
-  - paragraph [ref=e11]: Survey content here

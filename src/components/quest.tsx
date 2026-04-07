@@ -132,7 +132,7 @@ function Quest({
 
   const survey = new Model({
     ...surveyJson,
-    css: { ...defaultCss, root: 'sd-root-modern custom-root' },
+    css: { ...defaultCss, root: `sd-root-modern custom-root${containerClass ? ' survey-custom-bg' : ''}` },
   });
   survey.applyTheme(theme ?? ContrastLight);
 

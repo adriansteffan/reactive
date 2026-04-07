@@ -3,7 +3,7 @@ import { ToastContainer } from 'react-toastify';
 
 const queryClient = new QueryClient();
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createContext, ReactNode, useContext } from 'react';
+import { createContext, ReactNode, useContext, useEffect } from 'react';
 import { SettingsScreen } from './settingsscreen';
 import { Param } from '../utils/common';
 
@@ -20,6 +20,19 @@ function parseBooleanProp(value: unknown): boolean {
 }
 
 export default function ExperimentProvider({ children, disableSettings, disableHybridSimulation }: { children: ReactNode, disableSettings?: boolean, disableHybridSimulation?: boolean }) {
+
+  useEffect(() => {
+    const preventSpaceScroll = (e: KeyboardEvent) => {
+      if (e.key === ' ' &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement) &&
+        !(e.target as HTMLElement).isContentEditable) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', preventSpaceScroll);
+    return () => window.removeEventListener('keydown', preventSpaceScroll);
+  }, []);
 
   if (window.location.pathname.endsWith('/settings') && !parseBooleanProp(disableSettings)) {
     return (

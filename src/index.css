@@ -85,6 +85,14 @@
   font-style: italic;
 }
 
+.reactive-dark-bg {
+  background-color: #21294b;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
 /* customization for the surveyjs elements - a bit hacky and broken*/
 .sd-root-modern {
   background-color: white !important;

@@ -32,7 +32,7 @@ export const THEME = {
     toastTheme: 'light' as const,
   },
   dark: {
-    containerBg: 'bg-[#1a1a2e]',
+    containerBg: 'reactive-dark-bg',
     text: 'text-[#f5f5f5]',
     prose: 'prose-invert',
     proseLink: 'prose-a:text-blue-400',
@@ -57,6 +57,8 @@ export const THEME = {
     toastTheme: 'dark' as const,
   },
 } as const;
+
+export const DARK_BG_CLASS = 'reactive-dark-bg';
 
 export function t(theme: Theme) {
   return THEME[theme];

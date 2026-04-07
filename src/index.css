@@ -94,9 +94,10 @@
   font-family: 'Atkinson Hyperlegible', sans-serif; /* Added this line */
 }
 
-.sd-root-modern.survey-custom-bg {
+.quest-custom-bg .sd-root-modern {
   background-color: transparent !important;
   background-image: none !important;
+  background-size: unset !important;
 }
 
 .sd-root-modern * {

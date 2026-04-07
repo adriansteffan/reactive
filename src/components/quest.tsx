@@ -132,7 +132,7 @@ function Quest({
 
   const survey = new Model({
     ...surveyJson,
-    css: { ...defaultCss, root: `sd-root-modern custom-root${containerClass ? ' survey-custom-bg' : ''}` },
+    css: { ...defaultCss, root: 'sd-root-modern custom-root' },
   });
   survey.applyTheme(theme ?? ContrastLight);
 
@@ -148,7 +148,7 @@ function Quest({
   return (
     <div className={`min-h-screen ${containerClass ?? ''}`}>
       {!containerClass && <div className='absolute inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]' />}
-      <div className='max-w-4xl mx-auto px-4'>
+      <div className={`max-w-4xl mx-auto px-4${containerClass ? ' quest-custom-bg' : ''}`}>
         <Survey model={survey} />
       </div>
     </div>

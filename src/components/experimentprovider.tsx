@@ -10,9 +10,18 @@ import { Param } from '../utils/common';
 const HybridSimulationContext = createContext(false);
 export const useHybridSimulationDisabled = () => useContext(HybridSimulationContext);
 
+function parseBooleanProp(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const lower = value.trim().toLowerCase();
+    return lower !== '' && lower !== 'false' && lower !== '0';
+  }
+  return !!value;
+}
+
 export default function ExperimentProvider({ children, disableSettings, disableHybridSimulation }: { children: ReactNode, disableSettings?: boolean, disableHybridSimulation?: boolean }) {
- 
-  if (window.location.pathname.endsWith('/settings') && !disableSettings) {
+
+  if (window.location.pathname.endsWith('/settings') && !parseBooleanProp(disableSettings)) {
     return (
       <SettingsScreen
         paramRegistry={Param.getRegistry()}
@@ -23,7 +32,7 @@ export default function ExperimentProvider({ children, disableSettings, disableH
 
   return (
     <QueryClientProvider client={queryClient}>
-      <HybridSimulationContext.Provider value={!!disableHybridSimulation}>
+      <HybridSimulationContext.Provider value={parseBooleanProp(disableHybridSimulation)}>
       {children}
       </HybridSimulationContext.Provider>
       <ToastContainer

@@ -45,6 +45,7 @@ function Text({
         allowedKeys === true || (Array.isArray(allowedKeys) && allowedKeys.includes(event.key));
 
       if (isKeyAllowed) {
+        event.preventDefault();
         const reactionTime = keypressTime - startTimeRef.current;
 
         next({
@@ -95,6 +96,8 @@ function Text({
         >
           <button
             onClick={handleClick}
+            tabIndex={-1}
+            onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
             className='bg-white cursor-pointer px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
           >
             {buttonText}

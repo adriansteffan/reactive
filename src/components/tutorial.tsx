@@ -3,6 +3,7 @@ import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { BaseComponentProps } from '../mod';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
+import { useTheme, t } from '../utils/theme';
 
 registerFlattener('Tutorial', null);
 
@@ -75,12 +76,8 @@ export interface TutorialProps extends BaseComponentProps {
   theme?: 'light' | 'dark';
 }
 
-const NAV_BTN =
-  'px-4 py-3 border-2 border-black font-bold text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all duration-100 outline-none focus:outline-none focus:ring-0';
-
-const NAV_BTN_ACTIVE = NAV_BTN + ' bg-white text-black cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none';
-
-const NAV_BTN_DISABLED = NAV_BTN + ' bg-gray-200 text-gray-400 border-gray-400 shadow-[2px_2px_0px_rgba(156,163,175,1)] cursor-default';
+const NAV_BTN_BASE =
+  'px-4 py-3 border-2 font-bold text-lg rounded-xl transition-all duration-100 outline-none focus:outline-none focus:ring-0';
 
 export const Tutorial = ({
   next,
@@ -91,8 +88,15 @@ export const Tutorial = ({
   animate = false,
   nextKey = 'ArrowRight',
   backKey = 'ArrowLeft',
-  theme = 'light',
+  theme,
 }: TutorialProps) => {
+  const contextTheme = useTheme();
+  const resolvedTheme = theme ?? contextTheme;
+  const th = t(resolvedTheme);
+
+  const NAV_BTN_ACTIVE = `${NAV_BTN_BASE} ${th.buttonBg} ${th.buttonText} ${th.buttonBorder} ${th.buttonShadow} cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`;
+  const NAV_BTN_DISABLED = `${NAV_BTN_BASE} ${th.buttonDisabledBg} ${th.buttonDisabledText} ${th.buttonDisabledBorder} ${th.buttonDisabledShadow} cursor-default`;
+
   const [page, setPage] = useState(0);
   const [progressMap, setProgressMap] = useState<Record<number, boolean>>({});
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -162,7 +166,7 @@ export const Tutorial = ({
   return (
     <LayoutGroup>
       <div
-        className={`${containerClass ?? ''} ${animate ? 'animate-slide-down opacity-0' : ''}`}
+        className={`${containerClass ?? th.containerBg} ${animate ? 'animate-slide-down opacity-0' : ''}`}
         style={{
           width: '100vw',
           height: '100vh',
@@ -222,9 +226,7 @@ export const Tutorial = ({
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
-                  backgroundColor: i === page
-                    ? (theme === 'dark' ? '#fff' : '#000')
-                    : (theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)'),
+                  backgroundColor: i === page ? th.dotActive : th.dotInactive,
                   transition: 'background-color 0.2s',
                 }}
               />

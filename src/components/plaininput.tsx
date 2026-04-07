@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
 import { uniform } from '../utils/distributions';
+import { useTheme, t } from '../utils/theme';
 
 registerFlattener('PlainInput', 'session');
 
@@ -40,6 +41,7 @@ function PlainInput({
   storeupdate?: (entry: string) => { [key: string]: any };
   placeholder?: string;
 }) {
+  const th = t(useTheme());
   const [inputValue, setInputValue] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,9 +56,10 @@ function PlainInput({
   };
 
   return (
+    <div className={`min-h-screen ${th.containerBg}`}>
     <div className={`max-w-prose mx-auto ${className} mt-20 mb-20 px-4 `}>
       <article
-        className={`prose prose-2xl prose-slate text-xl prose-a:text-blue-600 prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold text-black leading-relaxed
+        className={`prose prose-2xl ${th.prose} text-xl ${th.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${th.text} leading-relaxed
               ${animate ? 'animate-slide-down opacity-0' : ''}`}
       >
         {content}
@@ -68,7 +71,7 @@ function PlainInput({
           value={inputValue}
           onChange={handleChange}
           placeholder={placeholder}
-          className='w-full px-4 py-3 border-2 border-black rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-blue-500'
+          className={`w-full px-4 py-3 border-2 ${th.inputBorder} ${th.inputBg} ${th.inputText} rounded-xl text-lg focus:outline-none focus:ring-2 ${th.focusRing}`}
         />
       </div>
 
@@ -79,12 +82,13 @@ function PlainInput({
         >
           <button
             onClick={handleClick}
-            className='bg-white cursor-pointer px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
+            className={`${th.buttonBg} cursor-pointer px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`}
           >
             {buttonText}
           </button>
         </div>
       )}
+    </div>
     </div>
   );
 }

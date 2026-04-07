@@ -6,6 +6,7 @@ import Text from '../components/text';
 import { StatusBar } from '@capacitor/status-bar';
 import { ImmersiveMode } from '@adriansteffan/immersive-mode';
 import { Capacitor } from '@capacitor/core';
+import { useTheme, t } from '../utils/theme';
 
 registerFlattener('EnterFullscreen', 'session');
 registerSimulation('EnterFullscreen', noopSimulate, {});
@@ -129,8 +130,10 @@ export default function EnterFullscreen({
   }, [removeListenersAndTimeout]);
 
  
+  const th = t(useTheme());
+
   if (isWaiting) {
-    return <div className={`min-h-screen ${containerClass ?? ''}`} />;
+    return <div className={`min-h-screen ${containerClass ?? th.containerBg}`} />;
   }
 
   return (

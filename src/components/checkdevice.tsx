@@ -2,6 +2,7 @@ import { BaseComponentProps } from '../mod';
 import { useEffect, useRef, useState } from 'react';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
+import { useTheme, t } from '../utils/theme';
 
 registerFlattener('CheckDevice', 'session');
 
@@ -164,11 +165,15 @@ function CheckDevice({
     gatherDeviceInfo();
   }, [check, data, updateStore, next]);
 
+  const th = t(useTheme());
+
   return showContent ? (
+    <div className={`min-h-screen ${th.containerBg}`}>
     <div className='max-w-prose mx-auto mt-20 mb-20 px-4'>
-      <article className='prose prose-2xl prose-slate text-xl prose-a:text-blue-600 prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold text-black leading-relaxed'>
+      <article className={`prose prose-2xl ${th.prose} text-xl ${th.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${th.text} leading-relaxed`}>
         {content}
       </article>
+    </div>
     </div>
   ) : null;
 }

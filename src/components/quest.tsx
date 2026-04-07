@@ -1,11 +1,12 @@
 import { useCallback, createElement, ComponentType } from 'react';
 import { defaultCss, Model, Question, Serializer } from 'survey-core';
 import { ReactQuestionFactory, Survey, SurveyQuestionElementBase } from 'survey-react-ui';
-import { ContrastLight } from 'survey-core/themes';
+import { ContrastLight, ContrastDark } from 'survey-core/themes';
 import 'survey-core/survey-core.min.css';
 import { registerSimulation } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
 import { uniform } from '../utils/distributions';
+import { useTheme, t } from '../utils/theme';
 
 registerFlattener('Quest', 'session');
 
@@ -126,6 +127,9 @@ function Quest({
   theme?: any;
   containerClass?: string;
 }) {
+  const contextTheme = useTheme();
+  const th = t(contextTheme);
+
   Object.keys(customQuestions).forEach((name) => {
     registerCustomQuestion(name, customQuestions[name]);
   });
@@ -134,7 +138,7 @@ function Quest({
     ...surveyJson,
     css: { ...defaultCss, root: 'sd-root-modern custom-root' },
   });
-  survey.applyTheme(theme ?? ContrastLight);
+  survey.applyTheme(theme ?? (contextTheme === 'dark' ? ContrastDark : ContrastLight));
 
   const saveResults = useCallback(
     (sender: any) => {
@@ -145,10 +149,12 @@ function Quest({
 
   survey.onComplete.add(saveResults);
 
+  const useCustomBg = !!containerClass || contextTheme === 'dark';
+
   return (
-    <div className={`min-h-screen ${containerClass ?? ''}`}>
-      {!containerClass && <div className='absolute inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]' />}
-      <div className={`max-w-4xl mx-auto px-4${containerClass ? ' quest-custom-bg' : ''}`}>
+    <div className={`min-h-screen ${containerClass ?? th.containerBg}`}>
+      {!useCustomBg && <div className='absolute inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]' />}
+      <div className={`max-w-4xl mx-auto px-4${useCustomBg ? ' quest-custom-bg' : ''}`}>
         <Survey model={survey} />
       </div>
     </div>

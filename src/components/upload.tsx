@@ -17,6 +17,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../utils/upload';
 import { registerSimulation, getBackendUrl, getInitialParticipant } from '../utils/simulation';
 import { uniform } from '../utils/distributions';
+import { useTheme, t } from '../utils/theme';
 
 registerSimulation('Upload', async (trialProps, experimentState, _simulators, participant) => {
   const sessionID = trialProps.sessionID || `sim_${Date.now()}_${Math.floor(uniform(0, 36 ** 6)).toString(36)}`;
@@ -379,16 +380,16 @@ export default function Upload({
     }
   }, [uploadState]);
 
+  const th = t(useTheme());
+  const btnClass = `cursor-pointer ${th.buttonBg} px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`;
+
   return (
-    <div className={containerClass ?? ''} style={{ position: 'fixed', inset: 0 }}>
-    <div className={`flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10 h-full ${className ?? ''}`}>
+    <div className={containerClass ?? th.containerBg} style={{ position: 'fixed', inset: 0 }}>
+    <div className={`flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10 h-full ${th.text} ${className ?? ''}`}>
       {uploadState == 'initial' && !autoUpload && (
         <>
           {content ?? <p>Thank you for participating! Please click the button below to submit your data.</p>}
-          <button
-            onClick={handleUpload}
-            className='mt-8 cursor-pointer bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
-          >
+          <button onClick={handleUpload} className={`mt-8 ${btnClass}`}>
             Submit Data
           </button>
         </>
@@ -405,14 +406,11 @@ export default function Upload({
 
       {uploadState == 'error' && (
         <>
-          {errorContent ?? <div className='text-red-500 mb-4'>
+          {errorContent ?? <div className={`${th.error} mb-4`}>
             <p>Sorry, there was an error uploading your data.</p>
             <p>Please try again or contact the researcher.</p>
           </div>}
-          <button
-            onClick={handleUpload}
-            className='cursor-pointer bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none'
-          >
+          <button onClick={handleUpload} className={btnClass}>
             Try Again
           </button>
         </>

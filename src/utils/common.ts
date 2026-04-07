@@ -40,6 +40,7 @@ export interface FileUpload {
 
 export interface ExperimentConfig {
   showProgressBar: boolean;
+  theme?: import('./theme').Theme;
 }
 
 export interface Store {

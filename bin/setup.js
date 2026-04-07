@@ -21,7 +21,7 @@ const rl = readline.createInterface({
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
 
 
-function copyDir(src, dest, ignoreFiles = []) {
+function copyDir(src, dest, ignoreEntries = []) {
   mkdirSync(dest, { recursive: true });
 
   const entries = readdirSync(src, { withFileTypes: true });
@@ -29,17 +29,17 @@ function copyDir(src, dest, ignoreFiles = []) {
   for (let entry of entries) {
     const srcPath = join(src, entry.name);
     const destPath = join(dest, entry.name);
-    
-    // Check if the current file path matches any in the ignore list
-    const shouldIgnore = ignoreFiles.some(ignorePath => 
+
+    // Check if the current entry matches any in the ignore list
+    const shouldIgnore = ignoreEntries.some(ignorePath =>
       join(src, entry.name) === join(src, ignorePath)
     );
+    if (shouldIgnore) continue;
 
-    if (entry.isDirectory()) {
-      // only ignore at top level
-      copyDir(srcPath, destPath);
-    } else if (shouldIgnore) {
+    if (entry.isSymbolicLink()) {
       continue;
+    } else if (entry.isDirectory()) {
+      copyDir(srcPath, destPath);
     } else {
       copyFileSync(srcPath, destPath);
     }
@@ -66,7 +66,7 @@ async function main() {
       process.exit(1);
     }
 
-    copyDir(templatePath, projectPath, ['package.json','capacitor.config.js']);
+    copyDir(templatePath, projectPath, ['package.json','capacitor.config.js','node_modules']);
 
     const templatePackageJsonPath = join(templatePath, 'package.json');
     if (!existsSync(templatePackageJsonPath)) {

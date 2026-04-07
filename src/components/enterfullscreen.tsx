@@ -13,6 +13,8 @@ registerSimulation('EnterFullscreen', noopSimulate, {});
 export default function EnterFullscreen({
   content,
   buttonText,
+  className,
+  containerClass,
   next,
   data,
   updateStore,
@@ -21,6 +23,8 @@ export default function EnterFullscreen({
   prolificCode?: string;
   content?: React.ReactNode;
   buttonText?: string;
+  className?: string;
+  containerClass?: string;
   delayMs?: number;
 } & BaseComponentProps) {
   const contentWrap = (
@@ -131,6 +135,8 @@ export default function EnterFullscreen({
     <Text
       data={data}
       updateStore={updateStore}
+      className={className}
+      containerClass={containerClass}
       content={contentWrap}
       buttonText={buttonText ?? 'Enter Fullscreen Mode'}
       next={handleEnterFullscreenClick}

@@ -166,7 +166,7 @@ export const Tutorial = ({
   return (
     <LayoutGroup>
       <div
-        className={`${containerClass ?? th.containerBg} ${animate ? 'animate-slide-down opacity-0' : ''}`}
+        className={`${containerClass ?? th.containerBg} ${th.text} ${animate ? 'animate-slide-down opacity-0' : ''}`}
         style={{
           width: '100vw',
           height: '100vh',

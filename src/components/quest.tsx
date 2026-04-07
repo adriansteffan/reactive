@@ -117,10 +117,14 @@ function Quest({
   next,
   surveyJson,
   customQuestions = {},
+  theme,
+  containerClass,
 }: {
   next: (data: object) => void;
   surveyJson: object;
   customQuestions?: ComponentsMap;
+  theme?: any;
+  containerClass?: string;
 }) {
   Object.keys(customQuestions).forEach((name) => {
     registerCustomQuestion(name, customQuestions[name]);
@@ -130,7 +134,7 @@ function Quest({
     ...surveyJson,
     css: { ...defaultCss, root: 'sd-root-modern custom-root' },
   });
-  survey.applyTheme(ContrastLight);
+  survey.applyTheme(theme ?? ContrastLight);
 
   const saveResults = useCallback(
     (sender: any) => {
@@ -142,8 +146,8 @@ function Quest({
   survey.onComplete.add(saveResults);
 
   return (
-    <div className='max-w-4xl mx-auto px-4'>
-      <div className='absolute inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]' />
+    <div className={`max-w-4xl mx-auto px-4 ${containerClass ?? ''}`}>
+      {!containerClass && <div className='absolute inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]' />}
       <Survey model={survey} />
     </div>
   );

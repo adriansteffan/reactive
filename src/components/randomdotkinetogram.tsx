@@ -52,6 +52,7 @@ registerSimulation('RandomDotKinematogram', (trialProps, _experimentState, simul
   const result = simulators.respond(merged, participant);
   const { rt, response } = result.value;
 
+  const preTrialDuration = merged.preTrialMessage?.duration ?? 0;
   const fixation = merged.fixationTime ?? RDK_DEFAULTS.fixationTime;
   const trialDuration = merged.duration ?? RDK_DEFAULTS.duration;
   const responseEndsTrial = merged.responseEndsTrial ?? RDK_DEFAULTS.responseEndsTrial;
@@ -60,18 +61,39 @@ registerSimulation('RandomDotKinematogram', (trialProps, _experimentState, simul
   const correctKeys = Array.isArray(merged.correctResponse)
     ? merged.correctResponse.map((c: string) => c.toLowerCase())
     : merged.correctResponse ? [merged.correctResponse.toLowerCase()] : null;
+  const correct = response && correctKeys ? correctKeys.includes(response.toLowerCase()) : null;
+
+  let totalDuration = preTrialDuration + fixation + elapsed;
+
+  const responseData: Record<string, any> = {
+    ...merged,
+    rt,
+    response,
+    correct,
+    framesDisplayed: 0,
+    measuredRefreshRate: null,
+    feedbackShown: null as string | null,
+    feedbackDuration: null as number | null,
+  };
+
+  const fb = merged.feedback as RDKFeedback | undefined;
+  if (fb) {
+    let shown: RDKMessage | null = null;
+    if (rt === null && fb.onTimeout) shown = fb.onTimeout;
+    else if (correct === false && fb.onIncorrect) shown = fb.onIncorrect;
+    else if (correct === true && fb.onCorrect) shown = fb.onCorrect;
+
+    if (shown) {
+      responseData.feedbackShown = shown.content;
+      responseData.feedbackDuration = shown.duration;
+      totalDuration += shown.duration;
+    }
+  }
 
   return {
-    responseData: {
-      ...merged,
-      rt,
-      response,
-      correct: response && correctKeys ? correctKeys.includes(response.toLowerCase()) : null,
-      framesDisplayed: 0,
-      measuredRefreshRate: null,
-    },
+    responseData,
     participantState: result.participantState,
-    duration: fixation + elapsed,
+    duration: totalDuration,
   };
 }, {
   respond: (trialProps: any, participant: any) => {
@@ -95,6 +117,20 @@ registerSimulation('RandomDotKinematogram', (trialProps, _experimentState, simul
     };
   },
 });
+
+export interface RDKMessage {
+  content: string;
+  duration: number;
+}
+
+export interface RDKFeedback {
+  /** Shown when rt === null (no response within duration) */
+  onTimeout?: RDKMessage;
+  /** Shown when the response was incorrect (correct === false) */
+  onIncorrect?: RDKMessage;
+  /** Shown when the response was correct (correct === true) */
+  onCorrect?: RDKMessage;
+}
 
 // this is assigned per dot
 export type NoiseMovement = 'randomTeleport' | 'randomWalk' | 'randomDirection';
@@ -864,6 +900,10 @@ export interface RDKProps extends BaseComponentProps {
   borderWidth?: number;
   borderColor?: string;
   responseHint?: string;
+  /** Timed message shown before the fixation cross. Useful for per-trial condition cues. */
+  preTrialMessage?: RDKMessage;
+  /** Post-response feedback. Evaluated after response/timeout, displayed before calling next(). */
+  feedback?: RDKFeedback;
 }
 
 export const RandomDotKinematogram = (rawProps: RDKProps) => {
@@ -884,17 +924,28 @@ export const RandomDotKinematogram = (rawProps: RDKProps) => {
   const propsRef = useRef(rawProps);
   propsRef.current = rawProps;
 
+  const preTrialDuration = rawProps.preTrialMessage?.duration ?? 0;
+
   const canvasHandle = useRef<RDKCanvasHandle>(null);
   const startTimeRef = useRef<number>(performance.now());
   const trialEndedRef = useRef(false);
   const responseRef = useRef<string | null>(null);
   const responseTimeRef = useRef<number | null>(null);
 
+  const [preTrialDone, setPreTrialDone] = useState(!rawProps.preTrialMessage);
   const [response, setResponse] = useState<string | null>(null);
   const [fixationComplete, setFixationComplete] = useState(fixationTime <= 0);
   const [stimulusVisible, setStimulusVisible] = useState(true);
+  const [feedbackMsg, setFeedbackMsg] = useState<RDKMessage | null>(null);
 
   const initialRefreshRate = store?._reactiveScreenRefreshRate;
+
+  // Pre-trial message timer
+  useEffect(() => {
+    if (!rawProps.preTrialMessage) return;
+    const timer = setTimeout(() => setPreTrialDone(true), rawProps.preTrialMessage.duration);
+    return () => clearTimeout(timer);
+  }, []);
 
   const endTrial = useCallback((key: string | null, rt: number | null) => {
     if (trialEndedRef.current) return;
@@ -907,46 +958,66 @@ export const RandomDotKinematogram = (rawProps: RDKProps) => {
       : rdkProps.correctResponse
         ? [rdkProps.correctResponse.toLowerCase()]
         : null;
+    const correct = key && correctKeys ? correctKeys.includes(key) : null;
 
-    nextFn({
+    const responseData: Record<string, any> = {
       ...RDK_DEFAULTS,
       ...rdkProps,
       rt,
       response: key,
-      correct: key && correctKeys ? correctKeys.includes(key) : null,
+      correct,
       framesDisplayed: stats?.framesDisplayed ?? 0,
       measuredRefreshRate: stats?.measuredRefreshRate ?? null,
-    });
+      feedbackShown: null,
+      feedbackDuration: null,
+    };
+
+    const fb = rdkProps.feedback;
+    let shown: RDKMessage | null = null;
+    if (fb) {
+      if (rt === null && fb.onTimeout) shown = fb.onTimeout;
+      else if (correct === false && fb.onIncorrect) shown = fb.onIncorrect;
+      else if (correct === true && fb.onCorrect) shown = fb.onCorrect;
+    }
+
+    if (shown) {
+      responseData.feedbackShown = shown.content;
+      responseData.feedbackDuration = shown.duration;
+      setFeedbackMsg(shown);
+      setTimeout(() => nextFn(responseData), shown.duration);
+    } else {
+      nextFn(responseData);
+    }
   }, []);
 
-  // Fixation duration delay before showing dots
+  // Fixation duration delay before showing dots (offset by preTrialDuration)
   useEffect(() => {
     if (fixationTime <= 0) return;
-    const timer = setTimeout(() => setFixationComplete(true), fixationTime);
+    const timer = setTimeout(() => setFixationComplete(true), preTrialDuration + fixationTime);
     return () => clearTimeout(timer);
-  }, [fixationTime]);
+  }, [fixationTime, preTrialDuration]);
 
-  // Stimulus duration timer
+  // Stimulus duration timer (offset by preTrialDuration)
   useEffect(() => {
     const effectiveStimDur = stimulusDuration ?? duration;
     if (effectiveStimDur <= 0) return;
-    const timer = setTimeout(() => setStimulusVisible(false), fixationTime + effectiveStimDur);
+    const timer = setTimeout(() => setStimulusVisible(false), preTrialDuration + fixationTime + effectiveStimDur);
     return () => clearTimeout(timer);
-  }, [fixationTime, stimulusDuration, duration]);
+  }, [preTrialDuration, fixationTime, stimulusDuration, duration]);
 
-  // Trial duration timer — ends trial with whatever response was collected
+  // Trial duration timer — ends trial with whatever response was collected (offset by preTrialDuration)
   useEffect(() => {
     if (duration <= 0) return;
     const timer = setTimeout(() => {
       endTrial(responseRef.current, responseTimeRef.current);
-    }, fixationTime + duration);
+    }, preTrialDuration + fixationTime + duration);
     return () => clearTimeout(timer);
-  }, [fixationTime, duration, endTrial]);
+  }, [preTrialDuration, fixationTime, duration, endTrial]);
 
-  // Handle keyboard response
+  // Handle keyboard response (blocked during preTrialMessage)
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (trialEndedRef.current || responseRef.current) return;
+      if (trialEndedRef.current || responseRef.current || !preTrialDone) return;
 
       const key = e.key.toLowerCase();
       const allowedKeys = validKeys.length > 0 ? validKeys.map((c) => c.toLowerCase()) : null;
@@ -965,59 +1036,83 @@ export const RandomDotKinematogram = (rawProps: RDKProps) => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [validKeys, responseEndsTrial, endTrial]);
+  }, [validKeys, responseEndsTrial, endTrial, preTrialDone]);
+
+  const messageOverlay = (text: string) => (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <span style={{ color: 'white', fontSize: '2rem', fontWeight: 'bold', textAlign: 'center', padding: '0 2rem' }}>
+        {text}
+      </span>
+    </div>
+  );
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', margin: 0, padding: 0, backgroundColor }}>
-      <RDKCanvas
-        ref={canvasHandle}
-        width={window.innerWidth}
-        height={window.innerHeight}
-        active={fixationComplete && stimulusVisible}
-        initialRefreshRate={initialRefreshRate}
-        dotCount={dotCount}
-        dotSetCount={dotSetCount}
-        direction={direction}
-        coherence={coherence}
-        opposite={opposite}
-        speed={speed}
-        dotLifetime={dotLifetime}
-        updateRate={updateRate}
-        dotRadius={dotRadius}
-        dotCharacter={dotCharacter}
-        dotColor={dotColor}
-        coherentDotColor={coherentDotColor}
-        backgroundColor={backgroundColor}
-        apertureShape={apertureShape}
-        apertureWidth={apertureWidth}
-        apertureHeight={apertureHeight}
-        apertureCenterX={apertureCenterX}
-        apertureCenterY={apertureCenterY}
-        reinsertMode={reinsertMode}
-        noiseMovement={noiseMovement}
-        reassignEveryMs={reassignEveryMs}
-        showFixation={showFixation}
-        fixationWidth={fixationWidth}
-        fixationHeight={fixationHeight}
-        fixationColor={fixationColor}
-        fixationThickness={fixationThickness}
-        showBorder={showBorder}
-        borderWidth={borderWidth}
-        borderColor={borderColor}
-      />
-      {responseHint && !stimulusVisible && !response && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '60%',
-            width: '100%',
-            textAlign: 'center',
-            color: 'white',
-            fontSize: '1.25rem',
-          }}
-        >
-          {responseHint}
-        </div>
+      {!preTrialDone ? (
+        messageOverlay(rawProps.preTrialMessage!.content)
+      ) : feedbackMsg ? (
+        messageOverlay(feedbackMsg.content)
+      ) : (
+        <>
+          <RDKCanvas
+            ref={canvasHandle}
+            width={window.innerWidth}
+            height={window.innerHeight}
+            active={fixationComplete && stimulusVisible}
+            initialRefreshRate={initialRefreshRate}
+            dotCount={dotCount}
+            dotSetCount={dotSetCount}
+            direction={direction}
+            coherence={coherence}
+            opposite={opposite}
+            speed={speed}
+            dotLifetime={dotLifetime}
+            updateRate={updateRate}
+            dotRadius={dotRadius}
+            dotCharacter={dotCharacter}
+            dotColor={dotColor}
+            coherentDotColor={coherentDotColor}
+            backgroundColor={backgroundColor}
+            apertureShape={apertureShape}
+            apertureWidth={apertureWidth}
+            apertureHeight={apertureHeight}
+            apertureCenterX={apertureCenterX}
+            apertureCenterY={apertureCenterY}
+            reinsertMode={reinsertMode}
+            noiseMovement={noiseMovement}
+            reassignEveryMs={reassignEveryMs}
+            showFixation={showFixation}
+            fixationWidth={fixationWidth}
+            fixationHeight={fixationHeight}
+            fixationColor={fixationColor}
+            fixationThickness={fixationThickness}
+            showBorder={showBorder}
+            borderWidth={borderWidth}
+            borderColor={borderColor}
+          />
+          {responseHint && !stimulusVisible && !response && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '60%',
+                width: '100%',
+                textAlign: 'center',
+                color: 'white',
+                fontSize: '1.25rem',
+              }}
+            >
+              {responseHint}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -14,4 +14,4 @@ export { default as CheckDevice } from './checkdevice';
 export { Tutorial, useTutorialSlide } from './tutorial';
 export type { TutorialProps } from './tutorial';
 export { RandomDotKinematogram, RDKCanvas } from './randomdotkinetogram';
-export type { RDKCanvasProps, RDKCanvasHandle, RDKProps, NoiseMovement } from './randomdotkinetogram';
+export type { RDKCanvasProps, RDKCanvasHandle, RDKProps, RDKMessage, RDKFeedback, NoiseMovement } from './randomdotkinetogram';

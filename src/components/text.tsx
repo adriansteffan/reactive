@@ -8,6 +8,9 @@ import { useTheme, t } from '../utils/theme';
 registerFlattener('Text', 'text');
 
 registerSimulation('Text', (trialProps, _experimentState, simulators, participant) => {
+  if (trialProps.duration != null) {
+    return { responseData: {}, participantState: participant, duration: trialProps.duration };
+  }
   const result = simulators.respond(trialProps, participant);
   return { responseData: result.value, participantState: result.participantState, duration: result.value.reactionTime };
 }, {
@@ -26,6 +29,7 @@ function Text({
   next,
   animate = false,
   allowedKeys = false,
+  duration,
 }: {
   content: React.ReactNode;
   buttonText?: string;
@@ -35,15 +39,25 @@ function Text({
   centered?: boolean;
   animate?: boolean;
   allowedKeys?: string[] | boolean;
+  /** Auto-advance after N ms. When set, no button is shown and key presses are ignored. */
+  duration?: number;
 } & BaseComponentProps) {
   const th = t(useTheme());
   const startTimeRef = useRef<number>(0);
+  const timed = duration != null;
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
+    if (!timed) return;
+    const timer = setTimeout(() => next({}), duration);
+    return () => clearTimeout(timer);
+  }, [timed, duration, next]);
+
+  useEffect(() => {
+    if (timed) return;
     startTimeRef.current = now();
 
     const handleKeyPress = (event: KeyboardEvent) => {
@@ -73,7 +87,7 @@ function Text({
         window.removeEventListener('keydown', handleKeyPress);
       }
     };
-  }, [next, allowedKeys]);
+  }, [next, allowedKeys, timed]);
 
   const handleClick = () => {
     const clickTime = now();
@@ -97,7 +111,7 @@ function Text({
         {content}
       </article>
 
-      {buttonText && (
+      {!timed && buttonText && (
         <div
           className={`mt-16 flex justify-center ${animate ? 'animate-fade-in opacity-0' : ''}`}
           style={animate ? { animationDelay: '1s' } : {}}

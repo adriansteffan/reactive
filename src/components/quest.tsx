@@ -138,7 +138,7 @@ function Quest({
     ...surveyJson,
     css: { ...defaultCss, root: 'sd-root-modern custom-root' },
   });
-  survey.applyTheme(theme ?? (contextTheme === 'dark' ? ContrastDark : ContrastLight));
+  survey.applyTheme(theme ?? (contextTheme.startsWith('dark') ? ContrastDark : ContrastLight));
 
   const saveResults = useCallback(
     (sender: any) => {
@@ -149,7 +149,7 @@ function Quest({
 
   survey.onComplete.add(saveResults);
 
-  const useCustomBg = !!containerClass || contextTheme === 'dark';
+  const useCustomBg = !!containerClass || contextTheme.startsWith('dark');
 
   return (
     <div className={`min-h-screen ${containerClass ?? th.containerBg}`}>

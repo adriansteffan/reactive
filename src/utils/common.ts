@@ -54,6 +54,14 @@ export interface BaseComponentProps {
   updateStore: (mergeIn: Store) => void;
 }
 
+export function selectPrevTrialData(data: any[], type?: string): any | undefined {
+  if (!type) return data.at(-1);
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i].type === type) return data[i];
+  }
+  return undefined;
+}
+
 type ParamType = 'string' | 'number' | 'boolean' | 'array' | 'json';
 
 type ParamValue<T extends ParamType> = T extends 'number'

@@ -130,12 +130,12 @@ function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<stri
       const prefix = item.name || item.type;
       // Add user-provided metadata (non-builtin top-level keys), namespaced by trial name
       for (const [key, value] of Object.entries(item)) {
-        if (!trialBuiltinKeys.has(key)) row[`${prefix}_${key}`] = value;
+        if (!trialBuiltinKeys.has(key)) row[`${prefix}_${key}`] = typeof value === 'object' && value !== null && !Array.isArray(value) ? JSON.stringify(value) : value;
       }
       // Add responseData fields, namespaced by trial name
       if (item.responseData && typeof item.responseData === 'object' && !Array.isArray(item.responseData)) {
         for (const [key, value] of Object.entries(item.responseData)) {
-          row[`${prefix}_${key}`] = value;
+          row[`${prefix}_${key}`] = typeof value === 'object' && value !== null && !Array.isArray(value) ? JSON.stringify(value) : value;
         }
       }
     }
@@ -159,14 +159,21 @@ function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<stri
         if (trialBuiltinKeys.has(key)) {
           if (trialInfoKeys.has(key)) base[`trial_${key}`] = value;
         } else {
-          base[key] = value;
+          base[key] = typeof value === 'object' && value !== null && !Array.isArray(value) ? JSON.stringify(value) : value;
         }
       }
       // When no flatten function is registered, spread responseData directly.
       const flatRows = flatten
         ? flatten(item)
         : [item.responseData && typeof item.responseData === 'object' ? { ...item.responseData } : {}];
-      return flatRows.map((row: any) => ({ ...base, ...row }));
+      return flatRows.map((row: any) => {
+        const merged = { ...base, ...row };
+        for (const k of Object.keys(merged)) {
+          const v = merged[k];
+          if (typeof v === 'object' && v !== null && !Array.isArray(v)) merged[k] = JSON.stringify(v);
+        }
+        return merged;
+      });
     });
     if (rows.length > 0) {
       files.push({

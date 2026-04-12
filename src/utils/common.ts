@@ -197,7 +197,9 @@ export function registerExperimentParams(experiment: any[]) {
     if (params) {
       for (const param of params) {
         if(!item.hideSettings || (item.hideSettings !== true && !item.hideSettings.includes(param.name))){
-          sharedRegistry.push(param);
+          if (!sharedRegistry.some((p) => p.name === param.name)) {
+            sharedRegistry.push(param);
+          }
         }
       }
     }
@@ -212,8 +214,6 @@ export function registerComponentParams(
 }
 
 export function subsetExperimentByParam(experiment: any[]) {
-  registerExperimentParams(experiment);
-
   timelineRepresentation.length = 0;
 
   experiment.forEach((item) => {

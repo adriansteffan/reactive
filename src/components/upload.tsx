@@ -12,7 +12,7 @@ import {
   Store,
   TrialData,
 } from '../utils/common';
-import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
+import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../utils/upload';
 import { registerSimulation, getBackendUrl, getInitialParticipant } from '../utils/simulation';
@@ -283,7 +283,12 @@ export default function Upload({
     const zipWriter = new ZipWriter(new BlobWriter());
 
     for (const file of files) {
-      await zipWriter.add(file.filename, new TextReader(file.content));
+      if (file.encoding === 'base64') {
+        const binary = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0));
+        await zipWriter.add(file.filename, new BlobReader(new Blob([binary])));
+      } else {
+        await zipWriter.add(file.filename, new TextReader(file.content));
+      }
     }
 
     const blob = await zipWriter.close();

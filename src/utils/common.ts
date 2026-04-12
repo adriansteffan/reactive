@@ -36,6 +36,8 @@ export interface FileUpload {
   filename: string;
   content: string;
   encoding?: 'base64' | 'utf8';
+  /** Internal flag: file was already eagerly uploaded, skip in upload but include in download. */
+  _alreadyUploaded?: boolean;
 }
 
 export interface ExperimentConfig {

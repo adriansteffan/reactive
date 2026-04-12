@@ -199,16 +199,15 @@ function extractAudioRecordings(data: any[]): FileUpload[] {
   const files: FileUpload[] = [];
 
   const processRecording = (obj: any, nameHint: string) => {
-    if (obj?.type === 'audiorecording') {
-      if (obj._audioPreUploaded && obj._audioPreUploadedFilename) {
-        // Already uploaded eagerly -> just record the filename reference
-        obj.audioFile = obj._audioPreUploadedFilename;
-      } else if (obj.data64) {
-        // Not pre-uploaded —> extract as a file for the final upload
-        const filename = generateAudioFilename(nameHint);
-        files.push({ filename, content: obj.data64, encoding: 'base64' });
-        obj.audioFile = filename;
-      }
+    if (obj?.type === 'audiorecording' && obj.data64) {
+      const filename = obj._audioPreUploadedFilename ?? generateAudioFilename(nameHint);
+      files.push({
+        filename,
+        content: obj.data64,
+        encoding: 'base64' as const,
+        _alreadyUploaded: !!obj._audioPreUploaded,
+      });
+      obj.audioFile = filename;
       delete obj.data64;
       delete obj.blob;
       delete obj.url;

@@ -318,16 +318,17 @@ export default function Upload({
     });
 
     try {
-      const payload: UploadPayload = {
-        sessionId: sessionIDUpload,
-        // Include _uploadId so the backend can rename the eager-upload folder
-        ...(store?._uploadId && store._uploadId !== sessionIDUpload ? { _uploadId: store._uploadId } : {}),
-        files: files.map((file) => ({ ...file, encoding: file.encoding ?? 'utf8' })),
-      };
-
       if (shouldDownload) {
         await downloadFiles(files);
       }
+
+      // Filter out eagerly uploaded files for the server upload (they're already there)
+      const filesToUpload = files.filter((f) => !f._alreadyUploaded);
+      const payload: UploadPayload = {
+        sessionId: sessionIDUpload,
+        ...(store?._uploadId && store._uploadId !== sessionIDUpload ? { _uploadId: store._uploadId } : {}),
+        files: filesToUpload.map((file) => ({ ...file, encoding: file.encoding ?? 'utf8' })),
+      };
 
       if (!shouldUpload) {
         next({});

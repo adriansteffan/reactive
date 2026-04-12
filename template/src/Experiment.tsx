@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef } from 'react';
-import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation, registerFlattener, sampleParticipants } from '@adriansteffan/reactive';
+import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation, registerFlattener, sampleParticipants, prepareTimeline } from '@adriansteffan/reactive';
 
 
 const config: ExperimentConfig = { showProgressBar: true };
@@ -66,7 +66,7 @@ const CustomQuestion = () => {
 
 // --- Timeline ---
 
-const experiment = [
+const experiment = prepareTimeline([
   {
     name: 'introtext',
     type: 'Text',
@@ -149,7 +149,7 @@ const experiment = [
       content: <>Thank you for participating in our study, you can now close the browser window.</>,
     },
   },
-];
+]);
 
 // --- Simulation config ---
 const simulationConfig = {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import '../index.css';
-import { ExperimentConfig, Store, Param, now, getParam, registerExperimentParams } from '../utils/common';
+import { ExperimentConfig, Store, Param, now, getParam } from '../utils/common';
 import { useCallback, useEffect, useMemo, useRef, useState, ComponentType } from 'react';
 import {
   compileTimeline,
@@ -110,7 +110,6 @@ export default function ExperimentRunner({
   /** Simulation config — not used at runtime, extracted by simulate.ts via createElement. */
   simulationConfig?: any;
 }) {
-  registerExperimentParams(timeline);
   const disableHybridSimulation = useHybridSimulationDisabled();
   const trialByteCode = useMemo(() => {
     return compileTimeline(timeline);

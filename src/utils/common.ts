@@ -213,15 +213,18 @@ export function registerComponentParams(
   providedComponentParams[type] = params;
 }
 
-export function subsetExperimentByParam(experiment: any[]) {
-  timelineRepresentation.length = 0;
+export function prepareTimeline(experiment: any[], options: { subset?: boolean } = {}): any[] {
+  registerExperimentParams(experiment);
 
+  timelineRepresentation.length = 0;
   experiment.forEach((item) => {
     timelineRepresentation.push({
       type: item.type ?? 'NoTypeSpecified',
       name: item.name,
     });
   });
+
+  if (!options.subset) return experiment;
 
   const include = getParam('includeSubset', undefined);
   const exclude = getParam('excludeSubset', undefined);
@@ -254,6 +257,7 @@ export function subsetExperimentByParam(experiment: any[]) {
 
   return experimentFiltered;
 }
+
 
 export function canvasCountdown(seconds: number) {
   if (seconds <= 0) {

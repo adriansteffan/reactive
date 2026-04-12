@@ -216,6 +216,8 @@ export function registerComponentParams(
 export function prepareTimeline(experiment: any[], options: { subset?: boolean } = {}): any[] {
   registerExperimentParams(experiment);
 
+  if (!options.subset) return experiment;
+
   timelineRepresentation.length = 0;
   experiment.forEach((item) => {
     timelineRepresentation.push({
@@ -223,8 +225,6 @@ export function prepareTimeline(experiment: any[], options: { subset?: boolean }
       name: item.name,
     });
   });
-
-  if (!options.subset) return experiment;
 
   const include = getParam('includeSubset', undefined);
   const exclude = getParam('excludeSubset', undefined);

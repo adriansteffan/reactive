@@ -29,9 +29,23 @@ interface FileUpload {
 
 interface UploadRequest {
   sessionId: string;
+  _uploadId?: string;
   files: FileUpload[];
 }
 
+async function getUniqueDirName(base: string): Promise<string> {
+  let candidate = base;
+  let counter = 0;
+  while (true) {
+    try {
+      await fs.access(path.join(backendFolder, candidate));
+      counter++;
+      candidate = `${base}_${counter}`;
+    } catch {
+      return candidate;
+    }
+  }
+}
 
 api.post(
   '/data',
@@ -48,7 +62,24 @@ api.post(
       }
 
       const data = req.body as UploadRequest;
-      const dataDir = path.join(backendFolder, data.sessionId);
+      let targetDir = data.sessionId;
+
+      // If _uploadId differs from sessionId and its folder exists, rename it
+      if (data._uploadId && data._uploadId !== data.sessionId) {
+        const uploadIdDir = path.join(backendFolder, data._uploadId);
+        try {
+          await fs.access(uploadIdDir);
+          // Folder from eager uploads exists; rename to final sessionId with collision avoidance
+          const uniqueName = await getUniqueDirName(data.sessionId);
+          await fs.rename(uploadIdDir, path.join(backendFolder, uniqueName));
+          targetDir = uniqueName;
+        } catch {
+          // No eager upload folder — use sessionId directly with collision avoidance
+          targetDir = await getUniqueDirName(data.sessionId);
+        }
+      }
+
+      const dataDir = path.join(backendFolder, targetDir);
       await fs.mkdir(dataDir, { recursive: true });
 
       const savePromises = data.files.map(async (file) => {

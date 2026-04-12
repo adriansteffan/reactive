@@ -1,9 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { HiMicrophone, HiStop, HiTrash } from 'react-icons/hi2';
-
-interface AudioVisualizerProps {
-  stream: MediaStream;
-}
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { HiMicrophone, HiStop, HiTrash, HiPause } from 'react-icons/hi2';
+import { useTheme, t } from '../utils/theme';
+import { useAudioDeviceId } from '../utils/audiodevice';
 
 interface RecordingData {
   blob: Blob;
@@ -11,12 +9,9 @@ interface RecordingData {
   timestamp: string;
 }
 
-// I quickly AI-genned this viz so that the participants have some feedback if their audio is being picked up - probably highly inaccurate, but that should not matter at all
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream }) => {
+const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ stream, isDark }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const previousDataRef = useRef<number[]>([]);
 
   useEffect(() => {
     if (!stream || !canvasRef.current) return;
@@ -26,178 +21,146 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream }) => {
     const analyser = audioContext.createAnalyser();
     const source = audioContext.createMediaStreamSource(stream);
 
-    // Increased FFT size for smoother data
     analyser.fftSize = 2048;
     source.connect(analyser);
-    analyserRef.current = analyser;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
-
     canvas.style.width = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
 
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    previousDataRef.current = Array(analyser.frequencyBinCount).fill(128);
-
-    // Enhanced smoothing function with weighted average
-    const smoothValue = (current: number, previous: number) => {
-      const weight = 0.08; // Lower = smoother, higher = more responsive
-      return previous + (current - previous) * weight;
-    };
-
-    // Function to compute running average for additional smoothing
-    const averageValues = (data: number[], windowSize: number = 3) => {
-      const result = new Array(data.length).fill(0);
-
-      for (let i = 0; i < data.length; i++) {
-        let sum = 0;
-        let count = 0;
-
-        for (
-          let j = Math.max(0, i - windowSize);
-          j < Math.min(data.length, i + windowSize + 1);
-          j++
-        ) {
-          sum += data[j];
-          count++;
-        }
-
-        result[i] = sum / count;
-      }
-
-      return result;
-    };
+    const timeData = new Uint8Array(analyser.fftSize);
+    const bgColor = isDark ? '#374151' : '#ffffff';
+    const activeColor = isDark ? '#ffffff' : '#000000';
+    const dimColor = isDark ? '#4B5563' : '#E5E7EB';
+    const width = rect.width;
+    const height = rect.height;
+    const segmentCount = 24;
+    const segmentWidth = width / segmentCount;
+    const gap = 2;
+    let smoothedLevel = 0;
 
     const draw = () => {
-      const width = rect.width;
-      const height = rect.height;
-      const centerY = height / 2;
-
       animationRef.current = requestAnimationFrame(draw);
-      analyser.getByteTimeDomainData(dataArray);
+      analyser.getByteTimeDomainData(timeData);
 
-      // Apply initial smoothing
-      const smoothedData = Array.from(dataArray).map((value, i) =>
-        smoothValue(value, previousDataRef.current[i]),
-      );
-
-      // Apply running average smoothing
-      const averagedData = averageValues(smoothedData);
-
-      // Update previous data
-      previousDataRef.current = averagedData;
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width * dpr, height * dpr);
-
-      // Draw the center line
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-      ctx.lineWidth = 1;
-      ctx.moveTo(0, centerY);
-      ctx.lineTo(width, centerY);
-      ctx.stroke();
-
-      // Draw waveform
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
-
-      const skipPoints = 4;
-      const points: [number, number][] = [];
-
-      for (let i = 0; i < averagedData.length; i += skipPoints) {
-        const x = (i / averagedData.length) * width;
-        const normalizedValue = (averagedData[i] - 128) / 128;
-        const y = centerY + normalizedValue * height * 4.0;
-        points.push([x, y]);
+      // Compute RMS volume from time-domain samples (centered at 128)
+      let sumOfSquares = 0;
+      for (let i = 0; i < timeData.length; i++) {
+        const normalized = (timeData[i] - 128) / 128;
+        sumOfSquares += normalized * normalized;
       }
+      const volumeLevel = Math.min(1, Math.sqrt(sumOfSquares / timeData.length) * 5);
+      smoothedLevel += (volumeLevel - smoothedLevel) * 0.3;
 
-      // Draw smooth curve through points
-      if (points.length > 0) {
-        ctx.moveTo(points[0][0], points[0][1]);
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, width, height);
 
-        for (let i = 1; i < points.length - 2; i++) {
-          const xc = (points[i][0] + points[i + 1][0]) / 2;
-          const yc = (points[i][1] + points[i + 1][1]) / 2;
-          ctx.quadraticCurveTo(points[i][0], points[i][1], xc, yc);
-        }
-
-        // For the last two points
-        if (points.length > 2) {
-          const last = points.length - 1;
-          ctx.quadraticCurveTo(
-            points[last - 1][0],
-            points[last - 1][1],
-            points[last][0],
-            points[last][1],
-          );
-        }
+      const activeSegments = Math.round(smoothedLevel * segmentCount);
+      for (let i = 0; i < segmentCount; i++) {
+        ctx.fillStyle = i < activeSegments ? activeColor : dimColor;
+        ctx.fillRect(i * segmentWidth + gap / 2, gap, segmentWidth - gap, height - gap * 2);
       }
-
-      ctx.stroke();
     };
 
     draw();
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
       source.disconnect();
       audioContext.close();
     };
-  }, [stream]);
+  }, [stream, isDark]);
 
   return (
     <canvas
       ref={canvasRef}
       width={300}
       height={60}
-      className='mx-auto rounded-lg bg-white shadow-xs'
+      className={`mx-auto border-2 border-black ${isDark ? 'bg-gray-700' : 'bg-white'}`}
     />
   );
 };
 
-export const VoiceRecorder = ({
-  question,
-  handleSaveVoiceData,
-  handleDiscardVoiceData,
-}: {
-  question: {
-    value: RecordingData | null;
-  };
+export interface VoiceRecorderHandle {
+  stop: () => void;
+}
+
+export interface VoiceRecorderProps {
+  question?: { value: RecordingData | null };
   handleSaveVoiceData: (data: object) => void;
   handleDiscardVoiceData: () => void;
-}) => {
+  deviceId?: string;
+  showPause?: boolean;
+  showStop?: boolean;
+  showVisualizer?: boolean;
+  /** Show a discard button while recording to delete and start over. */
+  showDiscard?: boolean;
+  onRecordingStart?: () => void;
+  onPause?: (duration: number) => void;
+  onResume?: () => void;
+}
+
+export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>(({
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  question: _question,
+  handleSaveVoiceData,
+  handleDiscardVoiceData,
+  deviceId,
+  showPause = true,
+  showStop = true,
+  showVisualizer = true,
+  showDiscard = true,
+  onRecordingStart,
+  onPause,
+  onResume,
+}, ref) => {
+  const theme = useTheme();
+  const th = t(theme);
+  const isDark = theme.startsWith('dark');
+  const contextDeviceId = useAudioDeviceId();
+
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
+  // Duration tracking (ms, excludes paused time)
+  const durationRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
+  const startTimer = () => { durationRef.current = 0; timerRef.current = setInterval(() => { durationRef.current += 100; }, 100); };
+  const resumeTimer = () => { timerRef.current = setInterval(() => { durationRef.current += 100; }, 100); };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && (recorder.state === 'recording' || recorder.state === 'paused')) {
+      recorder.stop();
+      recorder.stream.getTracks().forEach((track) => track.stop());
+      setIsRecording(false);
+      setIsPaused(false);
+      clearTimer();
+    }
+  };
+
+  useImperativeHandle(ref, () => ({ stop: stopRecording }));
+
   const startRecording = async () => {
     try {
-      /*This is really hacky but it works and there is a deadline, we should find a way to pass around such values in the future */
-      /*eslint-disable-next-line @typescript-eslint/no-explicit-any*/
-      const deviceId = (window as any).audioInputId;
+      const resolvedDeviceId = deviceId ?? contextDeviceId;
       const constraints: MediaStreamConstraints = {
-        audio: deviceId
-          ? {
-              deviceId: { exact: deviceId },
-            }
+        audio: resolvedDeviceId
+          ? { deviceId: { exact: resolvedDeviceId } }
           : true,
       };
 
@@ -225,16 +188,29 @@ export const VoiceRecorder = ({
       mediaRecorderRef.current.start();
 
       setIsRecording(true);
+      setIsPaused(false);
+      startTimer();
+      onRecordingStart?.();
     } catch (err) {
       console.error('Error accessing microphone:', err);
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
-      setIsRecording(false);
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
+      clearTimer();
+      onPause?.(durationRef.current);
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+      resumeTimer();
+      onResume?.();
     }
   };
 
@@ -243,7 +219,6 @@ export const VoiceRecorder = ({
       const base64Data = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-          // Remove data URL prefix (e.g., "data:audio/webm;base64,")
           const base64 = reader.result?.toString().split(',')[1] || '';
           resolve(base64);
         };
@@ -252,13 +227,30 @@ export const VoiceRecorder = ({
 
       handleSaveVoiceData({
         blob: blob,
-        // dont change this type, since the upload function depends on it while looking for audio. we might want to refactor this at some point
+        // dont change this type, since the upload function depends on it while looking for audio
         type: 'audiorecording',
         url: url,
         data64: base64Data,
         timestamp: new Date().toISOString(),
+        recordingDuration: durationRef.current,
       });
     }
+  };
+
+  const discardWhileRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && (recorder.state === 'recording' || recorder.state === 'paused')) {
+      // Prevent onstop from saving, clear chunks first
+      chunksRef.current = [];
+      recorder.onstop = null;
+      recorder.stop();
+      recorder.stream.getTracks().forEach((track) => track.stop());
+    }
+    setIsRecording(false);
+    setIsPaused(false);
+    setAudioStream(null);
+    clearTimer();
+    handleDiscardVoiceData();
   };
 
   const discardRecording = () => {
@@ -266,45 +258,78 @@ export const VoiceRecorder = ({
       URL.revokeObjectURL(audioUrl);
     }
     setAudioUrl(null);
-    question.value = null;
+    setIsPaused(false);
     handleDiscardVoiceData();
   };
 
+  const btnBase = `flex items-center justify-center p-4 rounded-full border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer transition-colors duration-200`;
+
   return (
-    <div className='flex flex-col items-center space-y-4 p-4 bg-white px-8 '>
-      {/* Recording button */}
-      {!audioUrl && (
+    <div className='flex flex-col items-center space-y-4 p-4 px-8'>
+      {/* Start button */}
+      {!audioUrl && !isRecording && (
         <button
-          onClick={isRecording ? stopRecording : startRecording}
-          className={`flex items-center justify-center space-x-2 p-4 rounded-full border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer
-              ${isRecording ? 'bg-red-500 hover:bg-red-600' : ''} 
-              text-white transition-colors duration-200`}
-          aria-label={isRecording ? 'Stop Recording' : 'Start Recording'}
+          onClick={startRecording}
+          className={`${btnBase} ${th.buttonBg}`}
+          aria-label='Start Recording'
         >
-          {isRecording ? (
-            <HiStop className='w-6 h-6' />
-          ) : (
-            <HiMicrophone className='w-6 h-6 text-black' />
-          )}
+          <HiMicrophone className={`w-6 h-6 ${th.buttonText}`} />
         </button>
       )}
 
+      {/* Recording controls */}
+      {!audioUrl && isRecording && (
+        <div className='flex items-center space-x-4'>
+          {showPause && (
+            <button
+              onClick={isPaused ? resumeRecording : pauseRecording}
+              className={`${btnBase} ${th.buttonBg}`}
+              aria-label={isPaused ? 'Resume Recording' : 'Pause Recording'}
+            >
+              {isPaused ? (
+                <HiMicrophone className={`w-6 h-6 ${th.buttonText}`} />
+              ) : (
+                <HiPause className={`w-6 h-6 ${th.buttonText}`} />
+              )}
+            </button>
+          )}
+          {showStop && (
+            <button
+              onClick={stopRecording}
+              className={`${btnBase} bg-red-500 text-white`}
+              aria-label='Stop Recording'
+            >
+              <HiStop className='w-6 h-6' />
+            </button>
+          )}
+          {showDiscard && isPaused && (
+            <button
+              onClick={discardWhileRecording}
+              className={`${btnBase} ${th.buttonBg}`}
+              aria-label='Discard Recording'
+            >
+              <HiTrash className={`w-6 h-6 ${th.buttonText}`} />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Audio visualizer */}
-      {isRecording && audioStream && (
+      {showVisualizer && isRecording && !isPaused && audioStream && (
         <div className='w-full max-w-md mx-auto'>
-          <AudioVisualizer stream={audioStream} />
+          <AudioVisualizer stream={audioStream} isDark={isDark} />
         </div>
       )}
 
       {/* Recording status */}
       {isRecording && (
         <div className='flex items-center space-x-2'>
-          <div className='w-3 h-3 bg-red-500 rounded-full animate-pulse'></div>
-          <span className='text-sm text-black'>Recording...</span>
+          <div className={`w-3 h-3 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'}`}></div>
+          <span className={`text-sm ${th.text}`}>{isPaused ? 'Paused' : 'Recording...'}</span>
         </div>
       )}
 
-      {/* Audio player and action buttons */}
+      {/* Audio player and discard */}
       {audioUrl && !isRecording && (
         <div className='flex flex-col items-center space-y-4 w-full max-w-md'>
           <audio controls preload='none' className='w-full' playsInline>
@@ -316,8 +341,7 @@ export const VoiceRecorder = ({
           <div className='flex space-x-4'>
             <button
               onClick={discardRecording}
-              className='border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer flex items-center space-x-2 px-4 py-2 text-black
-                        rounded-xl transition-colors duration-200'
+              className={`border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer flex items-center space-x-2 px-4 py-2 ${th.text} rounded-xl transition-colors duration-200`}
             >
               <HiTrash className='w-4 h-4' />
               <span>Discard</span>
@@ -327,8 +351,7 @@ export const VoiceRecorder = ({
       )}
     </div>
   );
-};
-
+});
 
 
 export default function VoicerecorderQuestionComponent({
@@ -338,7 +361,6 @@ export default function VoicerecorderQuestionComponent({
 }) {
   return (
     <VoiceRecorder
-      question={{ value: null }}
       handleSaveVoiceData={(data) => setValue(data)}
       handleDiscardVoiceData={() => setValue(null)}
     />

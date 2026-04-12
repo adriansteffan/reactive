@@ -66,6 +66,7 @@ export const THEME = {
   },
 } as const;
 
+export const LIGHT_DOT_BG_CLASS = 'reactive-light-dot-bg';
 export const DARK_BG_CLASS = 'reactive-dark-bg';
 export const DARK_BG_PLAIN_CLASS = 'reactive-dark-bg-plain';
 

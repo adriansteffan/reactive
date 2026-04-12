@@ -66,7 +66,7 @@ const CustomQuestion = () => {
 
 // --- Timeline ---
 
-export const experiment = [
+const experiment = [
   {
     name: 'introtext',
     type: 'Text',
@@ -151,6 +151,14 @@ export const experiment = [
   },
 ];
 
+// --- Simulation config ---
+const simulationConfig = {
+  seed: 42,
+  participants: () => sampleParticipants('sobol', 10, {
+    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  }).map((p) => ({ ...p, nickname: `participant_${p.index}` })),
+};
+
 export default function Experiment() {
   return (
     <ExperimentRunner
@@ -159,17 +167,7 @@ export default function Experiment() {
       components={{CustomTrial}}
       questions={{CustomQuestion}}
       hybridParticipant={{ id: 0, nickname: 'test' }}
+      simulationConfig={simulationConfig}
     />
   );
 }
-
-// --- Simulation config ---
-// Define how simulated participants are generated.
-// Use a factory function for participants: the framework seeds it with the base seed,
-// so every worker generates the same participant list regardless of its per-worker seed.
-export const simulationConfig = {
-  seed: 42,
-  participants: () => sampleParticipants('sobol', 10, {
-    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
-  }).map((p, i) => ({ ...p, id: i, nickname: `participant_${i}` })),
-};

@@ -144,6 +144,32 @@ http://localhost:5173?hybridSimulation=true
 Trials with `simulators` or `simulate: true` defined will auto-advance. Others render normally for human interaction. Hybrid mode is enabled by default during development. For production, set `VITE_DISABLE_HYBRID_SIMULATION=true` to disable it.
 
 
+## Transcription
+
+Automatically transcribe voice recordings from experiment data using Docker. Requires [Docker](https://docs.docker.com/engine/install/) to be installed.
+
+### CPU (faster-whisper)
+
+```
+npm run transcribe
+```
+
+### GPU (qwen-asr, requires NVIDIA GPU)
+
+```
+npm run transcribe:gpu
+```
+
+### Options
+
+```
+npm run transcribe -- --overwrite       # re-transcribe even if transcriptions.csv exists
+npm run transcribe -- --model small     # use a different model
+```
+
+Output: `transcriptions.csv` in each participant's data directory with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
+
+
 ## Target: Windows or MacOS
 
 ### Development

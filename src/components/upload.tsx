@@ -65,6 +65,7 @@ registerSimulation('Upload', async (trialProps, experimentState, _simulators, pa
 
 interface UploadPayload {
   sessionId: string;
+  _uploadId?: string;
   files: FileUpload[];
 }
 
@@ -305,7 +306,7 @@ export default function Upload({
 
     uploadInitiatedRef.current = true;
 
-    const sessionIDUpload = sessionID ?? uuidv4();
+    const sessionIDUpload = sessionID ?? store?._uploadId ?? uuidv4();
 
     const files = buildUploadFiles({
       sessionID: sessionIDUpload,
@@ -319,6 +320,8 @@ export default function Upload({
     try {
       const payload: UploadPayload = {
         sessionId: sessionIDUpload,
+        // Include _uploadId so the backend can rename the eager-upload folder
+        ...(store?._uploadId && store._uploadId !== sessionIDUpload ? { _uploadId: store._uploadId } : {}),
         files: files.map((file) => ({ ...file, encoding: file.encoding ?? 'utf8' })),
       };
 

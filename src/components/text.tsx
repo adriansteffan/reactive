@@ -15,7 +15,7 @@ registerSimulation('Text', (trialProps, _experimentState, simulators, participan
   return { responseData: result.value, participantState: result.participantState, duration: result.value.reactionTime };
 }, {
   respond: (_input: any, participant: any) => ({
-    value: { key: 'button', reactionTime: uniform(500, 2000) },
+    value: { key: 'button', time: Date.now(), reactionTime: uniform(500, 2000) },
     participantState: participant,
   }),
 });

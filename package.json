@@ -1,6 +1,6 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.1.36",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,7 +27,9 @@
       "import": "./dist/reactive.es.js",
       "require": "./dist/reactive.umd.js",
       "types": "./dist/mod.d.ts"
-    }
+    },
+    "./raw-loader": "./raw-loader.mjs",
+    "./raw-loader-hooks": "./raw-loader-hooks.mjs"
   },
   "author": "Adrian Steffan",
   "license": "MIT",

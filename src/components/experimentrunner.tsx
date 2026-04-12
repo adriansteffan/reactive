@@ -18,6 +18,8 @@ import {
 } from '../utils/simulation';
 import { useHybridSimulationDisabled } from './experimentprovider';
 import { ThemeContext, t } from '../utils/theme';
+import { AudioDeviceContext } from '../utils/audiodevice';
+import { v4 as uuidv4 } from 'uuid';
 
 import Upload from './upload';
 import Text from './text';
@@ -36,6 +38,7 @@ import React from 'react';
 import StoreUI from './storeui';
 import { Tutorial } from './tutorial';
 import { RandomDotKinematogram } from './randomdotkinetogram';
+import VoiceRecording from './voicerecording';
 
 type ComponentsMap = {
   [key: string]: ComponentType<any>;
@@ -56,6 +59,7 @@ const defaultComponents: ComponentsMap = {
   StoreUI,
   Tutorial,
   RandomDotKinematogram,
+  VoiceRecording,
 };
 
 const defaultCustomQuestions: ComponentsMap = {
@@ -77,6 +81,9 @@ interface RuntimeComponentContent {
   simulators?: Record<string, any>;
 }
 
+// Register dev param globally so it appears in the settings screen
+getParam('dev', false, 'boolean', 'Enable the developer inspector panel');
+
 function isRuntimeComponentContent(content: any): content is RuntimeComponentContent {
   return typeof content === 'object' && content !== null && typeof content.type === 'string';
 }
@@ -89,12 +96,19 @@ export default function ExperimentRunner({
   components = {},
   questions = {},
   hybridParticipant,
+  disableDev = false,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  simulationConfig: _simulationConfig,
 }: {
   timeline: TimelineItem[];
   config?: ExperimentConfig;
   components?: ComponentsMap;
   questions?: ComponentsMap;
   hybridParticipant?: ParticipantState;
+  /** Disable the ?dev=true inspector panel. Set to true for production. */
+  disableDev?: boolean;
+  /** Simulation config — not used at runtime, extracted by simulate.ts via createElement. */
+  simulationConfig?: any;
 }) {
   const disableHybridSimulation = useHybridSimulationDisabled();
   const trialByteCode = useMemo(() => {
@@ -153,7 +167,7 @@ export default function ExperimentRunner({
 
   const [totalTrialsCompleted, setTotalTrialsCompleted] = useState(0);
   const lastTrialEndTimeRef = useRef(now());
-  const experimentStoreRef = useRef<Store>({});
+  const experimentStoreRef = useRef<Store>({ _uploadId: uuidv4() });
 
   const [instructionPointer, setInstructionPointer] = useState(() =>
     advanceToNextContent(
@@ -390,6 +404,7 @@ export default function ExperimentRunner({
               updateStore={updateStore}
               store={experimentStoreRef.current}
               data={dataRef.current}
+              name={content.name}
               {...(content.type === 'Quest' ? { customQuestions: customQuestionsMap } : {})}
               {...componentProps}
             />
@@ -410,8 +425,13 @@ export default function ExperimentRunner({
   const themeValue = config.theme ?? 'light';
   const th = t(themeValue);
 
+  const showDev = !disableDev && getParam('dev', false, 'boolean');
+  const devPanelRef = useRef<HTMLDivElement>(null);
+  const devContent = currentInstruction?.type === 'ExecuteContent' ? currentInstruction.content : null;
+
   return (
     <ThemeContext.Provider value={themeValue}>
+    <AudioDeviceContext.Provider value={experimentStoreRef.current.audioInputId}>
     <div className='w-full h-full'>
       <div
         className={` ${
@@ -434,7 +454,40 @@ export default function ExperimentRunner({
         </div>
       </div>
       {componentToRender}
+      {showDev && (
+        <>
+          <button
+            onClick={(e) => {
+              const panel = devPanelRef.current;
+              if (panel) {
+                const open = panel.style.display === 'none';
+                panel.style.display = open ? 'block' : 'none';
+                (e.currentTarget as HTMLButtonElement).textContent = open ? '\u2715' : 'DEV';
+              }
+            }}
+            className='fixed top-2 right-2 z-50 px-3 py-1 bg-white text-black text-xs font-bold border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none cursor-pointer'
+          >
+            DEV
+          </button>
+          <div ref={devPanelRef} style={{ display: 'none' }} className='fixed top-10 right-2 z-50 w-96 max-h-[80vh] overflow-auto bg-white text-black text-xs font-mono border-2 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] p-3'>
+            {devContent && <>
+              <div className='font-bold mb-2 text-sm'>{(devContent as any).type} {(devContent as any).name ? `(${(devContent as any).name})` : ''}</div>
+              <div className='mb-2'><span className='font-bold'>Props:</span><pre className='mt-1 whitespace-pre-wrap break-all'>{JSON.stringify(typeof (devContent as any).props === 'function' ? '(dynamic)' : (devContent as any).props, null, 2)}</pre></div>
+              {(devContent as any).metadata && <div className='mb-2'><span className='font-bold'>Metadata:</span><pre className='mt-1 whitespace-pre-wrap break-all'>{JSON.stringify((devContent as any).metadata, null, 2)}</pre></div>}
+              <div className='mb-2'><span className='font-bold'>Store:</span><pre className='mt-1 whitespace-pre-wrap break-all'>{JSON.stringify(experimentStoreRef.current, null, 2)}</pre></div>
+              <div>
+                <span className='font-bold cursor-pointer' onClick={(e) => {
+                  const el = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement;
+                  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+                }}>Data ({dataRef.current.length}) ▸</span>
+                <pre style={{ display: 'none' }} className='mt-1 whitespace-pre-wrap break-all'>{JSON.stringify(dataRef.current, null, 2)}</pre>
+              </div>
+            </>}
+          </div>
+        </>
+      )}
     </div>
+    </AudioDeviceContext.Provider>
     </ThemeContext.Provider>
   );
 }

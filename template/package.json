@@ -47,7 +47,9 @@
     "dev": "vite",
     "backend": "npm run dev --prefix backend",
     "dev:all": "concurrently -n \"FRONT,BACK\" -c \"blue,green\" \"npm run dev\" \"npm run backend\"",
-    "simulate": "npx tsx simulate.ts",
+    "simulate": "NODE_OPTIONS='--import tsx/esm --import @adriansteffan/reactive/raw-loader' node simulate.ts",
+    "transcribe": "docker compose run --rm transcribe",
+    "transcribe:gpu": "docker compose run --rm transcribe-gpu",
     "build": "tsc && vite build",
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -72,7 +74,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.1.0",
-    "survey-react-ui": "^1.12.9"
+    "survey-react-ui": "^1.12.9",
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.1",

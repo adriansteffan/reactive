@@ -36,7 +36,7 @@ export function escapeCsvValue(value: any): string {
     return '';
   }
 
-  const stringValue = String(value);
+  const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
   if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
     const escapedValue = stringValue.replace(/"/g, '""');
@@ -187,6 +187,56 @@ function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<stri
   return files;
 }
 
+let audioFileIndex = 0;
+export function generateAudioFilename(label: string): string {
+  return `audio_${label}_${audioFileIndex++}_${Date.now()}.webm`;
+}
+
+// Scans trial data for audio recordings (type: 'audiorecording' with data64),
+// extracts them as separate .webm files, and replaces the binary data in-place
+// with a filename reference. This keeps CSVs and raw JSON clean.
+function extractAudioRecordings(data: any[]): FileUpload[] {
+  const files: FileUpload[] = [];
+
+  const processRecording = (obj: any, nameHint: string) => {
+    if (obj?.type === 'audiorecording') {
+      if (obj._audioPreUploaded && obj._audioPreUploadedFilename) {
+        // Already uploaded eagerly -> just record the filename reference
+        obj.audioFile = obj._audioPreUploadedFilename;
+      } else if (obj.data64) {
+        // Not pre-uploaded —> extract as a file for the final upload
+        const filename = generateAudioFilename(nameHint);
+        files.push({ filename, content: obj.data64, encoding: 'base64' });
+        obj.audioFile = filename;
+      }
+      delete obj.data64;
+      delete obj.blob;
+      delete obj.url;
+      delete obj._audioPreUploaded;
+      delete obj._audioPreUploadedFilename;
+    }
+  };
+
+  for (const item of data) {
+    const rd = item.responseData;
+    if (!rd || typeof rd !== 'object') continue;
+
+    // Direct responseData is an audio recording (VoiceRecording component)
+    processRecording(rd, item.name || item.type);
+
+    // Nested in responseData (Quest voicerecorder questions)
+    if (!Array.isArray(rd)) {
+      for (const [key, value] of Object.entries(rd)) {
+        if (value && typeof value === 'object') {
+          processRecording(value, `${item.name || item.type}_${key}`);
+        }
+      }
+    }
+  }
+
+  return files;
+}
+
 export function buildUploadFiles(config: {
   sessionID: string;
   data: any[];
@@ -205,6 +255,9 @@ export function buildUploadFiles(config: {
   } = config;
 
   const files: FileUpload[] = generateFiles ? generateFiles(sessionID, data, store) : [];
+
+  // Extract audio recordings as separate files before serialization
+  files.push(...extractAudioRecordings(data));
 
   if (uploadRaw) {
     files.push({

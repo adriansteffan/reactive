@@ -40,6 +40,7 @@ Premade components available so far:
     * voicerecorder: a custom question type that allows participants to record voice
 * Tutorial: A paginated slide deck with navigation, dot indicators, and optional interactive slides via `useTutorialSlide`
 * RandomDotKinematogram: A random dot kinematogram (RDK) stimulus for motion perception experiments
+* VoiceRecording: A standalone voice recording trial with pause/stop controls, optional minimum duration warning, and confirmation dialog
 * Upload: Uploads the collected data on a button press by the participant 
 
 
@@ -57,7 +58,7 @@ export const simulationConfig = {
   seed: 42, // optional: makes simulations fully reproducible
   participants: () => sampleParticipants('sobol', 10, {
     needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
-  }).map((p, i) => ({ ...p, id: i })),
+  }),
 };
 ```
 
@@ -140,7 +141,7 @@ export const simulationConfig = {
     needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
     agreeableness: { distribution: 'normal', mean: 3.0, sd: 1.0 },
     age: { distribution: 'uniform', min: 18, max: 65 },
-  }).map((p, i) => ({ ...p, id: i })),
+  }),
 };
 ```
 
@@ -183,7 +184,7 @@ participants: () => {
     alertness: { distribution: 'normal', mean: 3.6, sd: 0.5 },
   }).map((p) => ({ ...p, smoker: false }));
 
-  return [...smokers, ...nonSmokers].map((p, i) => ({ ...p, id: i }));
+  return [...smokers, ...nonSmokers];
 },
 ```
 
@@ -200,6 +201,7 @@ participants: () => {
 | Upload | *(none)* | Builds CSVs and POSTs to backend |
 | StoreUI | *(none)* | Uses field default values |
 | CheckDevice | *(none)* | Returns simulated device info |
+| VoiceRecording | `respondTTS`, `respondBase64` | Platform TTS with default text; falls back to dummy sine tone |
 | EnterFullscreen, ExitFullscreen, MicrophoneCheck, ProlificEnding, RequestFilePermission | *(none)* | No-op, advances immediately |
 
 
@@ -414,6 +416,8 @@ Each dimension spec is one of:
 | Uniform | `{ distribution: 'uniform', min, max }` | Uniform over `[min, max)` |
 | Normal | `{ distribution: 'normal', mean, sd }` | Gaussian with given mean and standard deviation |
 | Poisson | `{ distribution: 'poisson', mean }` | Poisson with given mean (discrete) |
+| Integer | `{ distribution: 'integer', min, max }` | Uniform integer in `[min, max]` inclusive |
+| Discrete | `{ distribution: 'discrete', outcomes }` | Weighted categorical — `outcomes: [{ value, weight }, ...]` |
 
 For a single dimension, both return a flat `number[]`. For multiple dimensions, they return `number[][]`.
 
@@ -449,8 +453,8 @@ import { sampleParticipants } from '@adriansteffan/reactive';
 const participants = sampleParticipants('sobol', 100, {
   needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
   agreeableness: { distribution: 'normal', mean: 3.0, sd: 1.0 },
-}).map((p, i) => ({ ...p, id: i }));
-// → [{ needForCognition: 3.5, agreeableness: 3.0, id: 0 }, ...]
+});
+// → [{ index: 0, needForCognition: 3.5, agreeableness: 3.0 }, ...]
 ```
 
 The first argument is the sampling method: `'sobol'`, `'halton'`, or `'random'`.
@@ -489,6 +493,105 @@ After the stimulus disappears (`stimOffset`), the `postStimStrategy` takes over:
 Boundaries can also collapse during viewing via `stimulusCollapse: { rate, delay? }`.
 
 The RDK component uses this as its default simulator with parameters from Ratcliff & McKoon (2008), converted to ms time steps.
+
+
+## Voice Recording
+
+### MicrophoneCheck
+
+Place early in your timeline to let participants select and test their microphone:
+
+```tsx
+{ type: 'MicrophoneCheck' }
+```
+
+The selected device ID is stored automatically and used by all subsequent recording components.
+
+### VoiceRecording
+
+A standalone trial where participants record their voice. The "Continue" button only appears after a recording is made.
+
+```tsx
+{
+  type: 'VoiceRecording',
+  props: {
+    content: <p>Please describe what you saw.</p>,
+  },
+}
+```
+
+With minimum duration enforcement; shows a warning when paused if the recording is too short:
+
+```tsx
+{
+  type: 'VoiceRecording',
+  props: {
+    content: <p>Please describe your decision in detail.</p>,
+    minDuration: 15000,
+  },
+}
+```
+
+When `minDuration` is set, only pause and discard buttons are shown. When not set, pause, stop, and discard buttons appear with playback after stopping.
+
+| Prop | Default | Description |
+|---|---|---|
+| `content` | — | Prompt text/JSX |
+| `buttonText` | `'Continue'` / `'Save & Continue'` (with minDuration) | Button text |
+| `shortButtonText` | `'Continue without improving'` | Button text when recording is too short |
+| `shortRecordingWarning` | Generic message | Warning text for short recordings |
+| `minDuration` | — | Minimum recording duration in ms |
+| `showVisualizer` | `true` | Show volume level meter |
+| `eagerUpload` | `true` | Upload audio immediately after recording |
+| `animate` | `false` | Fade-in animation |
+
+Audio recordings are automatically extracted as separate `.webm` files during upload and eagerly uploaded to reduce final upload size. The trial `name` is used in the filename.
+
+
+## LLM Integration
+
+`invokeLLM` is a general-purpose function for calling LLM APIs. It works with any OpenAI-compatible endpoint (OpenAI, HuggingFace). Responses are cached to disk (`.reactive-cache/llm.json`) so repeated calls with the same arguments skip the API.
+
+```tsx
+import { invokeLLM } from '@adriansteffan/reactive';
+
+const text = await invokeLLM(
+  { provider: 'openai', model: 'gpt-4o-mini', apiKey: process.env.OPENAI_API_KEY! },
+  'Describe a financial decision.'
+);
+```
+
+### Structured output
+
+Pass a JSON Schema as the third argument to constrain the model's output:
+
+```tsx
+const result = await invokeLLM(
+  { provider: 'openai', model: 'gpt-4o-mini', apiKey: process.env.OPENAI_API_KEY! },
+  'Describe a decision.',
+  {
+    type: 'object',
+    properties: {
+      text: { type: 'string' },
+      confidence: { type: 'number' },
+    },
+    required: ['text', 'confidence'],
+  }
+);
+const parsed = JSON.parse(result);
+// parsed.text and parsed.confidence are guaranteed to exist
+```
+
+### Configuration
+
+| Field | Type | Description |
+|---|---|---|
+| `provider` | `'openai' \| 'huggingface'` | API provider |
+| `model` | `string` | Model name (e.g. `'gpt-4o-mini'`) |
+| `apiKey` | `string` | API key |
+| `baseUrl` | `string?` | Override the API endpoint |
+
+Requires `import 'dotenv/config'` at the top of `simulate.ts` to load `.env` files. Add `.reactive-cache/` to your `.gitignore`.
 
 
 ## Development

@@ -30,7 +30,9 @@ function seedDistributions(seed: number): void {
 type UniformSpec = { distribution: 'uniform'; min: number; max: number };
 type NormalSpec = { distribution: 'normal'; mean: number; sd: number };
 type PoissonSpec = { distribution: 'poisson'; mean: number };
-type DimensionSpec = UniformSpec | NormalSpec | PoissonSpec;
+type IntegerSpec = { distribution: 'integer'; min: number; max: number };
+type DiscreteSpec = { distribution: 'discrete'; outcomes: Array<{ value: number; weight: number }> };
+type DimensionSpec = UniformSpec | NormalSpec | PoissonSpec | IntegerSpec | DiscreteSpec;
 
 // Inverse CDFs return +-Infinity at exactly 0 or 1, so clamp to open interval (0, 1).
 function clampUnit(value: number): number {
@@ -47,6 +49,23 @@ function resolveTransform(spec: DimensionSpec): (unitValue: number) => number {
       // QMC variance reduction is less effective on discrete distributions
       // due to integer clumping at quantile boundaries.
       return (u) => poissonQuantile(clampUnit(u), spec.mean);
+    case 'integer':
+      // Uniform integer in [min, max] inclusive
+      return (u) => Math.floor(spec.min + u * (spec.max - spec.min + 1));
+    case 'discrete': {
+      // Weighted discrete distribution -> divide [0,1) into segments proportional to weights
+      const totalWeight = spec.outcomes.reduce((sum, o) => sum + o.weight, 0);
+      const cumulative = spec.outcomes.map((() => {
+        let acc = 0;
+        return (o: { value: number; weight: number }) => { acc += o.weight / totalWeight; return acc; };
+      })());
+      return (u) => {
+        for (let i = 0; i < cumulative.length; i++) {
+          if (u < cumulative[i]) return spec.outcomes[i].value;
+        }
+        return spec.outcomes[spec.outcomes.length - 1].value;
+      };
+    }
   }
 }
 
@@ -154,7 +173,7 @@ function sampleParticipants<T extends Record<string, DimensionSpec>>(
   method: SamplingMethod,
   count: number,
   specs: T,
-): Array<{ [K in keyof T]: number }> {
+): Array<{ [K in keyof T]: number } & { index: number }> {
   const keys = Object.keys(specs) as (keyof T & string)[];
   const dimSpecs = keys.map((k) => specs[k]);
 
@@ -173,7 +192,7 @@ function sampleParticipants<T extends Record<string, DimensionSpec>>(
 
   return Array.from({ length: count }, (_, i) => {
     const row = keys.length === 1 ? [points[i] as number] : (points[i] as number[]);
-    return Object.fromEntries(keys.map((k, d) => [k, row[d]])) as { [K in keyof T]: number };
+    return { index: i, ...Object.fromEntries(keys.map((k, d) => [k, row[d]])) } as { [K in keyof T]: number } & { index: number };
   });
 }
 
@@ -187,5 +206,9 @@ function randomPoints(count: number, specs: DimensionSpec[]): number[] | number[
   );
 }
 
-export { normal, poisson, uniform, seedDistributions, sobol, halton, sampleParticipants };
-export type { DimensionSpec, UniformSpec, NormalSpec, PoissonSpec, SamplingMethod };
+function draw(spec: DimensionSpec): number {
+  return resolveTransform(spec)(uniform(0, 1));
+}
+
+export { normal, poisson, uniform, seedDistributions, sobol, halton, sampleParticipants, draw };
+export type { DimensionSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod };

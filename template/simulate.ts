@@ -1,4 +1,12 @@
+import 'dotenv/config';
 import { orchestrateSimulation, simulateParticipant, setBackendUrl, seedDistributions } from '@adriansteffan/reactive';
+
+function extractProps(ExperimentComponent: any) {
+  // Call the component function directly to get the ExperimentRunner element.
+  // This is safe because Experiment() just returns JSX — no hooks execute.
+  const element = ExperimentComponent();
+  return element.props;
+}
 
 // Each simulated participant runs as a separate subprocess to get fresh module-level
 // randomization (e.g., group assignment). The orchestrator spawns workers that re-run
@@ -13,7 +21,8 @@ if (process.env._REACTIVE_WORKER_INDEX) {
   if (seed) seedDistributions(parseInt(seed) + index);
   setBackendUrl(process.env._REACTIVE_BACKEND_URL!);
 
-  const { experiment, simulationConfig } = await import('./src/Experiment');
+  const { default: Experiment } = await import('./src/Experiment');
+  const { timeline, simulationConfig } = extractProps(Experiment);
   const participants = simulationConfig.participants;
 
   let participant;
@@ -28,8 +37,9 @@ if (process.env._REACTIVE_WORKER_INDEX) {
     participant = participants.generator(index);
   }
 
-  await simulateParticipant(experiment, participant);
+  await simulateParticipant(timeline, participant);
 } else {
-  const { simulationConfig } = await import('./src/Experiment');
+  const { default: Experiment } = await import('./src/Experiment');
+  const { simulationConfig } = extractProps(Experiment);
   await orchestrateSimulation(simulationConfig, import.meta.filename);
 }

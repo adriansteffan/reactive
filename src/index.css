@@ -85,6 +85,12 @@
   font-style: italic;
 }
 
+.reactive-light-dot-bg {
+  background-color: white;
+  background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
 .reactive-dark-bg-plain {
   background-color: #21294b;
 }

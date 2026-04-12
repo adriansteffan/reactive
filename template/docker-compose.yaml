@@ -11,3 +11,35 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8001
+
+  transcribe:
+    profiles: ["transcribe"]
+    build:
+      context: ./transcription
+      dockerfile: Dockerfile.cpu
+    volumes:
+      - ./data:/data
+      - model-cache:/root/.cache/huggingface
+    environment:
+      - DATA_DIR=/data
+
+  transcribe-gpu:
+    profiles: ["transcribe-gpu"]
+    build:
+      context: ./transcription
+      dockerfile: Dockerfile.gpu
+    volumes:
+      - ./data:/data
+      - model-cache:/root/.cache/huggingface
+    environment:
+      - DATA_DIR=/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  model-cache:

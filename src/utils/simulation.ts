@@ -182,7 +182,7 @@ export async function orchestrateSimulation(config: RunSimulationConfig, scriptP
       ? config.participants.length
       : config.participants.count;
 
-  const backend = spawn('npx', ['tsx', 'src/backend.ts'], {
+  const backend = spawn('node', ['src/backend.ts'], {
     cwd: './backend',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -223,7 +223,7 @@ export async function orchestrateSimulation(config: RunSimulationConfig, scriptP
 
     const spawnWorker = (i: number) => new Promise<void>((resolve) => {
       let stderr = '';
-      const worker = spawn('npx', ['tsx', scriptPath], {
+      const worker = spawn('node', [scriptPath], {
         env: {
           ...process.env,
           _REACTIVE_WORKER_INDEX: String(i),

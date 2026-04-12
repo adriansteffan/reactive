@@ -26,7 +26,7 @@ export default defineConfig(() => {
         fileName: (format: string) => `reactive.${format}.js`,
       },
       rollupOptions: {
-        external: ['react', 'react-dom', 'child_process', 'os'],
+        external: ['react', 'react-dom', 'child_process', 'os', 'path', 'fs', 'module'],
         output: {
           globals: {
             react: 'React',

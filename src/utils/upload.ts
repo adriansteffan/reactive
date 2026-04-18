@@ -74,14 +74,17 @@ export function convertArrayOfObjectsToCSV(data: DataObject[]): string {
 }
 
 // Extracts experiment parameter values (URL params / registered params) from the initial metadata trial.
-// Each param entry has { value, defaultValue, ... } — we pick value if set, otherwise the default.
+// Each param entry has { value, defaultValue, registered, ... } — we pick value if set, otherwise the default.
+// Unregistered params (raw URL params not declared via getParam) are prefixed with `url_` so they're
+// visibly distinguishable from intentional study variables in the CSV.
 function extractParams(data: any[]): Record<string, any> {
   const paramsSource = data?.[0]?.responseData?.params;
   if (!paramsSource || typeof paramsSource !== 'object') return {};
   const result: Record<string, any> = {};
   for (const [name, details] of Object.entries(paramsSource) as [string, any][]) {
     if (details && typeof details === 'object') {
-      result[name] = details.value ?? details.defaultValue;
+      const key = details.registered ? name : `url_${name}`;
+      result[key] = details.value ?? details.defaultValue;
     }
   }
   return result;

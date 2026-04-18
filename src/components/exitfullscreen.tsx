@@ -11,6 +11,7 @@ registerSimulation('ExitFullscreen', noopSimulate, {});
 
 export default function ExitFullscreen({
   next,
+  updateStore,
   delayMs = 0,
 }: {
   delayMs?: number;
@@ -62,6 +63,7 @@ export default function ExitFullscreen({
   }, [handleFullscreenChangeForFallback, removeListenersAndTimeout]);
 
   useEffect(() => {
+    updateStore({ _fullscreenGuard: null });
     const performExitFullscreen = async () => {
       if (!isFullscreen()) {
         next({});

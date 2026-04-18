@@ -19,6 +19,7 @@ import {
 import { useHybridSimulationDisabled } from './experimentprovider';
 import { ThemeContext, t } from '../utils/theme';
 import { AudioDeviceContext } from '../utils/audiodevice';
+import { getOverlays } from '../utils/overlays';
 import { v4 as uuidv4 } from 'uuid';
 
 import Upload from './upload';
@@ -454,6 +455,9 @@ export default function ExperimentRunner({
         </div>
       </div>
       {componentToRender}
+      {getOverlays().map((O, i) => (
+        <O key={i} store={experimentStoreRef.current} updateStore={updateStore} data={dataRef.current} />
+      ))}
       {showDev && (
         <>
           <button

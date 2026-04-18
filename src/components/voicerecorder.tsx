@@ -103,6 +103,12 @@ export interface VoiceRecorderProps {
   showVisualizer?: boolean;
   /** Show a discard button while recording to delete and start over. */
   showDiscard?: boolean;
+  /** Label for the post-recording discard button. */
+  discardLabel?: string;
+  /** If set, show a "speak up" banner after this many seconds of continuous silence. Disabled when undefined. */
+  silenceWarningSec?: number;
+  /** Text shown in the silence banner. */
+  silenceWarningText?: string;
   onRecordingStart?: () => void;
   onPause?: (duration: number) => void;
   onResume?: () => void;
@@ -118,6 +124,9 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
   showStop = true,
   showVisualizer = true,
   showDiscard = true,
+  discardLabel = 'New Recording',
+  silenceWarningSec,
+  silenceWarningText = 'We can\'t hear you — please speak up',
   onRecordingStart,
   onPause,
   onResume,
@@ -131,6 +140,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [showSilenceBanner, setShowSilenceBanner] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
@@ -154,6 +164,47 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
   };
 
   useImperativeHandle(ref, () => ({ stop: stopRecording }));
+
+  // Silence detection: analyze the mic stream every 100ms; trigger banner when
+  // RMS stays below threshold for silenceWarningSec seconds continuously.
+  useEffect(() => {
+    if (!audioStream || !silenceWarningSec || isPaused) {
+      setShowSilenceBanner(false);
+      return;
+    }
+    const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
+    const audioCtx = new AudioCtx();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    const source = audioCtx.createMediaStreamSource(audioStream);
+    source.connect(analyser);
+    const timeData = new Uint8Array(analyser.fftSize);
+
+    let silenceMs = 0;
+    const tick = setInterval(() => {
+      analyser.getByteTimeDomainData(timeData);
+      let sum = 0;
+      for (let i = 0; i < timeData.length; i++) {
+        const n = (timeData[i] - 128) / 128;
+        sum += n * n;
+      }
+      const rms = Math.sqrt(sum / timeData.length);
+      if (rms < 0.02) {
+        silenceMs += 100;
+        if (silenceMs >= silenceWarningSec * 1000) setShowSilenceBanner(true);
+      } else {
+        silenceMs = 0;
+        setShowSilenceBanner(false);
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(tick);
+      source.disconnect();
+      audioCtx.close();
+      setShowSilenceBanner(false);
+    };
+  }, [audioStream, silenceWarningSec, isPaused]);
 
   const startRecording = async () => {
     try {
@@ -266,6 +317,11 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
 
   return (
     <div className='flex flex-col items-center space-y-4 p-4 px-8'>
+      {showSilenceBanner && (
+        <div className='fixed top-0 left-0 right-0 z-40 bg-yellow-300 text-black text-center py-3 px-4 border-b-2 border-black font-semibold shadow-[0px_2px_0px_rgba(0,0,0,1)]'>
+          {silenceWarningText}
+        </div>
+      )}
       {/* Start button */}
       {!audioUrl && !isRecording && (
         <button
@@ -344,7 +400,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
               className={`border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer flex items-center space-x-2 px-4 py-2 ${th.text} rounded-xl transition-colors duration-200`}
             >
               <HiTrash className='w-4 h-4' />
-              <span>Discard</span>
+              <span>{discardLabel}</span>
             </button>
           </div>
         </div>

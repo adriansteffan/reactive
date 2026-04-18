@@ -90,7 +90,7 @@ function MicrophoneSelect({
   );
 }
 
-const MicrophoneCheck = ({ next, updateStore, animate = false }: BaseComponentProps & { animate?: boolean }) => {
+const MicrophoneCheck = ({ next, updateStore, animate = false, discardLabel }: BaseComponentProps & { animate?: boolean; discardLabel?: string }) => {
   const th = t(useTheme());
   const [recordingExists, setRecordingExists] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -120,14 +120,17 @@ const MicrophoneCheck = ({ next, updateStore, animate = false }: BaseComponentPr
           </p>
         </article>
 
-        <VoiceRecorder
-          onRecordingStart={() => setIsRecording(true)}
-          handleSaveVoiceData={() => { setRecordingExists(true); setIsRecording(false); }}
-          handleDiscardVoiceData={() => { setRecordingExists(false); setIsRecording(false); }}
-          deviceId={selectedDeviceId}
-          showPause={false}
-          showDiscard={false}
-        />
+        <div className='mt-4 mb-12'>
+          <VoiceRecorder
+            onRecordingStart={() => setIsRecording(true)}
+            handleSaveVoiceData={() => { setRecordingExists(true); setIsRecording(false); }}
+            handleDiscardVoiceData={() => { setRecordingExists(false); setIsRecording(false); }}
+            deviceId={selectedDeviceId}
+            showPause={false}
+            showDiscard={false}
+            discardLabel={discardLabel}
+          />
+        </div>
 
         {recordingExists && (
           <div className='animate-fade-in opacity-0'>

@@ -68,6 +68,8 @@ function VoiceRecording({
   eagerUpload = true,
   animate = false,
   name,
+  silenceWarningSec,
+  silenceWarningText,
 }: BaseComponentProps & {
   content?: React.ReactNode;
   buttonText?: string;
@@ -85,6 +87,10 @@ function VoiceRecording({
   eagerUpload?: boolean;
   animate?: boolean;
   name?: string;
+  /** Seconds of continuous silence before a "speak up" banner appears. Disabled when undefined. */
+  silenceWarningSec?: number;
+  /** Text shown in the silence banner. */
+  silenceWarningText?: string;
 }) {
   const th = t(useTheme());
   const resolvedButtonText = buttonText ?? (minDuration != null ? 'Save & Continue' : 'Continue');
@@ -153,6 +159,8 @@ function VoiceRecording({
           showStop={minDuration == null}
           showDiscard={minDuration != null}
           showVisualizer={showVisualizer}
+          silenceWarningSec={silenceWarningSec}
+          silenceWarningText={silenceWarningText}
           onPause={handlePause}
           onResume={handleResume}
         />

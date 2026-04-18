@@ -62,6 +62,28 @@ export const simulationConfig = {
 };
 ```
 
+### Simulating URL params (e.g. Prolific IDs)
+
+To produce simulated runs whose session CSV matches real Prolific runs (so payout/analysis scripts work on both), attach a `urlParams` object to each simulated participant. These flow into the metadata trial as unregistered params and land in the CSV with a `url_` prefix.
+
+```tsx
+import { sampleParticipants, prolificId } from '@adriansteffan/reactive';
+
+export const simulationConfig = {
+  seed: 42,
+  participants: () => sampleParticipants('sobol', 10, {
+    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  }).map((p) => ({
+    ...p,
+    urlParams: {
+      PROLIFIC_PID: prolificId(),
+    },
+  })),
+};
+```
+
+Available generators: `prolificId()` (24-char alphanumeric), `alphanumericId(length)` for custom lengths.
+
 Run the simulation:
 
 ```

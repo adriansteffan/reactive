@@ -97,15 +97,28 @@ export async function simulateParticipant(
       name: '',
       responseData: {
         userAgent: 'simulated',
-        params: Object.fromEntries(
-          (Param.getRegistry() || []).map((p: any) => [p.name, {
-            value: p.value !== undefined ? p.value : p.defaultValue,
-            registered: true,
-            defaultValue: p.defaultValue,
-            type: p.type,
-            description: p.description,
-          }]),
-        ),
+        params: {
+          // Unregistered URL params from participant.urlParams appear in the CSV with a `url_` prefix.
+          ...Object.fromEntries(
+            Object.entries((participant as any)?.urlParams ?? {}).map(([name, value]) => [name, {
+              value,
+              registered: false,
+              defaultValue: undefined,
+              type: undefined,
+              description: undefined,
+            }]),
+          ),
+          // Registered params win on name collision.
+          ...Object.fromEntries(
+            (Param.getRegistry() || []).map((p: any) => [p.name, {
+              value: p.value !== undefined ? p.value : p.defaultValue,
+              registered: true,
+              defaultValue: p.defaultValue,
+              type: p.type,
+              description: p.description,
+            }]),
+          ),
+        },
       },
     },
   ];

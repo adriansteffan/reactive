@@ -27,6 +27,7 @@ function PlainInput({
   content,
   buttonText = 'Click me',
   className = '',
+  centered = false,
   next,
   updateStore,
   animate = false,
@@ -37,6 +38,7 @@ function PlainInput({
   buttonText?: string;
   onButtonClick?: () => void;
   className?: string;
+  centered?: boolean;
   animate?: boolean;
   storeupdate?: (entry: string) => { [key: string]: any };
   placeholder?: string;
@@ -56,8 +58,8 @@ function PlainInput({
   };
 
   return (
-    <div className={`min-h-screen ${th.containerBg}`}>
-    <div className={`max-w-prose mx-auto ${className} mt-20 mb-20 px-4 `}>
+    <div className={`min-h-screen ${centered ? 'flex items-center justify-center' : ''} ${th.containerBg}`}>
+    <div className={`w-full max-w-prose mx-auto ${className} pt-20 pb-20 px-4 `}>
       <article
         className={`prose prose-2xl ${th.prose} text-xl ${th.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${th.text} leading-relaxed
               ${animate ? 'animate-slide-down opacity-0' : ''}`}
@@ -71,7 +73,7 @@ function PlainInput({
           value={inputValue}
           onChange={handleChange}
           placeholder={placeholder}
-          className={`w-full px-4 py-3 border-2 ${th.inputBorder} ${th.inputBg} ${th.inputText} rounded-xl text-lg focus:outline-none focus:ring-2 ${th.focusRing}`}
+          className={`w-full px-4 py-3 border-2 ${th.inputBorder} ${th.inputBg} ${th.inputText} rounded-xl text-lg focus:outline-none`}
         />
       </div>
 

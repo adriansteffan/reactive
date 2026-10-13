@@ -6,7 +6,7 @@ The project is very early stage, so many of the abstractions are still very leak
 
 ## Prerequisites
 
-You will need a current version of [Bun](https://bun.sh/) installed on your system.
+You will need a current version of [Bun](https://bun.sh/) installed on your system. Projects run entirely on Bun: the dev server, the production build, the upload backend and simulations.
 
 ## Using the package
 
@@ -90,7 +90,7 @@ Run the simulation:
 bun run simulate
 ```
 
-This starts the backend, simulates all participants through the experiment, uploads data via the real backend (just like real participants would), and shuts down.
+This starts the backend on a free port, simulates all participants through the experiment, uploads data via the real backend (just like real participants would), and shuts down.
 
 ### How it works
 
@@ -618,11 +618,12 @@ Keep API keys in `.env.local`, which Bun loads automatically and the project's `
 
 ## Development
 
-The package is published as TypeScript source, so there is no build step. Run the tests and the typecheck with
+The package is published as TypeScript source, so there is no build step. Check it with
 
 ```
 bun test
 bun run typecheck
+bun run lint
 ```
 
 To try changes in a project, create a global link once:
@@ -656,6 +657,8 @@ Manually publishing to npm (until we figure out a better ci/cd process):
 ```
 npm publish
 ```
+
+Use npm 11 or later, older versions leave `template/.gitignore` out of the package.
 
 
 ## Authors

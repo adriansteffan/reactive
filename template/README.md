@@ -2,17 +2,21 @@
 
 Built with [reactive](https://github.com/adriansteffan/reactive)
 
-## Prerequisites and Setup
+## Setup
 
-Regardless of what platform you target with your experiment, you will need a current version of [Bun](https://bun.sh/) installed on your system for development.
-
-To install the needed dependencies, run the following in the root directory:
+Install [Bun](https://bun.sh/), then run in the root directory:
 
 ```
 bun install
 ```
 
-You can target multiple platforms at once, just follow the setup processes for all platforms you want to run you study on.
+### Project layout
+
+- `src/Experiment.tsx`: the experiment
+- `public/`: static files, served from the site root (`public/images/cat.png` is available at `/images/cat.png`)
+- `server.ts`: serves the experiment and the upload backend; add your own routes to `api`
+- `.env`: committed settings. Only `PUBLIC_` variables reach the experiment, and every one it reads must be defined here. Secrets such as API keys go in `.env.local`, which is not committed.
+- `data/`: uploaded data
 
 ## Target: Web (Online Experiment)
 
@@ -20,68 +24,27 @@ This is the version of the experiment you should use if your testing devices hav
 
 ### Development
 
-The web version of the experiment needs no additional setup for development.
-
-Run the app in development mode with
-
 ```
 bun run dev
 ```
-in the root directory.
 
-Open [http://localhost:8001](http://localhost:8001) to view it in the browser. The page updates as you edit, and the upload backend runs on the same server.
+Open [http://localhost:8001](http://localhost:8001). The page updates as you edit.
 
-Files in `public/` are served from the site root, so `public/images/cat.png` can be referenced as `/images/cat.png`.
-
-Settings are read from the `.env` file in the root directory, which is committed. Only variables starting with `PUBLIC_` reach the experiment, and every variable the experiment reads must be defined there. Put secrets such as API keys in `.env.local` instead, which overrides `.env` and is not committed.
-
-#### Running the production version locally
-
-```
-bun run start
-```
-
-serves the experiment the way the deployed version does.
-
+`bun run start` serves the production version locally, and `bun run typecheck` and `bun run lint` check the code.
 
 ### Deployment
 
-
-For deployment, you will need a server with an installation of [docker](https://docs.docker.com/engine/install/)
-
-
-To build the docker images, run 
+You will need a server with [Docker](https://docs.docker.com/engine/install/). In the root directory, start the app with
 
 ```
-docker compose build
+docker compose up -d --build
 ```
 
-in the root directory. This might take a while.
+and stop it with `docker compose down`. To update, run `git pull` and start it again with the same command.
 
-#### Running the app
+The app listens on port 8001 (see `docker-compose.yaml`). Expose it with a reverse proxy (Apache Virtualhosts or Nginx Server Blocks); [this guide](https://gist.github.com/adriansteffan/48c9bda7237a8a7fcc5bb6987c8e1790) explains how for our setup. The `PUBLIC_` variables are baked in when the image is built, so rebuild after changing `.env`.
 
-After completing the setup, start the webapp with
-
-```
-docker compose up -d
-```
-
-and stop it with
-
-```
-docker compose down
-```
-
-The server listens on port 8001, as set in `docker-compose.yaml`. The `PUBLIC_` variables from `.env` are baked into the image when it is built, so rebuild it after changing them.
-Use Virtualhosts (Apache) or Server Blocks (Nginx) with reverse proxy to expose these to the outside. [This guide](https://gist.github.com/adriansteffan/48c9bda7237a8a7fcc5bb6987c8e1790) explains how to do this for our setup.
-
-#### Updating
-
-To update the app, simply stop the running containers, run a `git pull` and build the docker containers once more, and start the containers again.
-
-#### Where is my data stored?
-
-The server will create a "data" directory in the root directory of the cloned repo,
+Uploaded data is stored in `data/` in the root directory of the cloned repo.
 
 
 ## Simulation
@@ -175,7 +138,7 @@ For ease of use, it makes sense to run the web version for most of the developme
 
 ### Setup
 
-To build and test an Adroid app containing your experiment, you will need an installation of 
+To build and test an Android app containing your experiment, you will need an installation of 
 [Android Studio](https://developer.android.com/studio) and [Java 21 or later](https://www.oracle.com/de/java/technologies/downloads/)
 
 To set up the android project, run this command in the root directory:
@@ -246,7 +209,7 @@ To set up the iOS project, run
 bunx cap add ios
 ```
 
-Then, go to `iso > App > App > Info.plist`
+Then, go to `ios > App > App > Info.plist`
 
 And add these lines next to the other keys:
 

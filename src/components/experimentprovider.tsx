@@ -19,7 +19,7 @@ function parseBooleanProp(value: unknown): boolean {
   return !!value;
 }
 
-export default function ExperimentProvider({ children, disableSettings, disableHybridSimulation }: { children: ReactNode, disableSettings?: boolean, disableHybridSimulation?: boolean }) {
+export default function ExperimentProvider({ children, disableSettings, disableHybridSimulation }: { children: ReactNode, disableSettings?: boolean | string, disableHybridSimulation?: boolean | string }) {
 
   useEffect(() => {
     const preventSpaceScroll = (e: KeyboardEvent) => {

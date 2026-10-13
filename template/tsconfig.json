@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
     "noImplicitAny": false,
-    "target": "ES2020",
+    "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["bun"],
     "module": "ESNext",
     "skipLibCheck": true,
 
@@ -21,6 +22,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "elec.js"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "server.ts", "simulate.ts", "build.ts"]
 }

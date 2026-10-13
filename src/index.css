@@ -1,6 +1,4 @@
-@import 'tailwindcss';
-
-@source '../dist/**/*.{js,ts,jsx,tsx}';
+@source './';
 
 @theme {
   --font-*: initial;
@@ -59,28 +57,28 @@
 
 @font-face {
   font-family: 'Atkinson Hyperlegible';
-  src: url('/Atkinson_Hyperlegible/AtkinsonHyperlegible-Regular.ttf') format('truetype');
+  src: url('./fonts/AtkinsonHyperlegible-Regular.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Atkinson Hyperlegible';
-  src: url('/Atkinson_Hyperlegible/AtkinsonHyperlegible-Bold.ttf') format('truetype');
+  src: url('./fonts/AtkinsonHyperlegible-Bold.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Atkinson Hyperlegible';
-  src: url('/Atkinson_Hyperlegible/AtkinsonHyperlegible-Italic.ttf') format('truetype');
+  src: url('./fonts/AtkinsonHyperlegible-Italic.woff2') format('woff2');
   font-weight: 400;
   font-style: italic;
 }
 
 @font-face {
   font-family: 'Atkinson Hyperlegible';
-  src: url('/Atkinson_Hyperlegible/AtkinsonHyperlegible-BoldItalic.ttf') format('truetype');
+  src: url('./fonts/AtkinsonHyperlegible-BoldItalic.woff2') format('woff2');
   font-weight: 700;
   font-style: italic;
 }

@@ -113,7 +113,8 @@ export default function EnterFullscreen({
   );
 
   const [isWaiting, setIsWaiting] = useState(false);
-  const listenerFallbackActive = useRef(false);
+  // The listener that was actually registered, since the handler is recreated when its dependencies change
+  const fallbackListener = useRef<(() => void) | null>(null);
   const timeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelPendingTimeout = useCallback(() => {
@@ -124,12 +125,15 @@ export default function EnterFullscreen({
   }, []);
 
   const removeListenersAndTimeout = useCallback(() => {
-    document.removeEventListener('fullscreenchange', handleFullscreenChangeForFallback);
-    document.removeEventListener('webkitfullscreenchange', handleFullscreenChangeForFallback);
-    document.removeEventListener('mozfullscreenchange', handleFullscreenChangeForFallback);
-    document.removeEventListener('MSFullscreenChange', handleFullscreenChangeForFallback);
+    const listener = fallbackListener.current;
+    if (listener) {
+      document.removeEventListener('fullscreenchange', listener);
+      document.removeEventListener('webkitfullscreenchange', listener);
+      document.removeEventListener('mozfullscreenchange', listener);
+      document.removeEventListener('MSFullscreenChange', listener);
+      fallbackListener.current = null;
+    }
     cancelPendingTimeout();
-    listenerFallbackActive.current = false;
   }, [cancelPendingTimeout]);
 
   const proceedWithDelay = useCallback(() => {
@@ -146,7 +150,7 @@ export default function EnterFullscreen({
   }, [next, delayMs, cancelPendingTimeout, keepFullscreen, updateStore]);
 
   const handleFullscreenChangeForFallback = useCallback(() => {
-    if (!listenerFallbackActive.current) return;
+    if (!fallbackListener.current) return;
     const currentlyFullscreen = isFullscreen();
     removeListenersAndTimeout();
     if (currentlyFullscreen) {
@@ -158,7 +162,7 @@ export default function EnterFullscreen({
 
   const addListenersForFallback = useCallback(() => {
     removeListenersAndTimeout();
-    listenerFallbackActive.current = true;
+    fallbackListener.current = handleFullscreenChangeForFallback;
     document.addEventListener('fullscreenchange', handleFullscreenChangeForFallback);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChangeForFallback);
     document.addEventListener('mozfullscreenchange', handleFullscreenChangeForFallback);

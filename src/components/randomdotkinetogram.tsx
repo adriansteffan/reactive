@@ -610,7 +610,8 @@ export const RDKCanvas = forwardRef<RDKCanvasHandle, RDKCanvasProps>(
           return createDot(assignedMovement, dotLifetime, aperture);
         }),
       );
-    }, []);
+      currentSetRef.current = 0;
+    }, [dotCount, dotSetCount, coherence, opposite, noiseMovement, dotLifetime, aperture]);
 
     // Seed refresh rate estimate
     useEffect(() => {
@@ -945,6 +946,7 @@ export const RandomDotKinematogram = (rawProps: RDKProps) => {
     if (!rawProps.preTrialMessage) return;
     const timer = setTimeout(() => setPreTrialDone(true), rawProps.preTrialMessage.duration);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the message is shown once per trial, a new props object must not restart it
   }, []);
 
   const endTrial = useCallback((key: string | null, rt: number | null) => {

@@ -1,8 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-import '../index.css';
 import { ExperimentConfig, Store, Param, now, getParam } from '../utils/common';
-import { useCallback, useEffect, useMemo, useRef, useState, ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, ComponentType, ReactNode } from 'react';
 import {
   compileTimeline,
   advanceToNextContent,
@@ -87,6 +84,106 @@ getParam('dev', false, 'boolean', 'Enable the developer inspector panel');
 
 function isRuntimeComponentContent(content: any): content is RuntimeComponentContent {
   return typeof content === 'object' && content !== null && typeof content.type === 'string';
+}
+
+function collectRefreshRate(callback: (refreshRate: number | null) => void) {
+  let frameCount = 0;
+  const startTime = now();
+  const maxDuration = 20000;
+  let rafId: number;
+  let lastUpdateTime = startTime;
+  const updateInterval = 1000;
+
+  const calculateRefreshRate = () => {
+    const currentTime = now();
+    const elapsedTime = currentTime - startTime;
+    if (elapsedTime > 0) {
+      const refreshRate = Math.round((frameCount * 1000) / elapsedTime);
+      return refreshRate;
+    }
+    return null;
+  };
+
+  const cleanup = () => {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+    }
+  };
+
+  const countFrames = (timestamp: number) => {
+    frameCount++;
+    const elapsedTime = timestamp - startTime;
+
+    // Check if it's time for an update (once per second)
+    if (timestamp - lastUpdateTime >= updateInterval) {
+      callback(calculateRefreshRate());
+      lastUpdateTime = timestamp;
+    }
+
+    if (elapsedTime < maxDuration) {
+      rafId = requestAnimationFrame(countFrames);
+    } else {
+      cleanup();
+      callback(calculateRefreshRate());
+    }
+  };
+
+  rafId = requestAnimationFrame(countFrames);
+
+  return cleanup;
+}
+
+function TimingWrapper({
+  children,
+  collectRefreshRate: shouldcollect,
+  next,
+  updateStore,
+}: {
+  children: React.ReactNode;
+  collectRefreshRate?: boolean;
+  next: (responseData?: object, actualStartTime?: number, actualEndTime?: number) => void;
+  updateStore: (update: Partial<Store>) => void;
+}) {
+  const wrapperStartTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    wrapperStartTimeRef.current = now();
+
+    if (shouldcollect) {
+      const cleanup = collectRefreshRate((rate) => {
+        updateStore({ _reactiveScreenRefreshRate: rate });
+      });
+
+      return cleanup;
+    }
+  }, [shouldcollect, updateStore]);
+
+  const childWithTimingProps = React.Children.map(children, (child) => {
+    if (React.isValidElement(child)) {
+      const interceptedNext = (
+        responseData?: object,
+        actualStartTime?: number,
+        actualEndTime?: number,
+      ) => {
+        const currentTimeWrapper = now();
+
+        // Use the timings provided by the component if available, otherwise use the one by the wrapper
+        const startTime =
+          actualStartTime !== undefined ? actualStartTime : wrapperStartTimeRef.current;
+        const endTime = actualEndTime !== undefined ? actualEndTime : currentTimeWrapper;
+
+        next(responseData, startTime ?? undefined, endTime ?? undefined);
+      };
+
+      return React.cloneElement(child, {
+        ...child.props,
+        next: interceptedNext,
+      });
+    }
+    return child;
+  });
+
+  return <>{childWithTimingProps}</>;
 }
 
 export default function ExperimentRunner({
@@ -201,15 +298,15 @@ export default function ExperimentRunner({
     window.scrollTo(0, 0);
   }, [instructionPointer]);
 
-  function updateStore(update: Partial<Store>) {
+  const updateStore = useCallback((update: Partial<Store>) => {
     experimentStoreRef.current = { ...experimentStoreRef.current, ...update };
-  }
+  }, []);
 
-  function next(
+  const next = useCallback((
     componentResponseData?: object,
     actualStartTime?: number,
     actualEndTime?: number,
-  ): void {
+  ): void => {
     const currentTime = now();
     const currentInstruction = trialByteCode.instructions[instructionPointer];
 
@@ -256,102 +353,7 @@ export default function ExperimentRunner({
       lastTrialEndTimeRef.current = now();
     }
     setInstructionPointer(nextPointer);
-  }
-
-  const collectRefreshRate = useCallback((callback: (refreshRate: number | null) => void) => {
-    let frameCount = 0;
-    const startTime = now();
-    const maxDuration = 20000;
-    let rafId: number;
-    let lastUpdateTime = startTime;
-    const updateInterval = 1000;
-
-    const calculateRefreshRate = () => {
-      const currentTime = now();
-      const elapsedTime = currentTime - startTime;
-      if (elapsedTime > 0) {
-        const refreshRate = Math.round((frameCount * 1000) / elapsedTime);
-        return refreshRate;
-      }
-      return null;
-    };
-
-    const cleanup = () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-    };
-
-    const countFrames = (timestamp: number) => {
-      frameCount++;
-      const elapsedTime = timestamp - startTime;
-
-      // Check if it's time for an update (once per second)
-      if (timestamp - lastUpdateTime >= updateInterval) {
-        callback(calculateRefreshRate());
-        lastUpdateTime = timestamp;
-      }
-
-      if (elapsedTime < maxDuration) {
-        rafId = requestAnimationFrame(countFrames);
-      } else {
-        cleanup();
-        callback(calculateRefreshRate());
-      }
-    };
-
-    rafId = requestAnimationFrame(countFrames);
-
-    return cleanup;
-  }, []);
-
-  const TimingWrapper: React.FC<{
-    children: React.ReactNode;
-    collectRefreshRate?: boolean;
-  }> = ({ children, collectRefreshRate: shouldcollect }) => {
-    const wrapperStartTimeRef = useRef<number | null>(null);
-    const refreshRateRef = useRef<number | null>(null);
-
-    useEffect(() => {
-      wrapperStartTimeRef.current = now();
-
-      if (shouldcollect) {
-        const cleanup = collectRefreshRate((rate) => {
-          refreshRateRef.current = rate;
-          updateStore({ _reactiveScreenRefreshRate: rate });
-        });
-
-        return cleanup;
-      }
-    }, []);
-
-    const childWithTimingProps = React.Children.map(children, (child) => {
-      if (React.isValidElement(child)) {
-        const interceptedNext = (
-          responseData?: object,
-          actualStartTime?: number,
-          actualEndTime?: number,
-        ) => {
-          const currentTimeWrapper = now();
-
-          // Use the timings provided by the component if available, otherwise use the one by the wrapper
-          const startTime =
-            actualStartTime !== undefined ? actualStartTime : wrapperStartTimeRef.current;
-          const endTime = actualEndTime !== undefined ? actualEndTime : currentTimeWrapper;
-
-          next(responseData, startTime ?? undefined, endTime ?? undefined);
-        };
-
-        return React.cloneElement(child, {
-          ...child.props,
-          next: interceptedNext,
-        });
-      }
-      return child;
-    });
-
-    return <>{childWithTimingProps}</>;
-  };
+  }, [trialByteCode, instructionPointer, totalTrialsCompleted, updateStore]);
 
   const currentInstruction = trialByteCode.instructions[instructionPointer];
 
@@ -362,7 +364,7 @@ export default function ExperimentRunner({
     if (!isRuntimeComponentContent(content)) return false;
     if (content.simulate === false) return false;
     return !!content.simulate || !!content.simulators;
-  }, [instructionPointer, simulationMode, currentInstruction]);
+  }, [simulationMode, currentInstruction]);
 
   useEffect(() => {
     if (!shouldSimulate) return;
@@ -384,9 +386,9 @@ export default function ExperimentRunner({
       if (result.storeUpdates) updateStore(result.storeUpdates);
       next(result.responseData);
     })();
-  }, [shouldSimulate, instructionPointer]);
+  }, [shouldSimulate, instructionPointer, currentInstruction, next, updateStore]);
 
-  let componentToRender = null;
+  let componentToRender: ReactNode = null;
   if (currentInstruction?.type === 'ExecuteContent' && !shouldSimulate) {
     const content = currentInstruction.content;
     if (isRuntimeComponentContent(content)) {
@@ -399,7 +401,7 @@ export default function ExperimentRunner({
             : content.props || {};
 
         componentToRender = (
-          <TimingWrapper key={instructionPointer} collectRefreshRate={content.collectRefreshRate}>
+          <TimingWrapper key={instructionPointer} collectRefreshRate={content.collectRefreshRate} next={next} updateStore={updateStore}>
             <Component
               next={next}
               updateStore={updateStore}

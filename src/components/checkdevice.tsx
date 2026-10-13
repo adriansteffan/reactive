@@ -163,7 +163,7 @@ function CheckDevice({
     };
 
     gatherDeviceInfo();
-  }, [check, data, updateStore, next]);
+  }, [check, data, store, updateStore, next]);
 
   const th = t(useTheme());
 

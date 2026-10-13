@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 import {
   compileTimeline,
@@ -155,7 +155,7 @@ export async function simulateParticipant(
     const startTime = currentTime;
     currentTime += duration;
 
-    let trialData: ComponentResultData = {
+    const trialData: ComponentResultData = {
       index: pointer,
       trialNumber,
       start: startTime,
@@ -179,15 +179,11 @@ export interface RunSimulationConfig {
   participants: ParticipantState[] | { generator: (index: number) => ParticipantState; count: number } | (() => ParticipantState[]);
   /** Seed for reproducible simulations. Each participant gets seed + workerIndex. */
   seed?: number;
-  backendPort?: number;
   concurrency?: number;
 }
 
-export async function orchestrateSimulation(config: RunSimulationConfig, scriptPath: string): Promise<void> {
-  const { spawn } = await import('child_process');
-
-  const port = config.backendPort ?? 8001;
-  const backendUrl = `http://localhost:${port}/backend`;
+export async function orchestrateSimulation(config: RunSimulationConfig, scriptPath: string, backendUrl: string): Promise<void> {
+  const { spawn } = process.getBuiltinModule('child_process');
 
   const participantCount = typeof config.participants === 'function'
     ? config.participants().length
@@ -195,105 +191,75 @@ export async function orchestrateSimulation(config: RunSimulationConfig, scriptP
       ? config.participants.length
       : config.participants.count;
 
-  const backend = spawn('node', ['src/backend.ts'], {
-    cwd: './backend',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const concurrency = config.concurrency ?? process.getBuiltinModule('os').cpus().length;
+  console.log(`Simulating ${participantCount} participants (concurrency: ${concurrency})...`);
 
-  // Wait for backend to signal readiness before spawning workers
-  await new Promise<void>((resolve, reject) => {
-    backend.on('error', reject);
+  let completed = 0;
+  const errors: { index: number; error: string }[] = [];
 
-    backend.stdout?.on('data', (data: any) => {
-      const msg = data.toString();
-      if (msg.includes('REACTIVE_BACKEND_READY')) {
-        resolve();
+  const writeProgress = () => {
+    const pct = Math.min(100, Math.round((completed / participantCount) * 100));
+    const filled = Math.floor(pct / 2);
+    const bar = '█'.repeat(filled) + '░'.repeat(50 - filled);
+    process.stdout.write(`\r  ${bar} ${completed}/${participantCount} (${pct}%)`);
+  };
+
+  const spawnWorker = (i: number) => new Promise<void>((resolve) => {
+    let stderr = '';
+    const worker = spawn(process.execPath, [scriptPath], {
+      env: {
+        ...process.env,
+        _REACTIVE_WORKER_INDEX: String(i),
+        _REACTIVE_BACKEND_URL: backendUrl,
+        ...(config.seed !== undefined ? { _REACTIVE_SIMULATION_SEED: String(config.seed) } : {}),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    worker.stderr?.on('data', (data: any) => { stderr += data.toString(); });
+
+    worker.on('close', (code: number) => {
+      if (code !== 0) {
+        errors.push({ index: i, error: stderr.trim() || `exited with code ${code}` });
       }
+      completed++;
+      writeProgress();
+      resolve();
     });
-
-    backend.stderr?.on('data', (data: any) => {
-      console.error(`[backend] ${data.toString().trim()}`);
+    worker.on('error', (err: Error) => {
+      errors.push({ index: i, error: err.message });
+      completed++;
+      writeProgress();
+      resolve();
     });
-
-    setTimeout(() => reject(new Error('Backend did not start within 10 seconds')), 10000);
   });
 
-  console.log(`Backend running on port ${port}`);
+  writeProgress();
 
-  try {
-    const concurrency = config.concurrency ?? (await import('os')).cpus().length;
-    console.log(`Simulating ${participantCount} participants (concurrency: ${concurrency})...`);
-
-    let completed = 0;
-    const errors: { index: number; error: string }[] = [];
-
-    const writeProgress = () => {
-      const pct = Math.min(100, Math.round((completed / participantCount) * 100));
-      const filled = Math.floor(pct / 2);
-      const bar = '█'.repeat(filled) + '░'.repeat(50 - filled);
-      process.stdout.write(`\r  ${bar} ${completed}/${participantCount} (${pct}%)`);
+  // Worker pool: always keep `concurrency` workers running
+  let nextIndex = 0;
+  await new Promise<void>((resolveAll) => {
+    const startNext = () => {
+      if (nextIndex >= participantCount) {
+        if (completed >= participantCount) resolveAll();
+        return;
+      }
+      const i = nextIndex++;
+      spawnWorker(i).then(startNext);
     };
-
-    const spawnWorker = (i: number) => new Promise<void>((resolve) => {
-      let stderr = '';
-      const worker = spawn('node', [scriptPath], {
-        env: {
-          ...process.env,
-          _REACTIVE_WORKER_INDEX: String(i),
-          _REACTIVE_BACKEND_URL: backendUrl,
-          ...(config.seed !== undefined ? { _REACTIVE_SIMULATION_SEED: String(config.seed) } : {}),
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      worker.stderr?.on('data', (data: any) => { stderr += data.toString(); });
-
-      worker.on('close', (code: number) => {
-        if (code !== 0) {
-          errors.push({ index: i, error: stderr.trim() || `exited with code ${code}` });
-        }
-        completed++;
-        writeProgress();
-        resolve();
-      });
-      worker.on('error', (err: Error) => {
-        errors.push({ index: i, error: err.message });
-        completed++;
-        writeProgress();
-        resolve();
-      });
-    });
-
-    writeProgress();
-
-    // Worker pool: always keep `concurrency` workers running
-    let nextIndex = 0;
-    await new Promise<void>((resolveAll) => {
-      const startNext = () => {
-        if (nextIndex >= participantCount) {
-          if (completed >= participantCount) resolveAll();
-          return;
-        }
-        const i = nextIndex++;
-        spawnWorker(i).then(startNext);
-      };
-      for (let j = 0; j < Math.min(concurrency, participantCount); j++) {
-        startNext();
-      }
-    });
-
-    process.stdout.write('\n');
-
-    if (errors.length > 0) {
-      console.error(`\n${errors.length} participant(s) failed:`);
-      for (const { index, error } of errors) {
-        console.error(`  Participant ${index}: ${error}`);
-      }
+    for (let j = 0; j < Math.min(concurrency, participantCount); j++) {
+      startNext();
     }
+  });
 
-    console.log(`Simulation complete. ${completed - errors.length}/${participantCount} participants simulated successfully.`);
-  } finally {
-    backend.kill();
-    console.log('Backend stopped.');
+  process.stdout.write('\n');
+
+  if (errors.length > 0) {
+    console.error(`\n${errors.length} participant(s) failed:`);
+    for (const { index, error } of errors) {
+      console.error(`  Participant ${index}: ${error}`);
+    }
   }
+
+  console.log(`Simulation complete. ${completed - errors.length}/${participantCount} participants simulated successfully.`);
 }

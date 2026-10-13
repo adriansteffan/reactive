@@ -1,5 +1,3 @@
-import { getNodeRequire } from './nodecompat';
-
 /**
  * Generates a WebM audio file from text using the platform's native TTS.
  * Requires `ffmpeg` to be installed for WAV->WebM conversion.
@@ -12,13 +10,11 @@ import { getNodeRequire } from './nodecompat';
  */
 export async function textToWebmBase64(text: string): Promise<string | null> {
   try {
-    const req = await getNodeRequire();
-    const childProcess: typeof import('child_process') = req('child_process');
-    const path: typeof import('path') = req('path');
-    const fs: typeof import('fs') = req('fs');
-    const os: typeof import('os') = req('os');
+    const { execSync } = process.getBuiltinModule('child_process');
+    const path = process.getBuiltinModule('path');
+    const fs = process.getBuiltinModule('fs');
+    const os = process.getBuiltinModule('os');
 
-    const { execSync } = childProcess;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reactive-tts-'));
     const wavPath = path.join(dir, 'tts.wav');
     const webmPath = path.join(dir, 'tts.webm');
@@ -65,11 +61,10 @@ export async function textToWebmBase64(text: string): Promise<string | null> {
  */
 export async function probeAudioDurationMs(base64Audio: string): Promise<number | null> {
   try {
-    const req = await getNodeRequire();
-    const { execSync } = req('child_process') as typeof import('child_process');
-    const fs = req('fs') as typeof import('fs');
-    const path = req('path') as typeof import('path');
-    const os = req('os') as typeof import('os');
+    const { execSync } = process.getBuiltinModule('child_process');
+    const fs = process.getBuiltinModule('fs');
+    const path = process.getBuiltinModule('path');
+    const os = process.getBuiltinModule('os');
 
     const tmp = path.join(os.tmpdir(), `reactive-probe-${Date.now()}.webm`);
     fs.writeFileSync(tmp, Buffer.from(base64Audio, 'base64'));

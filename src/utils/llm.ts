@@ -55,20 +55,20 @@ async function callLLM(config: LLMConfig, prompt: string, schema?: LLMSchema): P
 const CACHE_DIR = '.reactive-cache';
 const CACHE_FILE = 'llm.json';
 let diskCache: Record<string, string> | null = null;
-import { getNodeRequire } from './nodecompat';
 
 async function loadCache(): Promise<Record<string, string>> {
   if (diskCache) return diskCache;
   try {
-    const req = await getNodeRequire();
-    const fs = req('fs') as typeof import('fs');
-    const path = req('path') as typeof import('path');
+    const fs = process.getBuiltinModule('fs');
+    const path = process.getBuiltinModule('path');
     const filePath = path.join(process.cwd(), CACHE_DIR, CACHE_FILE);
     if (fs.existsSync(filePath)) {
       diskCache = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       return diskCache!;
     }
-  } catch {}
+  } catch {
+    // No readable cache yet; start empty
+  }
   diskCache = {};
   return diskCache;
 }
@@ -76,13 +76,14 @@ async function loadCache(): Promise<Record<string, string>> {
 async function saveCache(): Promise<void> {
   if (!diskCache) return;
   try {
-    const req = await getNodeRequire();
-    const fs = req('fs') as typeof import('fs');
-    const path = req('path') as typeof import('path');
+    const fs = process.getBuiltinModule('fs');
+    const path = process.getBuiltinModule('path');
     const dirPath = path.join(process.cwd(), CACHE_DIR);
     fs.mkdirSync(dirPath, { recursive: true });
     fs.writeFileSync(path.join(dirPath, CACHE_FILE), JSON.stringify(diskCache, null, 2));
-  } catch {}
+  } catch {
+    // The cache only saves repeated API calls, so failing to write it is harmless
+  }
 }
 
 export async function invokeLLM(config: LLMConfig, prompt: string, schema?: LLMSchema): Promise<string> {

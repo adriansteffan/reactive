@@ -4,12 +4,12 @@ Built with [reactive](https://github.com/adriansteffan/reactive)
 
 ## Prerequisites and Setup
 
-Regardless of what platform you target with your experiment, you will need a current version of [node.js](https://nodejs.org/en/download/) installed on your system for development.
+Regardless of what platform you target with your experiment, you will need a current version of [Bun](https://bun.sh/) installed on your system for development.
 
 To install the needed dependencies, run the following in the root directory:
 
 ```
-npm i && npm i --prefix backend
+bun install
 ```
 
 You can target multiple platforms at once, just follow the setup processes for all platforms you want to run you study on.
@@ -25,24 +25,23 @@ The web version of the experiment needs no additional setup for development.
 Run the app in development mode with
 
 ```
-npm run dev:all
+bun run dev
 ```
 in the root directory.
 
-By default, open [http://localhost:5173](http://localhost:5173) to view it in the browser.
-The page will reload if you make edits.
+Open [http://localhost:8001](http://localhost:8001) to view it in the browser. The page updates as you edit, and the upload backend runs on the same server.
 
+Files in `public/` are served from the site root, so `public/images/cat.png` can be referenced as `/images/cat.png`.
 
-#### Buidling the frontend locally (to test)
+Settings are read from the `.env` file in the root directory, which is committed. Only variables starting with `PUBLIC_` reach the experiment, and every variable the experiment reads must be defined there. Put secrets such as API keys in `.env.local` instead, which overrides `.env` and is not committed.
 
-
-From the `frontend` directory, run
+#### Running the production version locally
 
 ```
-npm run build
+bun run start
 ```
 
-the resulting output can be found in `frontend/dist/`
+serves the experiment the way the deployed version does.
 
 
 ### Deployment
@@ -73,7 +72,7 @@ and stop it with
 docker compose down
 ```
 
-The server will be attached to the ports you specified in the .env files.
+The server listens on port 8001, as set in `docker-compose.yaml`. The `PUBLIC_` variables from `.env` are baked into the image when it is built, so rebuild it after changing them.
 Use Virtualhosts (Apache) or Server Blocks (Nginx) with reverse proxy to expose these to the outside. [This guide](https://gist.github.com/adriansteffan/48c9bda7237a8a7fcc5bb6987c8e1790) explains how to do this for our setup.
 
 #### Updating
@@ -105,10 +104,10 @@ export const simulationConfig = {
 ### Running
 
 ```
-npm run simulate
+bun run simulate
 ```
 
-This starts the backend, simulates all participants through the experiment, and shuts down. The simulated data ends up in `backend/data/`.
+This starts the backend, simulates all participants through the experiment, and shuts down. The simulated data ends up in `data/`.
 
 ### Customizing participant behavior
 
@@ -138,10 +137,10 @@ During development, auto-advance simulated trials while manually interacting wit
 Add `?hybridSimulation=true` to the URL:
 
 ```
-http://localhost:5173?hybridSimulation=true
+http://localhost:8001?hybridSimulation=true
 ```
 
-Trials with `simulators` or `simulate: true` defined will auto-advance. Others render normally for human interaction. Hybrid mode is enabled by default during development. For production, set `VITE_DISABLE_HYBRID_SIMULATION=true` to disable it.
+Trials with `simulators` or `simulate: true` defined will auto-advance. Others render normally for human interaction. Hybrid mode is enabled by default during development. For production, set `PUBLIC_DISABLE_HYBRID_SIMULATION=true` in `.env` to disable it.
 
 
 ## Transcription
@@ -151,20 +150,20 @@ Automatically transcribe voice recordings from experiment data using Docker. Req
 ### CPU (faster-whisper)
 
 ```
-npm run transcribe
+bun run transcribe
 ```
 
 ### GPU (qwen-asr, requires NVIDIA GPU)
 
 ```
-npm run transcribe:gpu
+bun run transcribe:gpu
 ```
 
 ### Options
 
 ```
-npm run transcribe -- --overwrite       # re-transcribe even if transcriptions.csv exists
-npm run transcribe -- --model small     # use a different model
+bun run transcribe -- --overwrite       # re-transcribe even if transcriptions.csv exists
+bun run transcribe -- --model small     # use a different model
 ```
 
 Output: `transcriptions.csv` in each participant's data directory with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
@@ -181,7 +180,7 @@ To build and test an Adroid app containing your experiment, you will need an ins
 
 To set up the android project, run this command in the root directory:
 ```
-npx cap add android
+bunx cap add android
 ````
 
 Next, find the [path to your local android sdk](https://stackoverflow.com/questions/25176594/android-sdk-location) and create a `local.properties` file in the `android` folder with the following content:
@@ -214,9 +213,9 @@ For more information, refer to the [Capacitor documentation on Android](https://
 
 Whenever you have made changes to the code and want to run it on the Android emulator, run:
 ```
-npm run build
-npx cap sync
-npx cap run android
+bun run build
+bunx cap sync
+bunx cap run android
 ```
 
 ### Packaging
@@ -224,7 +223,7 @@ npx cap run android
 From the root directory, run
 
 ```
-npx cap open android
+bunx cap open android
 ```
 
 . Wait for Android Studio to install the project dependencies and then run Build > Generate APKs and Bundles > Generate APKs. Once your build is finished, there will be a popup guiding you to the location of the bundle's app that you can transfer to your Android device.
@@ -244,7 +243,7 @@ To build an iOS app containing your experiment, you will need a machine running 
 To set up the iOS project, run 
 
 ```
-npx cap add ios
+bunx cap add ios
 ```
 
 Then, go to `iso > App > App > Info.plist`
@@ -265,9 +264,9 @@ For more information, refer to the [Capacitor documentation on iOS](https://capa
 Whenever you have made changes to the code and want to run it on the iOS emulator, run:
 
 ```
-npm run build
-npx cap sync
-npx cap run ios
+bun run build
+bunx cap sync
+bunx cap run ios
 ```
 
 ### Packaging
@@ -275,7 +274,7 @@ npx cap run ios
 Packaging iOS apps is quite an undertaking, which is why the process is not overly streamlined/documented yet. The best way to get your experiment on an iOS device right now is to run
 
 ```
-npx cap run ios
+bunx cap run ios
 ```
 
 which will open the finished project in XCode. From there, follow a guide on how to sign, bundle and install your app/experiment.

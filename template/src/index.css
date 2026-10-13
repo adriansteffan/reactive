@@ -1,11 +1,3 @@
-@import '@adriansteffan/reactive/style.css';
 @import 'tailwindcss';
+@import '@adriansteffan/reactive/style.css';
 @plugin '@tailwindcss/typography';
-
-@theme {
-  --font-*: initial;
-  --font-atkinson: Atkinson Hyperlegible, sans-serif;
-}
-
-@source '../node_modules/@adriansteffan/reactive/dist/**/*.{js,jsx,ts,tsx}';
-@source '../node_modules/@adriansteffan/reactive/src/**/*.{js,jsx,ts,tsx}';

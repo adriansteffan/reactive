@@ -19,7 +19,7 @@ export default function ProlificEnding({
   data,
   updateStore
 }: { prolificCode?: string; className?: string; containerClass?: string; centered?: boolean; animate?: boolean } & BaseComponentProps) {
-  let prolificCodeUsed = prolificCode ?? getParam('cc', '', 'string') ?? null;
+  const prolificCodeUsed = prolificCode ?? getParam('cc', '', 'string') ?? null;
 
   const content = (
     <div className='flex flex-col items-center'>

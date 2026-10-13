@@ -1,7 +1,8 @@
-import 'dotenv/config';
-import { orchestrateSimulation, simulateParticipant, setBackendUrl, seedDistributions } from '@adriansteffan/reactive';
+import type { ComponentProps, ReactElement } from 'react';
+import { type ExperimentRunner, orchestrateSimulation, simulateParticipant, setBackendUrl, seedDistributions } from '@adriansteffan/reactive';
+import { api } from './server';
 
-function extractProps(ExperimentComponent: any) {
+function extractProps(ExperimentComponent: () => ReactElement<ComponentProps<typeof ExperimentRunner>>) {
   // Call the component function directly to get the ExperimentRunner element.
   // This is safe because Experiment() just returns JSX — no hooks execute.
   const element = ExperimentComponent();
@@ -41,5 +42,9 @@ if (process.env._REACTIVE_WORKER_INDEX) {
 } else {
   const { default: Experiment } = await import('./src/Experiment');
   const { simulationConfig } = extractProps(Experiment);
-  await orchestrateSimulation(simulationConfig, import.meta.filename);
+
+  // Participants upload through the real backend, on a free port so it never collides with a running dev server
+  const server = Bun.serve({ port: 0, routes: api });
+  await orchestrateSimulation(simulationConfig, import.meta.path, `${server.url}backend`);
+  server.stop();
 }

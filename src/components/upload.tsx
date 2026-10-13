@@ -140,7 +140,7 @@ const createCapacitorFileBackend = (parentFolder?: string): FileBackend => {
               directory: Directory.Documents,
               recursive: false,
             });
-          } catch (e) {
+          } catch {
             // Parent directory might already exist, that's fine
           }
         }
@@ -242,7 +242,6 @@ export default function Upload({
   const shouldDownload = getParam(downloadParam.name, downloadParam.defaultValue, downloadParam.type);
 
   const uploadData = useMutation({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: async (body: any) => {
       const response = await post('/data', body);
       return response as UploadResponse;
@@ -357,6 +356,9 @@ export default function Upload({
     downloadFiles,
     next,
     uploadData,
+    store,
+    sessionData,
+    androidFolderName,
   ]);
 
   useEffect(() => {

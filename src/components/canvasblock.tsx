@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 
 import {
@@ -88,6 +86,10 @@ export default function CanvasBlock({
 
   const frameIntervalRef = useRef<number | null>(null);
 
+  // Callbacks read the latest props through this ref, so new prop identities never restart the running slide
+  const propsRef = useRef({ next, updateStore, styleCanvas, initCanvas });
+  propsRef.current = { next, updateStore, styleCanvas, initCanvas };
+
   useEffect(() => {
     const refreshRate = storeRef.current._reactiveScreenRefreshRate;
     const isValidRefreshRate =
@@ -146,6 +148,7 @@ export default function CanvasBlock({
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
+      const { styleCanvas } = propsRef.current;
       if (styleCanvas) {
         try {
           styleCanvas(ctx, canvasWidth, canvasHeight);
@@ -169,8 +172,8 @@ export default function CanvasBlock({
     [getCanvas],
   );
 
-  // Forward declare handleSlideEnd for tick
-  let handleSlideEnd: () => void;
+  // tick and handleSlideEnd depend on each other, so tick reaches handleSlideEnd through a ref
+  const handleSlideEndRef = useRef<() => void>(() => {});
 
   const tick = useCallback(() => {
     const timeNow = now();
@@ -229,7 +232,7 @@ export default function CanvasBlock({
     }
 
     if (shouldEndSlide) {
-      handleSlideEnd();
+      handleSlideEndRef.current();
     } else {
       if (
         (isDrawingVisibleRef.current &&
@@ -259,8 +262,8 @@ export default function CanvasBlock({
     instructionPointerRef.current = pointer;
 
     if (pointer >= instructions.length) {
-      updateStore(storeRef.current);
-      next(dataRef.current);
+      propsRef.current.updateStore(storeRef.current);
+      propsRef.current.next(dataRef.current);
       return;
     }
 
@@ -282,9 +285,9 @@ export default function CanvasBlock({
       instructionPointerRef.current++;
       processControlFlow();
     }
-  }, [instructions, markers, resolveSlideContent, drawSlideInternal, tick, next]);
+  }, [instructions, markers, resolveSlideContent, drawSlideInternal, tick]);
 
-  handleSlideEnd = useCallback(() => {
+  const handleSlideEnd = useCallback(() => {
     const responseData = responseRegisteredRef.current;
     const endTime = now();
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -321,6 +324,7 @@ export default function CanvasBlock({
     responseRegisteredRef.current = null;
     processControlFlow();
   }, [instructions, resolveSlideContent, processControlFlow]);
+  handleSlideEndRef.current = handleSlideEnd;
 
   const handleKeyPress = useCallback(
     (event: KeyboardEvent) => {
@@ -381,8 +385,8 @@ export default function CanvasBlock({
       }
       return null;
     };
-    let initialWidthPx = parseNonRatioDimension(width, vpWidth);
-    let initialHeightPx = parseNonRatioDimension(height, vpHeight);
+    const initialWidthPx = parseNonRatioDimension(width, vpWidth);
+    const initialHeightPx = parseNonRatioDimension(height, vpHeight);
     const isWidthRatio = typeof width === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(width);
     const isHeightRatio =
       typeof height === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(height);
@@ -431,7 +435,7 @@ export default function CanvasBlock({
         if (m) {
           computedWidth = (computedHeight / parseFloat(m[2])) * parseFloat(m[1]);
         }
-      } catch (e) {
+      } catch {
         console.error('Invalid width ratio string:', width);
       }
     } else if (isHeightRatio && !isWidthRatio) {
@@ -440,7 +444,7 @@ export default function CanvasBlock({
         if (m) {
           computedHeight = (computedWidth / parseFloat(m[1])) * parseFloat(m[2]);
         }
-      } catch (e) {
+      } catch {
         console.error('Invalid height ratio string:', height);
       }
     } else if (isWidthRatio && isHeightRatio) {
@@ -479,6 +483,7 @@ export default function CanvasBlock({
       ctx.scale(dpr, dpr);
     }
 
+    const { initCanvas } = propsRef.current;
     if (initCanvas && ctx) {
       try {
         initCanvas(ctx, finalWidth, finalHeight);

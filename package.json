@@ -1,35 +1,26 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "test": "vitest --silent=false",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "test": "bun test",
+    "typecheck": "tsc",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0"
   },
   "bin": {
     "create-reactive-experiment": "bin/setup.js",
     "@adriansteffan/reactive": "bin/setup.js"
   },
-  "main": "./dist/reactive.umd.js",
-  "module": "./dist/reactive.es.js",
-  "types": "./dist/mod.d.ts",
+  "files": [
+    "src",
+    "bin",
+    "template",
+    "template/.gitignore"
+  ],
   "exports": {
-    ".": {
-      "import": "./dist/reactive.es.js",
-      "require": "./dist/reactive.umd.js",
-      "types": "./dist/mod.d.ts"
-    },
-    "./style.css": "./dist/style.css",
-    "./array": {
-      "import": "./dist/reactive.es.js",
-      "require": "./dist/reactive.umd.js",
-      "types": "./dist/mod.d.ts"
-    },
-    "./raw-loader": "./raw-loader.mjs",
-    "./raw-loader-hooks": "./raw-loader-hooks.mjs"
+    ".": "./src/mod.tsx",
+    "./style.css": "./src/index.css",
+    "./bun-plugin": "./src/bun-plugin.ts"
   },
   "author": "Adrian Steffan",
   "license": "MIT",
@@ -40,7 +31,6 @@
     "@adriansteffan/immersive-mode": "^0.0.1",
     "@capacitor/core": "^7.0.1",
     "@capacitor/filesystem": "^7.0.0",
-    "@capacitor/share": "^7.0.0",
     "@capacitor/status-bar": "^7.0.0",
     "@stdlib/random-base-mt19937": "^0.2.3",
     "@stdlib/random-base-normal": "^0.2.2",
@@ -49,47 +39,32 @@
     "@stdlib/stats-base-dists-normal-quantile": "^0.3.1",
     "@stdlib/stats-base-dists-poisson-quantile": "^0.2.3",
     "@tanstack/react-query": "^5.61.3",
-    "@tanstack/react-query-devtools": "^5.61.3",
     "@zip.js/zip.js": "^2.7.53",
     "halton": "^1.0.0",
     "motion": "^12.38.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "react-icons": "^5.1.0",
     "react-toastify": "^10.0.6",
+    "survey-core": "^2.4.1",
     "survey-react-ui": "^2.4.1",
     "uuid": "^11.0.3"
   },
   "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "tailwindcss": "^4.0.9"
   },
   "devDependencies": {
-    "@eslint/config-array": "^0.19.0",
-    "@eslint/object-schema": "^2.1.4",
-    "@tailwindcss/postcss": "^4.0.9",
-    "@types/howler": "^2.2.11",
-    "@types/node": "^22.9.2",
+    "@eslint/js": "^9.39.5",
+    "@types/bun": "^1.4.3",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
-    "@types/uuid": "^10.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.16.0",
-    "@typescript-eslint/parser": "^8.16.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.20",
-    "concurrently": "^9.1.0",
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.14",
-    "glob": "^10.3.10",
-    "lru-cache": "^10.0.1",
-    "postcss": "^8.4.38",
+    "globals": "^17.13.0",
     "prettier": "3.2.5",
-    "rimraf": "^5.0.5",
-    "tailwindcss": "^4.0.9",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "typescript": "^5.2.2",
-    "vite": "^5.2.0",
-    "vite-plugin-dts": "^4.3.0",
-    "vite-plugin-static-copy": "^2.1.0",
-    "vitest": "^2.1.5"
+    "typescript-eslint": "^8.71.2"
   }
 }

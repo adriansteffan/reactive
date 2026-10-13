@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { FileUpload, Store, TrialData } from './common';
 
 type DataObject = {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { sobol, halton, seedDistributions, normal, uniform, poisson, sampleParticipants } from './distributions';
 
 // Known Sobol sequence values (1D, Van der Corput base 2, skipping the zero point)

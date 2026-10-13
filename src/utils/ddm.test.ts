@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { simulateDDMTrial, mapDDMChoice } from './ddm';
 import { seedDistributions } from './distributions';
 
@@ -109,7 +109,7 @@ describe('snapshot strategy', () => {
       stimOffset: 50,
       postStimStrategy: { type: 'snapshot' },
     });
-    expect([0, 1]).toContain(result.choice);
+    expect<(number | null)[]>([0, 1]).toContain(result.choice);
     expect(result.isContaminated).toBe(false);
   });
 
@@ -160,7 +160,7 @@ describe('collapse strategy', () => {
       },
     });
     // Boundaries collapse, must eventually reach evidence
-    expect([0, 1]).toContain(result.choice);
+    expect<(number | null)[]>([0, 1]).toContain(result.choice);
   });
 
   it('respects collapse delay', () => {
@@ -217,12 +217,12 @@ describe('mapDDMChoice', () => {
 
   it('handles array correctResponse', () => {
     const key = mapDDMChoice(1, ['a', 'b', 'c'], ['a', 'b']);
-    expect(['a', 'b']).toContain(key);
+    expect<(string | null)[]>(['a', 'b']).toContain(key);
   });
 
   it('returns random key when no correctResponse', () => {
     const key = mapDDMChoice(1, ['a', 'b']);
-    expect(['a', 'b']).toContain(key);
+    expect<(string | null)[]>(['a', 'b']).toContain(key);
   });
 
   it('falls back to any key when no matching keys for choice', () => {

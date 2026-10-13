@@ -6,7 +6,7 @@ import { ExperimentProvider } from "@adriansteffan/reactive";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ExperimentProvider disableSettings={import.meta.env.VITE_DISABLE_SETTINGS} disableHybridSimulation={!!import.meta.env.VITE_DISABLE_HYBRID_SIMULATION}>
+    <ExperimentProvider disableSettings={process.env.PUBLIC_DISABLE_SETTINGS} disableHybridSimulation={process.env.PUBLIC_DISABLE_HYBRID_SIMULATION}>
       <Experiment />
     </ExperimentProvider>
   </React.StrictMode>

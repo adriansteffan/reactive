@@ -179,7 +179,7 @@ export const SettingsScreen = ({
 
     setParamValues(initialValues);
     setCustomParams(extractedCustomParams);
-  }, [paramRegistry]);
+  }, [paramRegistry, timelineRepresentation.length]);
 
   // Generate URL whenever param values, custom params, trials selection, or encoding type changes
   useEffect(() => {
@@ -276,7 +276,7 @@ export const SettingsScreen = ({
 
     const fullUrl = `${window.location.origin}${baseUrl}${queryString}`;
     setGeneratedUrl(fullUrl);
-  }, [paramValues, customParams, useBase64, paramRegistry, selectedTrials, isExcludeMode]);
+  }, [paramValues, customParams, useBase64, paramRegistry, selectedTrials, isExcludeMode, timelineRepresentation.length]);
 
   const handleParamChange = (name: string, value: any) => {
     setParamValues((prev) => ({

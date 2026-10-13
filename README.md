@@ -1,19 +1,19 @@
 # reactive
 
-A framework for quickly building interactive online experiments using Typescript, React, and TailwindCSS. Comes with a template project that has all batteries included (build tools, docker deployment setup, node server for upload etc.)
+A framework for quickly building interactive online experiments using Typescript, React, and TailwindCSS. Comes with a template project that has all batteries included (build tools, docker deployment setup, Bun server for upload etc.)
 The project is very early stage, so many of the abstractions are still very leaky and the documentation is largely unfinished.
 
 
 ## Prerequisites
 
-You will need a current version of [node.js](https://nodejs.org/en/download/) installed on your system.
+You will need a current version of [Bun](https://bun.sh/) installed on your system.
 
 ## Using the package
 
 ### Create a template project
 
 ```
-npx @adriansteffan/reactive
+bunx @adriansteffan/reactive
 ```
 
 Then follow the instructions shown there and in the created `README.md`
@@ -87,7 +87,7 @@ Available generators: `prolificId()` (24-char alphanumeric), `alphanumericId(len
 Run the simulation:
 
 ```
-npm run simulate
+bun run simulate
 ```
 
 This starts the backend, simulates all participants through the experiment, uploads data via the real backend (just like real participants would), and shuts down.
@@ -145,12 +145,12 @@ The simulate function orchestrates the trial logic. The decision functions are t
 During development, you can auto-advance simulated trials while manually interacting with others. Add `?hybridSimulation=true` to the URL during development:
 
 ```
-http://localhost:5173?hybridSimulation=true
+http://localhost:8001?hybridSimulation=true
 ```
 
 Trials with `simulators` or `simulate: true` defined on them will auto-advance. Trials without them render normally for human interaction.
 
-Hybrid mode is enabled by default during development. For production, set `VITE_DISABLE_HYBRID_SIMULATION=true` to disable it regardless of URL parameters.
+Hybrid mode is enabled by default during development. For production, set `PUBLIC_DISABLE_HYBRID_SIMULATION=true` in `.env` to disable it regardless of URL parameters.
 
 ### Reproducible simulations
 
@@ -613,33 +613,43 @@ const parsed = JSON.parse(result);
 | `apiKey` | `string` | API key |
 | `baseUrl` | `string?` | Override the API endpoint |
 
-Requires `import 'dotenv/config'` at the top of `simulate.ts` to load `.env` files. Add `.reactive-cache/` to your `.gitignore`.
+Keep API keys in `.env.local`, which Bun loads automatically and the project's `.gitignore` excludes. Add `.reactive-cache/` to your `.gitignore`.
 
 
 ## Development
 
-
-Run this to in the root of the repo to build the project locally (also needs to be run after every change):
+The package is published as TypeScript source, so there is no build step. Run the tests and the typecheck with
 
 ```
-npm run build
+bun test
+bun run typecheck
 ```
 
-Then create a global link (only needs to run once during setup);
+To try changes in a project, create a global link once:
 ```
-npm link
+bun link
 ```
 
 Then set up a local testing project (run from the parent directory so it's created as a sibling):
 
 ```
 cd ..
-node reactive/bin/setup.js
+bun reactive/bin/setup.js
 cd <project-name>
 npm pkg set dependencies.@adriansteffan/reactive="*"
-npm i && npm i --prefix backend
-npm link @adriansteffan/reactive
+bun install
+bun link @adriansteffan/reactive
 ```
+
+The linked library would otherwise use React from its own `node_modules`, and two copies of React break hooks. So point the library's React at the project's, from the root of this repo:
+
+```
+rm -rf node_modules/react node_modules/react-dom
+ln -s ../../<project-name>/node_modules/react node_modules/react
+ln -s ../../<project-name>/node_modules/react-dom node_modules/react-dom
+```
+
+Changes to the library then show up in the project's dev server immediately. Running `bun install` in this repo replaces the links with regular copies, so repeat these three commands afterwards.
 
 
 Manually publishing to npm (until we figure out a better ci/cd process):

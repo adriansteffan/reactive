@@ -48,6 +48,7 @@ function MicrophoneSelect({
       .catch((err) => {
         console.error('Error accessing microphone:', err);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- asks for microphone access and picks a default device only once
   }, []);
 
   const handleSelect = (deviceId: string) => {

@@ -1,25 +1,20 @@
-FROM node:20-alpine as frontend-builder
+FROM oven/bun:1-alpine AS build
 WORKDIR /app
-COPY package*.json ./
 
-RUN npm install
+COPY package.json bun.lock* ./
+RUN bun install
 
 COPY . .
-RUN npm run build
+RUN bun run build
 
 
-FROM node:20-alpine
+FROM oven/bun:1-alpine
 WORKDIR /app
 
-COPY backend/package*.json ./
-RUN npm install
+COPY --from=build /app/dist-server ./
+COPY --from=build /app/public ./public
 
-COPY backend/ ./
-RUN npm run build
-RUN npm install -g pm2
-
-COPY --from=frontend-builder /app/dist ./static
-
+ENV NODE_ENV=production
 EXPOSE 8001
 
-CMD ["npx", "pm2-runtime", "./dist/backend.js"]
+CMD ["bun", "server.js"]

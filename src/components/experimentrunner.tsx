@@ -17,7 +17,7 @@ import { useHybridSimulationDisabled } from './experimentprovider';
 import { ThemeContext, t } from '../utils/theme';
 import { AudioDeviceContext } from '../utils/audiodevice';
 import { getOverlays } from '../utils/overlays';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/ids';
 
 import Upload from './upload';
 import Text from './text';
@@ -195,7 +195,6 @@ export default function ExperimentRunner({
   questions = {},
   hybridParticipant,
   disableDev = false,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   simulationConfig: _simulationConfig,
 }: {
   timeline: TimelineItem[];
@@ -294,6 +293,7 @@ export default function ExperimentRunner({
     return totalInstructions > 0 ? instructionPointer / totalInstructions : 0;
   }, [instructionPointer, trialByteCode.instructions]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrolls back to the top whenever a new trial starts
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [instructionPointer]);

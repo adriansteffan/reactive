@@ -1,12 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { BaseComponentProps, getPlatform, isFullscreen } from '../utils/common';
+import { BaseComponentProps, isFullscreen } from '../utils/common';
 import { registerSimulation, noopSimulate } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
 import { registerOverlay, OverlayProps } from '../utils/overlays';
 import Text from '../components/text';
-import { StatusBar } from '@capacitor/status-bar';
-import { ImmersiveMode } from '@adriansteffan/immersive-mode';
-import { Capacitor } from '@capacitor/core';
+import { getNative } from '../utils/native';
 import { useTheme, t } from '../utils/theme';
 
 registerFlattener('EnterFullscreen', 'session');
@@ -175,10 +173,7 @@ export default function EnterFullscreen({
 
     const element = document.documentElement;
 
-    if (getPlatform() === 'mobile' && Capacitor.getPlatform() === 'android') {
-      StatusBar.hide();
-      ImmersiveMode.enable();
-    }
+    getNative()?.enterFullscreen();
 
     if (element.requestFullscreen) {
       try {

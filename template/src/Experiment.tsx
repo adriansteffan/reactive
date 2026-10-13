@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/** biome-ignore-all lint/suspicious/noExplicitAny: trial props and participant state are loosely typed on purpose */
 import { useState, useRef } from 'react';
 import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation, registerFlattener, sampleParticipants, prepareTimeline } from '@adriansteffan/reactive';
 

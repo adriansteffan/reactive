@@ -91,7 +91,7 @@ export default function CanvasBlock({
   propsRef.current = { next, updateStore, styleCanvas, initCanvas };
 
   useEffect(() => {
-    const refreshRate = storeRef.current._reactiveScreenRefreshRate;
+    const refreshRate = store?._reactiveScreenRefreshRate;
     const isValidRefreshRate =
       typeof refreshRate === 'number' && refreshRate >= 20 && refreshRate <= 300;
 
@@ -379,7 +379,7 @@ export default function CanvasBlock({
       }
       if (typeof dim === 'string' && dim.includes('%')) {
         const p = parseFloat(dim);
-        if (!isNaN(p)) {
+        if (!Number.isNaN(p)) {
           return (vpDim * p) / 100;
         }
       }
@@ -498,7 +498,7 @@ export default function CanvasBlock({
       window.removeEventListener('keydown', handleKeyPress);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [timeline, width, height, handleKeyPress, processControlFlow]);
+  }, [width, height, handleKeyPress, processControlFlow]);
 
   return (
     <div

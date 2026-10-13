@@ -20,7 +20,7 @@ bun install
 
 ## Target: Web (Online Experiment)
 
-This is the version of the experiment you should use if your testing devices have internet access and don't need any device-specific functionalities (e.g. sensors). The web version will work on all platforms! The specific targets serve as replacements in situations where a stable internet connection might not be given, or privacy directives prevent you from uploading data to a server (and/or you need device-specific functionality).
+This is the version of the experiment you should use if your testing devices have internet access and don't need any device-specific functionalities (e.g. sensors). The web version will work on all platforms!
 
 ### Development
 
@@ -30,7 +30,7 @@ bun run dev
 
 Open [http://localhost:8001](http://localhost:8001). The page updates as you edit.
 
-`bun run start` serves the production version locally, and `bun run typecheck` and `bun run lint` check the code.
+`bun run start` serves the production version locally, and `bun run typecheck` and `bun run lint` check the code. Linting and formatting use [Biome](https://biomejs.dev/), which has an editor extension.
 
 ### Deployment
 
@@ -132,120 +132,15 @@ bun run transcribe -- --model small     # use a different model
 Output: `transcriptions.csv` in each participant's data directory with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
 
 
-## Target: Android
+## Android and iOS apps
 
-For ease of use, it makes sense to run the web version for most of the development and only switch to the specific device emulators for implementing device-specific features and testing compatibility before packaging.
-
-### Setup
-
-To build and test an Android app containing your experiment, you will need an installation of 
-[Android Studio](https://developer.android.com/studio) and [Java 21 or later](https://www.oracle.com/de/java/technologies/downloads/)
-
-To set up the android project, run this command in the root directory:
-```
-bunx cap add android
-````
-
-Next, find the [path to your local android sdk](https://stackoverflow.com/questions/25176594/android-sdk-location) and create a `local.properties` file in the `android` folder with the following content:
+The experiment can also be packaged as an Android or iOS app that stores data on the device, e.g. for studies without a reliable internet connection. To add this, run
 
 ```
-sdk.dir=SDK_PATH_HERE
+bunx @adriansteffan/reactive native
 ```
 
-If you want to enable file saving for Android versions <= 10, add these lines to the `android/app/main/AndroidManifest.xml`:
-
-```
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"> // this line is already there
-
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    
-    <!-- For Android 10+ (API 29+) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-
-    <application
-        android:requestLegacyExternalStorage="true" // add this to the application tag
-```
-
-For more information, refer to the [Capacitor documentation on Android](https://capacitorjs.com/docs/android)
-
-
-### Running
-
-Whenever you have made changes to the code and want to run it on the Android emulator, run:
-```
-bun run build
-bunx cap sync
-bunx cap run android
-```
-
-### Packaging
-
-From the root directory, run
-
-```
-bunx cap open android
-```
-
-. Wait for Android Studio to install the project dependencies and then run Build > Generate APKs and Bundles > Generate APKs. Once your build is finished, there will be a popup guiding you to the location of the bundle's app that you can transfer to your Android device.
-
-#### Where is my data stored?
-
-In the "Internal Storage" section of the file browser, you will find a "Documents" folder that will contain subfolders with your data as soon as the first participant has finished the experiment.
-
-## Target: iOS
-
-For ease of use, it makes sense to run the web version for most of the development and only switch to the specific device emulators for implementing device-specific features and testing compatibility before packaging.
-
-### Setup
-
-To build an iOS app containing your experiment, you will need a machine running MacOS and an installation of [XCode](https://apps.apple.com/us/app/xcode/id497799835). Furthermore, you will need to install [CocoaPods](https://cocoapods.org/), which is most easily installed with [Homebrew](https://brew.sh/).
-
-To set up the iOS project, run 
-
-```
-bunx cap add ios
-```
-
-Then, go to `ios > App > App > Info.plist`
-
-And add these lines next to the other keys:
-
-```
-<key>UIFileSharingEnabled</key>
-<string>YES</string>
-<key>LSSupportsOpeningDocumentsInPlace</key>
-<string>YES</string>
-```
-
-For more information, refer to the [Capacitor documentation on iOS](https://capacitorjs.com/docs/ios)
-
-### Running
-
-Whenever you have made changes to the code and want to run it on the iOS emulator, run:
-
-```
-bun run build
-bunx cap sync
-bunx cap run ios
-```
-
-### Packaging
-
-Packaging iOS apps is quite an undertaking, which is why the process is not overly streamlined/documented yet. The best way to get your experiment on an iOS device right now is to run
-
-```
-bunx cap run ios
-```
-
-which will open the finished project in XCode. From there, follow a guide on how to sign, bundle and install your app/experiment.
-
-#### Where is my data stored?
-
-After the first participant is run, a folder with the name of your app will appear under "My iPhone/iPad" in the files app, which contains your data.
-
+in the root directory and follow the [setup instructions](https://github.com/adriansteffan/reactive#android-and-ios-apps).
 
 
 ## Authors

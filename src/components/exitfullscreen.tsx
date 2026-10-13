@@ -1,10 +1,8 @@
 import { useCallback, useRef, useEffect } from 'react';
-import { BaseComponentProps, getPlatform, isFullscreen } from '../utils/common';
+import { BaseComponentProps, isFullscreen } from '../utils/common';
 import { registerSimulation, noopSimulate } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
-import { StatusBar } from '@capacitor/status-bar';
-import { ImmersiveMode } from '@adriansteffan/immersive-mode';
-import { Capacitor } from '@capacitor/core';
+import { getNative } from '../utils/native';
 
 registerFlattener('ExitFullscreen', 'session');
 registerSimulation('ExitFullscreen', noopSimulate, {});
@@ -74,10 +72,7 @@ export default function ExitFullscreen({
         return;
       }
       
-      if (getPlatform() === 'mobile' && Capacitor.getPlatform() === 'android') {
-        StatusBar.show();
-        ImmersiveMode.disable();
-      }
+      getNative()?.exitFullscreen();
 
       if (document.exitFullscreen) {
         try {

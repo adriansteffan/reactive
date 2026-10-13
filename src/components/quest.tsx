@@ -26,7 +26,7 @@ registerSimulation('Quest', (trialProps, _experimentState, simulators, participa
   return { responseData, participantState: participant, duration: totalDuration };
 }, {
   answerQuestion: (question: any, participant: any) => {
-    let value;
+    let value: any;
     switch (question.type) {
       case 'rating': {
         const min = question.rateMin ?? 1, max = question.rateMax ?? 5;

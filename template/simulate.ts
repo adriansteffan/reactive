@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactElement } from 'react';
-import { type ExperimentRunner, orchestrateSimulation, simulateParticipant, setBackendUrl, seedDistributions } from '@adriansteffan/reactive';
+import { type ExperimentRunner, type ParticipantState, orchestrateSimulation, simulateParticipant, setBackendUrl, seedDistributions } from '@adriansteffan/reactive';
 import { api } from './server';
 
 function extractProps(ExperimentComponent: () => ReactElement<ComponentProps<typeof ExperimentRunner>>) {
@@ -17,20 +17,20 @@ function extractProps(ExperimentComponent: () => ReactElement<ComponentProps<typ
 // code runs. If participants is a factory function, it is called with the base seed
 // for deterministic generation, then re-seeded per-worker for the simulation.
 if (process.env._REACTIVE_WORKER_INDEX) {
-  const index = parseInt(process.env._REACTIVE_WORKER_INDEX);
+  const index = parseInt(process.env._REACTIVE_WORKER_INDEX, 10);
   const seed = process.env._REACTIVE_SIMULATION_SEED;
-  if (seed) seedDistributions(parseInt(seed) + index);
+  if (seed) seedDistributions(parseInt(seed, 10) + index);
   setBackendUrl(process.env._REACTIVE_BACKEND_URL!);
 
   const { default: Experiment } = await import('./src/Experiment');
   const { timeline, simulationConfig } = extractProps(Experiment);
   const participants = simulationConfig.participants;
 
-  let participant;
+  let participant: ParticipantState;
   if (typeof participants === 'function') {
-    if (seed) seedDistributions(parseInt(seed));
+    if (seed) seedDistributions(parseInt(seed, 10));
     const allParticipants = participants();
-    if (seed) seedDistributions(parseInt(seed) + index);
+    if (seed) seedDistributions(parseInt(seed, 10) + index);
     participant = allParticipants[index];
   } else if (Array.isArray(participants)) {
     participant = participants[index];

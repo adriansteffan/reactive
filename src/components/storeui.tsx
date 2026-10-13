@@ -57,6 +57,35 @@ interface StoreUIProps extends BaseComponentProps {
   saveButtonText?: string;
 }
 
+function validateField(field: FieldConfig, value: any): string | null {
+  if (field.type === 'integer' || field.type === 'float') {
+    if (value === undefined || value === null || value === '') {
+      return 'This field is required';
+    } else if (field.min !== undefined && value < field.min) {
+      return `Value must be at least ${field.min}`;
+    } else if (field.max !== undefined && value > field.max) {
+      return `Value must be at most ${field.max}`;
+    }
+  } else if (field.type === 'string') {
+    if (field.minLength !== undefined && value.length < field.minLength) {
+      return `Must be at least ${field.minLength} characters`;
+    } else if (field.maxLength !== undefined && value.length > field.maxLength) {
+      return `Must be at most ${field.maxLength} characters`;
+    }
+  }
+  
+  if (field.validate) {
+    const validationResult = field.validate(value);
+    if (validationResult !== true && validationResult !== '') {
+      return typeof validationResult === 'string' 
+        ? validationResult 
+        : 'Invalid value';
+    }
+  }
+  
+  return null;
+}
+
 function StoreUI({
   next,
   updateStore,
@@ -82,34 +111,6 @@ function StoreUI({
     setTouched(initialTouched);
   }, [store, fields]);
   
-  const validateField = (field: FieldConfig, value: any): string | null => {
-    if (field.type === 'integer' || field.type === 'float') {
-      if (value === undefined || value === null || value === '') {
-        return 'This field is required';
-      } else if (field.min !== undefined && value < field.min) {
-        return `Value must be at least ${field.min}`;
-      } else if (field.max !== undefined && value > field.max) {
-        return `Value must be at most ${field.max}`;
-      }
-    } else if (field.type === 'string') {
-      if (field.minLength !== undefined && value.length < field.minLength) {
-        return `Must be at least ${field.minLength} characters`;
-      } else if (field.maxLength !== undefined && value.length > field.maxLength) {
-        return `Must be at most ${field.maxLength} characters`;
-      }
-    }
-    
-    if (field.validate) {
-      const validationResult = field.validate(value);
-      if (validationResult !== true && validationResult !== '') {
-        return typeof validationResult === 'string' 
-          ? validationResult 
-          : 'Invalid value';
-      }
-    }
-    
-    return null;
-  };
   
   useEffect(() => {
     const newErrors: Record<string, string> = {};
@@ -259,7 +260,7 @@ function StoreUI({
                   value={values[field.storeKey] || ''}
                   onChange={(e) => {
                     const rawValue = e.target.value;
-                    let parsedValue;
+                    let parsedValue: number | '' | undefined;
                     
                     if (field.type === 'integer') {
                       parsedValue = rawValue === '' ? '' : parseInt(rawValue, 10);
@@ -267,7 +268,7 @@ function StoreUI({
                       parsedValue = rawValue === '' ? '' : parseFloat(rawValue);
                     }
                     
-                    if (rawValue === '' || !isNaN(parsedValue as number)) {
+                    if (rawValue === '' || (typeof parsedValue === 'number' && !Number.isNaN(parsedValue))) {
                       handleChange(field.storeKey, parsedValue);
                     }
                   }}

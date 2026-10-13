@@ -1,19 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '../utils/ids';
 import { post } from '../utils/request';
 import {
   BaseComponentProps,
   FileUpload,
   getParam,
-  getPlatform,
   Platform,
   registerComponentParams,
   Store,
   TrialData,
 } from '../utils/common';
-import { BlobReader, BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { strToU8, zipSync, type Zippable } from 'fflate';
+import { FileBackend, getNative } from '../utils/native';
 import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../utils/upload';
 import { registerSimulation, getBackendUrl, getInitialParticipant } from '../utils/simulation';
 import { uniform } from '../utils/distributions';
@@ -69,11 +67,6 @@ interface UploadPayload {
   files: FileUpload[];
 }
 
-interface UploadResponse {
-  status: number;
-  message?: string;
-}
-
 const UPLOAD_PARAMS = [
   {
     name: 'upload',
@@ -91,94 +84,11 @@ const UPLOAD_PARAMS = [
 registerComponentParams('Upload', UPLOAD_PARAMS);
 
 
-interface FileBackend {
-  directoryExists(path: string): Promise<boolean>;
-  createDirectory(path: string): Promise<void>;
-  saveFile(filename: string, content: string, directory: string): Promise<void>;
-}
-
-const createCapacitorFileBackend = (parentFolder?: string): FileBackend => {
-  const getPath = (path: string): string => {
-    if (!parentFolder) {
-      return path;
-    }
-    return path ? `${parentFolder}/${path}` : parentFolder;
-  };
-
-  return {
-    directoryExists: async (path: string): Promise<boolean> => {
-      try {
-        if (parentFolder) {
-          try {
-            await Filesystem.readdir({
-              path: parentFolder,
-              directory: Directory.Documents,
-            });
-          } catch {
-            // Parent folder doesn't exist, so subpath doesn't exist either
-            return false;
-          }
-        }
-
-        const fullPath = getPath(path);
-        const result = await Filesystem.readdir({
-          path: fullPath,
-          directory: Directory.Documents,
-        });
-        return result.files.length >= 0;
-      } catch {
-        return false;
-      }
-    },
-
-    createDirectory: async (path: string): Promise<void> => {
-      try {
-        if (parentFolder) {
-          try {
-            await Filesystem.mkdir({
-              path: parentFolder,
-              directory: Directory.Documents,
-              recursive: false,
-            });
-          } catch {
-            // Parent directory might already exist, that's fine
-          }
-        }
-
-        const fullPath = getPath(path);
-        await Filesystem.mkdir({
-          path: fullPath,
-          directory: Directory.Documents,
-          recursive: true,
-        });
-      } catch (e) {
-        console.error('Error creating directory:', e);
-        throw e;
-      }
-    },
-
-    saveFile: async (filename: string, content: string, directory: string): Promise<void> => {
-      const fullDirectory = getPath(directory);
-
-      await Filesystem.writeFile({
-        path: `${fullDirectory}/${filename}`,
-        data: content,
-        directory: Directory.Documents,
-        encoding: 'utf8' as Encoding,
-      });
-    },
-  };
-};
-
 const getFileBackend = (parentDir?: string): { backend: FileBackend | null; type: Platform } => {
-  const platform = getPlatform();
-
-  switch (platform) {
-    case 'mobile':
-      return { backend: createCapacitorFileBackend(parentDir), type: platform };
-    case 'web':
-      return { backend: null, type: platform };
-  }
+  const native = getNative();
+  return native
+    ? { backend: native.createFileBackend(parentDir), type: 'mobile' }
+    : { backend: null, type: 'web' };
 };
 
 // Function to generate a unique directory name
@@ -241,37 +151,19 @@ export default function Upload({
   const shouldUpload = getParam(uploadParam.name, uploadParam.defaultValue, uploadParam.type);
   const shouldDownload = getParam(downloadParam.name, downloadParam.defaultValue, downloadParam.type);
 
-  const uploadData = useMutation({
-    mutationFn: async (body: any) => {
-      const response = await post('/data', body);
-      return response as UploadResponse;
-    },
-    onSuccess: (res: UploadResponse) => {
-      if (res.status === 200) {
-        setUploadState('success');
-        next({});
-      } else {
-        setUploadState('error');
-      }
-    },
-    onError: () => {
-      setUploadState('error');
-    },
-  });
-
   const downloadFiles = useCallback(async (files: FileUpload[]) => {
-    const zipWriter = new ZipWriter(new BlobWriter());
-
+    const entries: Zippable = {};
     for (const file of files) {
       if (file.encoding === 'base64') {
+        // Recordings are already compressed, so they are stored as they are
         const binary = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0));
-        await zipWriter.add(file.filename, new BlobReader(new Blob([binary])));
+        entries[file.filename] = [binary, { level: 0 }];
       } else {
-        await zipWriter.add(file.filename, new TextReader(file.content));
+        entries[file.filename] = strToU8(file.content);
       }
     }
 
-    const blob = await zipWriter.close();
+    const blob = new Blob([zipSync(entries)], { type: 'application/zip' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -324,7 +216,13 @@ export default function Upload({
       const { backend, type } = getFileBackend(androidFolderName);
 
       if (type === 'web') {
-        uploadData.mutate(payload);
+        const response = await post('/data', payload);
+        if (response.ok) {
+          setUploadState('success');
+          next({});
+        } else {
+          setUploadState('error');
+        }
       } else if (backend) {
         try {
           const uniqueSessionID = await getUniqueDirectoryName(backend, sessionIDUpload);
@@ -355,7 +253,6 @@ export default function Upload({
     shouldUpload,
     downloadFiles,
     next,
-    uploadData,
     store,
     sessionData,
     androidFolderName,
@@ -380,7 +277,7 @@ export default function Upload({
   return (
     <div className={`${centered ? 'flex items-center justify-center' : ''} ${containerClass ?? th.containerBg}`} style={{ position: 'fixed', inset: 0 }}>
     <div className={`flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10 h-full ${th.text} ${className ?? ''}`}>
-      {uploadState == 'initial' && !autoUpload && (
+      {uploadState === 'initial' && !autoUpload && (
         <>
           {content ?? <p>Thank you for participating! Please click the button below to submit your data.</p>}
           <button onClick={handleUpload} className={`mt-8 ${btnClass}`}>
@@ -388,7 +285,7 @@ export default function Upload({
           </button>
         </>
       )}
-      {uploadState == 'uploading' && (
+      {uploadState === 'uploading' && (
         <>
           {uploadingContent ?? <>
             <div className='w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin'></div>
@@ -396,9 +293,9 @@ export default function Upload({
           </>}
         </>
       )}
-      {uploadState == 'success' && <></>}
+      {uploadState === 'success' && <></>}
 
-      {uploadState == 'error' && (
+      {uploadState === 'error' && (
         <>
           {errorContent ?? <div className={`${th.error} mb-4`}>
             <p>Sorry, there was an error uploading your data.</p>

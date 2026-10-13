@@ -1,9 +1,8 @@
-import { BaseComponentProps, getPlatform } from '../utils/common';
+import { BaseComponentProps } from '../utils/common';
 import { useEffect, useState } from 'react';
 import { registerSimulation, noopSimulate } from '../utils/simulation';
 import { registerFlattener } from '../utils/upload';
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { Capacitor } from '@capacitor/core';
+import { getNative } from '../utils/native';
 
 registerFlattener('RequestFilePermission', null);
 registerSimulation('RequestFilePermission', noopSimulate, {});
@@ -15,32 +14,11 @@ export default function RequestFilePermission({ next }: BaseComponentProps) {
     if (permissionStatus !== 'checking') return;
     
     const checkPermission = async () => {
-      if (getPlatform() !== 'mobile' || Capacitor.getPlatform() !== 'android') {
-        next({});
-        return;
-      }
-      
-      try {
-        await Filesystem.writeFile({
-          path: 'permission_check.txt',
-          data: 'Testing permissions',
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8
-        });
-        
-        try {
-          await Filesystem.deleteFile({
-            path: 'permission_check.txt',
-            directory: Directory.Documents
-          });
-        } catch (e) {
-          console.log('Cleanup error:', e);
-        }
-        
+      const native = getNative();
+      if (!native || (await native.canWriteFiles())) {
         setPermissionStatus('granted');
         next({});
-      } catch (error) {
-        console.error('Permission denied or error:', error);
+      } else {
         setPermissionStatus('denied');
       }
     };

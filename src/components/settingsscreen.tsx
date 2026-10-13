@@ -157,7 +157,7 @@ export const SettingsScreen = ({
           // Try to determine the type
           if (value === 'true' || value === 'false') {
             paramType = 'boolean';
-          } else if (!isNaN(Number(value))) {
+          } else if (!Number.isNaN(Number(value))) {
             paramType = 'number';
           } else {
             try {
@@ -192,7 +192,7 @@ export const SettingsScreen = ({
       if (isExcludeMode) {
         allParams['excludeSubset'] = selectedTrials.sort().join(',');
         delete allParams['includeSubset'];
-      } else if (selectedTrials.length != timelineRepresentation.length) {
+      } else if (selectedTrials.length !== timelineRepresentation.length) {
         allParams['includeSubset'] = selectedTrials.sort().join(',');
         delete allParams['excludeSubset'];
       }

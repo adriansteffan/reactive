@@ -1,8 +1,6 @@
 import 'react-toastify/dist/ReactToastify.min.css';
 import { ToastContainer } from 'react-toastify';
 
-const queryClient = new QueryClient();
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, ReactNode, useContext, useEffect } from 'react';
 import { SettingsScreen } from './settingsscreen';
 import { Param } from '../utils/common';
@@ -44,7 +42,7 @@ export default function ExperimentProvider({ children, disableSettings, disableH
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       <HybridSimulationContext.Provider value={parseBooleanProp(disableHybridSimulation)}>
       {children}
       </HybridSimulationContext.Provider>
@@ -64,6 +62,6 @@ export default function ExperimentProvider({ children, disableSettings, disableH
         }
         bodyClassName='text-black font-sans'
       />
-    </QueryClientProvider>
+    </>
   );
 }

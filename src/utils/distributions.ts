@@ -1,27 +1,141 @@
-import mt19937 from '@stdlib/random-base-mt19937';
-import normalFactory from '@stdlib/random-base-normal';
-import poissonFactory from '@stdlib/random-base-poisson';
-import uniformFactory from '@stdlib/random-base-uniform';
-import normalQuantile from '@stdlib/stats-base-dists-normal-quantile';
-import poissonQuantile from '@stdlib/stats-base-dists-poisson-quantile';
-import generateHalton from 'halton';
-
 // --- Pseudorandom samplers (seedable) ---
 
-let normal: (mu: number, sigma: number) => number = normalFactory;
-let poisson: (lambda: number) => number = poissonFactory;
-let uniform: (min: number, max: number) => number = uniformFactory;
-
-interface StdlibPRNG {
-  normalized: () => number;
+// Mersenne Twister MT19937, Matsumoto & Nishimura (1998), https://doi.org/10.1145/272991.272995
+// Returns the generator's 32-bit integer stream.
+function mt19937(seed: number): () => number {
+  const state = new Uint32Array(624);
+  let index = 624;
+  state[0] = seed;
+  for (let i = 1; i < 624; i++) {
+    state[i] = Math.imul(1812433253, state[i - 1] ^ (state[i - 1] >>> 30)) + i;
+  }
+  return () => {
+    if (index === 624) {
+      for (let i = 0; i < 624; i++) {
+        const y = (state[i] & 0x80000000) | (state[(i + 1) % 624] & 0x7fffffff);
+        state[i] = state[(i + 397) % 624] ^ (y >>> 1) ^ (y & 1 ? 0x9908b0df : 0);
+      }
+      index = 0;
+    }
+    let y = state[index++];
+    y ^= y >>> 11;
+    y ^= (y << 7) & 0x9d2c5680;
+    y ^= (y << 15) & 0xefc60000;
+    y ^= y >>> 18;
+    return y >>> 0;
+  };
 }
 
+// Uniform in [0, 1) with 53-bit resolution, as in the reference genrand_res53
+function unitFromMt19937(next: () => number): () => number {
+  return () => ((next() >>> 5) * 67108864 + (next() >>> 6)) / 9007199254740992;
+}
+
+let random: () => number = Math.random;
+
 function seedDistributions(seed: number): void {
-  const prng = mt19937.factory({ seed }) as unknown as StdlibPRNG;
-  normal = normalFactory.factory({ prng: prng.normalized });
-  poisson = poissonFactory.factory({ prng: prng.normalized });
-  uniform = uniformFactory.factory({ prng: prng.normalized });
-  Math.random = () => uniform(0, 1);
+  random = unitFromMt19937(mt19937(seed));
+  Math.random = random;
+}
+
+function uniform(min: number, max: number): number {
+  return min + (max - min) * random();
+}
+
+// Box-Muller transform; 1 - random() lies in (0, 1], so the logarithm stays finite
+function normal(mu: number, sigma: number): number {
+  const radius = Math.sqrt(-2 * Math.log(1 - random()));
+  return mu + sigma * radius * Math.cos(2 * Math.PI * random());
+}
+
+// Knuth's multiplication method. exp(-lambda) underflows for large means, so those are drawn
+// as a sum of smaller Poisson draws, which is again Poisson distributed.
+function poisson(lambda: number): number {
+  if (!(lambda >= 0)) return NaN;
+  let count = 0;
+  for (let remaining = lambda; remaining > 0; remaining -= 500) {
+    const limit = Math.exp(-Math.min(remaining, 500));
+    let product = random();
+    while (product > limit) {
+      count++;
+      product *= random();
+    }
+  }
+  return count;
+}
+
+// --- Quantile functions ---
+
+// Evaluates c[0] + c[1] x + c[2] x^2 + ... (Horner's method)
+function polynomial(coefficients: number[], x: number): number {
+  return coefficients.reduceRight((sum, c) => sum * x + c, 0);
+}
+
+// Wichura (1988), Algorithm AS 241 (PPND16), https://doi.org/10.2307/2347330
+// Accurate to about 1e-16 on the open interval (0, 1).
+const AS241_CENTRAL = [
+  [
+    3.3871328727963665, 133.14166789178438, 1971.5909503065513, 13731.69376550946,
+    45921.95393154987, 67265.7709270087, 33430.57558358813, 2509.0809287301227,
+  ],
+  [
+    1, 42.31333070160091, 687.1870074920579, 5394.196021424751, 21213.794301586597,
+    39307.89580009271, 28729.085735721943, 5226.495278852854,
+  ],
+];
+const AS241_INTERMEDIATE = [
+  [
+    1.4234371107496835, 4.630337846156546, 5.769497221460691, 3.6478483247632045,
+    1.2704582524523684, 0.2417807251774506, 0.022723844989269184,
+    0.0007745450142783414,
+  ],
+  [
+    1, 2.053191626637759, 1.6763848301838038, 0.6897673349851,
+    0.14810397642748008, 0.015198666563616457, 0.0005475938084995345,
+    1.0507500716444169e-9,
+  ],
+];
+const AS241_TAIL = [
+  [
+    6.657904643501103, 5.463784911164114, 1.7848265399172913, 0.29656057182850487,
+    0.026532189526576124, 0.0012426609473880784, 0.000027115555687434876,
+    2.0103343992922881e-7,
+  ],
+  [
+    1, 0.599832206555888, 0.1369298809227358, 0.014875361290850615,
+    0.0007868691311456133, 0.000018463183175100548, 1.421511758316446e-7,
+    2.0442631033899397e-15,
+  ],
+];
+
+function standardNormalQuantile(p: number): number {
+  const q = p - 0.5;
+  if (Math.abs(q) <= 0.425) {
+    const r = 0.180625 - q * q;
+    return (q * polynomial(AS241_CENTRAL[0], r)) / polynomial(AS241_CENTRAL[1], r);
+  }
+  const r = Math.sqrt(-Math.log(q < 0 ? p : 1 - p));
+  const [numerator, denominator] = r <= 5 ? AS241_INTERMEDIATE : AS241_TAIL;
+  const shifted = r <= 5 ? r - 1.6 : r - 5;
+  const x = polynomial(numerator, shifted) / polynomial(denominator, shifted);
+  return q < 0 ? -x : x;
+}
+
+// Smallest k with P(X <= k) >= p. The probability mass is summed in log space so that large
+// means don't underflow. In double precision the sum is accurate to about 1e-11 for means in
+// the thousands, so a p closer than that to a step of the distribution can land one off.
+function poissonQuantile(p: number, lambda: number): number {
+  if (lambda === 0) return 0;
+  const logLambda = Math.log(lambda);
+  let logMass = -lambda;
+  let cumulative = 0;
+  for (let k = 0; ; k++) {
+    if (k > 0) logMass += logLambda - Math.log(k);
+    const mass = Math.exp(logMass);
+    cumulative += mass;
+    // Past the mode, a mass of zero means rounding kept the sum just below p
+    if (cumulative >= p || (k > lambda && mass === 0)) return k;
+  }
 }
 
 // --- QMC dimension specs ---
@@ -44,7 +158,7 @@ function resolveTransform(spec: DimensionSpec): (unitValue: number) => number {
     case 'uniform':
       return (u) => spec.min + u * (spec.max - spec.min);
     case 'normal':
-      return (u) => normalQuantile(clampUnit(u), spec.mean, spec.sd);
+      return (u) => spec.mean + spec.sd * standardNormalQuantile(clampUnit(u));
     case 'poisson':
       // QMC variance reduction is less effective on discrete distributions
       // due to integer clumping at quantile boundaries.
@@ -148,6 +262,16 @@ function generateSobol(count: number, dimensions: number): number[][] {
 
 // --- Halton sequence ---
 // Halton (1960), https://doi.org/10.1007/BF01386213
+function radicalInverse(index: number, base: number): number {
+  let result = 0;
+  let fraction = 1 / base;
+  for (let i = index; i > 0; i = Math.floor(i / base)) {
+    result += fraction * (i % base);
+    fraction /= base;
+  }
+  return result;
+}
+
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73];
 const HALTON_MAX_EFFECTIVE_DIMS = 6;
 
@@ -162,8 +286,8 @@ function halton(count: number, specs: DimensionSpec[]): number[] | number[][] {
     console.warn(`Halton sequence quality degrades above ${HALTON_MAX_EFFECTIVE_DIMS} dimensions. Consider using sobol() instead.`);
   }
   const bases = PRIMES.slice(0, specs.length);
-  // Generate count+1 and skip the first point (always zero in every dimension)
-  const unitPoints = (generateHalton(count + 1, bases) as number[][]).slice(1);
+  // Start at index 1, since the first point is zero in every dimension
+  const unitPoints = Array.from({ length: count }, (_, i) => bases.map((base) => radicalInverse(i + 1, base)));
   return transformPoints(unitPoints, specs);
 }
 
@@ -211,4 +335,6 @@ function draw(spec: DimensionSpec): number {
 }
 
 export { normal, poisson, uniform, seedDistributions, sobol, halton, sampleParticipants, draw };
+// Exported for the tests, not part of the public API
+export { mt19937, standardNormalQuantile, poissonQuantile, radicalInverse };
 export type { DimensionSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod };

@@ -32,6 +32,7 @@ export default function ProlificEnding({
         link:{' '}
         <a
           target='_blank'
+            rel='noopener noreferrer'
           className='text-blue-400'
           href={`https://app.prolific.com/submissions/complete?cc=${prolificCodeUsed}`}
         >

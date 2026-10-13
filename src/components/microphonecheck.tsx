@@ -25,11 +25,14 @@ function MicrophoneSelect({
   const [selectedMic, setSelectedMic] = useState<string>('');
   const [isOpen, setIsOpen] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asks for microphone access and picks a default device only once
   useEffect(() => {
     navigator.mediaDevices
       .getUserMedia({ audio: true })
       .then((stream) => {
-        stream.getTracks().forEach((track) => track.stop());
+        stream.getTracks().forEach((track) => {
+          track.stop();
+        });
         navigator.mediaDevices.enumerateDevices().then((devices) => {
           const mics = devices
             .filter((device) => device.kind === 'audioinput')
@@ -48,7 +51,6 @@ function MicrophoneSelect({
       .catch((err) => {
         console.error('Error accessing microphone:', err);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- asks for microphone access and picks a default device only once
   }, []);
 
   const handleSelect = (deviceId: string) => {

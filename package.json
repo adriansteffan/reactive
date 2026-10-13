@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc",
-    "lint": "eslint . --report-unused-disable-directives --max-warnings 0"
+    "typecheck": "bun check",
+    "lint": "biome lint --error-on-warnings"
   },
   "bin": {
     "create-reactive-experiment": "bin/setup.js",
@@ -20,7 +20,8 @@
   "exports": {
     ".": "./src/mod.tsx",
     "./style.css": "./src/index.css",
-    "./bun-plugin": "./src/bun-plugin.ts"
+    "./bun-plugin": "./src/bun-plugin.ts",
+    "./native": "./src/native.ts"
   },
   "author": "Adrian Steffan",
   "license": "MIT",
@@ -28,43 +29,46 @@
     "url": "https://github.com/adriansteffan/reactive/issues"
   },
   "dependencies": {
-    "@adriansteffan/immersive-mode": "^0.0.1",
-    "@capacitor/core": "^7.0.1",
-    "@capacitor/filesystem": "^7.0.0",
-    "@capacitor/status-bar": "^7.0.0",
-    "@stdlib/random-base-mt19937": "^0.2.3",
-    "@stdlib/random-base-normal": "^0.2.2",
-    "@stdlib/random-base-poisson": "^0.2.2",
-    "@stdlib/random-base-uniform": "^0.2.3",
-    "@stdlib/stats-base-dists-normal-quantile": "^0.3.1",
-    "@stdlib/stats-base-dists-poisson-quantile": "^0.2.3",
-    "@tanstack/react-query": "^5.61.3",
-    "@zip.js/zip.js": "^2.7.53",
-    "halton": "^1.0.0",
+    "fflate": "^0.8.3",
     "motion": "^12.38.0",
     "react-icons": "^5.1.0",
     "react-toastify": "^10.0.6",
     "survey-core": "^2.4.1",
-    "survey-react-ui": "^2.4.1",
-    "uuid": "^11.0.3"
+    "survey-react-ui": "^2.4.1"
   },
   "peerDependencies": {
+    "@adriansteffan/immersive-mode": "^0.0.1",
+    "@capacitor/core": "^7.0.1",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwindcss": "^4.0.9"
   },
+  "peerDependenciesMeta": {
+    "@adriansteffan/immersive-mode": {
+      "optional": true
+    },
+    "@capacitor/core": {
+      "optional": true
+    },
+    "@capacitor/filesystem": {
+      "optional": true
+    },
+    "@capacitor/status-bar": {
+      "optional": true
+    }
+  },
   "devDependencies": {
-    "@eslint/js": "^9.39.5",
+    "@adriansteffan/immersive-mode": "^0.0.1",
+    "@biomejs/biome": "^2.5.15",
+    "@capacitor/core": "^7.0.1",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
     "@types/bun": "^1.4.3",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
-    "eslint": "^9.0.0",
-    "eslint-plugin-react-hooks": "^5.0.0",
-    "globals": "^17.13.0",
-    "prettier": "3.2.5",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "typescript": "^5.2.2",
-    "typescript-eslint": "^8.71.2"
+    "react-dom": "^18.2.0"
   }
 }

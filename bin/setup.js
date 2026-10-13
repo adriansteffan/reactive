@@ -66,7 +66,7 @@ async function main() {
       process.exit(1);
     }
 
-    copyDir(templatePath, projectPath, ['package.json','capacitor.config.js','node_modules']);
+    copyDir(templatePath, projectPath, ['package.json','node_modules']);
 
     const templatePackageJsonPath = join(templatePath, 'package.json');
     if (!existsSync(templatePackageJsonPath)) {
@@ -78,18 +78,6 @@ async function main() {
     packageJsonContent = packageJsonContent.replace(/PROJECT_NAME/g, projectName).replace(/RP_VERSION/g, version);
 
     writeFileSync(join(projectPath, 'package.json'), packageJsonContent);
-
-
-    const templateCapacitorPath = join(templatePath, 'capacitor.config.ts');
-    if (!existsSync(templateCapacitorPath)) {
-      console.error('Template capacitor.config.ts not found');
-      process.exit(1);
-    }
-
-    let capacitorContent = readFileSync(templateCapacitorPath, 'utf8');
-    capacitorContent = capacitorContent.replace(/PROJECT_NAME/g, projectName);
-
-    writeFileSync(join(projectPath, 'capacitor.config.ts'), capacitorContent);
 
     console.log(`
 Project ${projectName} created successfully!
@@ -109,4 +97,9 @@ To get started:
   }
 }
 
-main();
+if (process.argv[2] === 'native') {
+  rl.close();
+  await import('./native.js');
+} else {
+  main();
+}

@@ -942,11 +942,11 @@ export const RandomDotKinematogram = (rawProps: RDKProps) => {
   const initialRefreshRate = store?._reactiveScreenRefreshRate;
 
   // Pre-trial message timer
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the message is shown once per trial, a new props object must not restart it
   useEffect(() => {
     if (!rawProps.preTrialMessage) return;
     const timer = setTimeout(() => setPreTrialDone(true), rawProps.preTrialMessage.duration);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the message is shown once per trial, a new props object must not restart it
   }, []);
 
   const endTrial = useCallback((key: string | null, rt: number | null) => {

@@ -22,4 +22,4 @@ export { simulateDDMTrial, mapDDMChoice } from './utils/ddm';
 export type { DDMTrialParams, DDMTrialResult, ParameterDef, NormalDist, UniformDist, BoundaryDef, CollapseDef, PostStimStrategyDef, ContinueStrategy, CollapseStrategy, SnapshotStrategy } from './utils/ddm';
 export * from './components';
 
-export * from 'react-toastify';
+export { toast } from 'react-toastify';

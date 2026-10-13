@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { getNative } from './native';
 
 
 export function now(){
@@ -100,7 +100,7 @@ export function getParam<T extends ParamType>(
     string: (v) => v,
     number: (v) => {
       const num = Number(v);
-      return isNaN(num) ? defaultValue : num;
+      return Number.isNaN(num) ? defaultValue : num;
     },
     boolean: (v) => v.toLowerCase() === 'true',
     array: (v) => {
@@ -181,13 +181,7 @@ export class Param {
 
 export type Platform = 'mobile' | 'web';
 
-export const getPlatform = (): Platform => {
-  if (Capacitor.isNativePlatform()) {
-    return 'mobile';
-  } else {
-    return 'web';
-  }
-};
+export const getPlatform = (): Platform => (getNative() ? 'mobile' : 'web');
 
 const providedComponentParams: Record<string, any> = {};
 
@@ -236,7 +230,7 @@ export function prepareTimeline(experiment: any[], options: { subset?: boolean }
     experimentFiltered = experimentFiltered.filter((item, index) => {
       const positionMatch = includeItems.some((val: string) => {
         const num = parseInt(val, 10);
-        return !isNaN(num) && num - 1 === index;
+        return !Number.isNaN(num) && num - 1 === index;
       });
       const nameMatch = item.name && includeItems.includes(item.name);
       return positionMatch || nameMatch;
@@ -248,7 +242,7 @@ export function prepareTimeline(experiment: any[], options: { subset?: boolean }
     experimentFiltered = experimentFiltered.filter((item, index) => {
       const positionMatch = excludeItems.some((val: string) => {
         const num = parseInt(val, 10);
-        return !isNaN(num) && num - 1 === index;
+        return !Number.isNaN(num) && num - 1 === index;
       });
       const nameMatch = item.name && excludeItems.includes(item.name);
       return !(positionMatch || nameMatch);

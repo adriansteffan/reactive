@@ -15,9 +15,8 @@ const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ s
 
   useEffect(() => {
     if (!stream || !canvasRef.current) return;
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    //@ts-ignore
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const AudioContextClass = window.AudioContext ?? (window as any).webkitAudioContext;
+    const audioContext = new AudioContextClass();
     const analyser = audioContext.createAnalyser();
     const source = audioContext.createMediaStreamSource(stream);
 
@@ -115,7 +114,6 @@ export interface VoiceRecorderProps {
 }
 
 export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>(({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   question: _question,
   handleSaveVoiceData,
   handleDiscardVoiceData,
@@ -156,7 +154,9 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
     const recorder = mediaRecorderRef.current;
     if (recorder && (recorder.state === 'recording' || recorder.state === 'paused')) {
       recorder.stop();
-      recorder.stream.getTracks().forEach((track) => track.stop());
+      recorder.stream.getTracks().forEach((track) => {
+        track.stop();
+      });
       setIsRecording(false);
       setIsPaused(false);
       clearTimer();
@@ -295,7 +295,9 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
       chunksRef.current = [];
       recorder.onstop = null;
       recorder.stop();
-      recorder.stream.getTracks().forEach((track) => track.stop());
+      recorder.stream.getTracks().forEach((track) => {
+        track.stop();
+      });
     }
     setIsRecording(false);
     setIsPaused(false);

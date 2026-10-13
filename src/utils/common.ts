@@ -18,10 +18,6 @@ export function isFullscreen(): boolean {
   return Math.abs(window.outerHeight - window.innerHeight) < 5;
 }
 
-export function isDesktop() {
-  return (window as any).electronAPI !== undefined;
-}
-
 // Generic type for all data structures
 export interface TrialData {
   index: number;
@@ -183,12 +179,10 @@ export class Param {
   }
 }
 
-export type Platform = 'desktop' | 'mobile' | 'web';
+export type Platform = 'mobile' | 'web';
 
 export const getPlatform = (): Platform => {
-  if ((window as any).electronAPI) {
-    return 'desktop';
-  } else if (Capacitor.isNativePlatform()) {
+  if (Capacitor.isNativePlatform()) {
     return 'mobile';
   } else {
     return 'web';

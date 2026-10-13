@@ -97,23 +97,6 @@ interface FileBackend {
   saveFile(filename: string, content: string, directory: string): Promise<void>;
 }
 
-const createElectronFileBackend = (): FileBackend => {
-  const electronAPI = (window as any).electronAPI;
-
-  return {
-    directoryExists: async (path: string): Promise<boolean> => {
-      const result = await electronAPI.directoryExists(path);
-      return result.success && result.exists;
-    },
-    createDirectory: async (path: string): Promise<void> => {
-      await electronAPI.createDirectory(path);
-    },
-    saveFile: async (filename: string, content: string, directory: string): Promise<void> => {
-      await electronAPI.saveFile(filename, content, directory);
-    },
-  };
-};
-
 const createCapacitorFileBackend = (parentFolder?: string): FileBackend => {
   const getPath = (path: string): string => {
     if (!parentFolder) {
@@ -191,8 +174,6 @@ const getFileBackend = (parentDir?: string): { backend: FileBackend | null; type
   const platform = getPlatform();
 
   switch (platform) {
-    case 'desktop':
-      return { backend: createElectronFileBackend(), type: platform };
     case 'mobile':
       return { backend: createCapacitorFileBackend(parentDir), type: platform };
     case 'web':

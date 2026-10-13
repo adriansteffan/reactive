@@ -5,44 +5,6 @@
   "author": "",
   "description": "",
   "type": "module",
-  "main": "dist-electron/main/index.js",
-  "build": {
-    "appId": "",
-    "productName": "PROJECT_NAME",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist-electron",
-      "dist"
-    ],
-    "mac": {
-      "category": "public.app-category.utilities"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility"
-    }
-  },
   "scripts": {
     "dev": "vite",
     "backend": "npm run dev --prefix backend",
@@ -54,12 +16,7 @@
     "test": "vitest --silent=false",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "rp-dev-pull": "npm link @adriansteffan/reactive",
-    "electron:dev": "NODE_ENV=development electron-vite dev",
-    "electron:build": "vite build && electron-vite build",
-    "electron:preview": "electron-vite preview",
-    "package:win": "electron-vite build && electron-builder --win",
-    "package:mac": "electron-vite build && electron-builder --mac"
+    "rp-dev-pull": "npm link @adriansteffan/reactive"
   },
   "dependencies": {
     "@adriansteffan/reactive": "RP_VERSION",
@@ -90,9 +47,6 @@
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.2",
-    "electron": "^35.0.0",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^3.0.0",
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",

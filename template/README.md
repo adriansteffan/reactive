@@ -170,45 +170,6 @@ npm run transcribe -- --model small     # use a different model
 Output: `transcriptions.csv` in each participant's data directory with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
 
 
-## Target: Windows or MacOS
-
-### Development
-
-The desktop version of the experiment needs no additional setup for development.
-
-Run the app in the development mode with
-
-```
-npm run electron:dev
-```
-in the root directory.
-
-### Packaging
-
-To build platform specific executables, run either
-
-```
-npm run package:mac
-```
-
-or 
-
-```
-npm run package:win
-```
-
-There will be a directory called "release" that will contain your executables.
-
-#### Where is my data stored?
-
-* Windows:
-    * On windows, a folder called "data" is created next the executable as soon as the first participant has completed the study
-
-* MacOS:
-    * Right click on the application and go to TODO > TODO > TODO, where a folder called "data" is created as soon as the first participant has completed the study
-
-
-
 ## Target: Android
 
 For ease of use, it makes sense to run the web version for most of the development and only switch to the specific device emulators for implementing device-specific features and testing compatibility before packaging.

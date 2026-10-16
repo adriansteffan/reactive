@@ -1,26 +1,9 @@
-import { BaseComponentProps } from '../mod';
+import { BaseComponentProps } from '../core/component';
 import { useEffect, useRef, useState } from 'react';
-import { registerSimulation } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
-import { useTheme, t } from '../utils/theme';
+import { defineComponent } from '../core/component';
+import { useTheme, t } from '../runner/theme';
 
-registerFlattener('CheckDevice', 'session');
-
-registerSimulation('CheckDevice', (_trialProps, _experimentState, _simulators, participant) => {
-  const deviceInfo = {
-    windowWidth: 1920, windowHeight: 1080, screenWidth: 1920, screenHeight: 1080,
-    browser: 'Simulated', browserVersion: '1.0', isMobile: false,
-    operatingSystem: 'Simulated', hasWebAudio: true, hasFullscreen: true,
-    hasWebcam: true, hasMicrophone: true,
-  };
-  return {
-    responseData: deviceInfo,
-    participantState: participant,
-    storeUpdates: { _reactiveDeviceInfo: deviceInfo },
-  };
-}, {});
-
-interface DeviceInfo {
+export interface DeviceInfo {
   windowWidth: number;
   windowHeight: number;
   screenWidth: number;
@@ -38,14 +21,12 @@ interface DeviceInfo {
 function CheckDevice({
   check,
   content = <div>Your device doesn't meet the requirements for this experiment.</div>,
-  data,
-  store,
-  updateStore,
   next,
 }: {
-  check: (deviceInfo: DeviceInfo, data: any, store: any) => boolean;
+  /** Whether the device fits the study. Without it, every device does. */
+  check?: (deviceInfo: DeviceInfo) => boolean;
   content?: React.ReactNode;
-} & BaseComponentProps) {
+} & BaseComponentProps<DeviceInfo>) {
   const [showContent, setShowContent] = useState<boolean>(false);
 
   const hasNavigatedRef = useRef(false);
@@ -150,9 +131,7 @@ function CheckDevice({
         hasMicrophone,
       };
 
-      updateStore({ _reactiveDeviceInfo: deviceInfo });
-
-      const checkResult = check ? check(deviceInfo, data, store) : true;
+      const checkResult = check ? check(deviceInfo) : true;
 
       if (checkResult && !hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
@@ -163,7 +142,7 @@ function CheckDevice({
     };
 
     gatherDeviceInfo();
-  }, [check, data, store, updateStore, next]);
+  }, [check, next]);
 
   const th = t(useTheme());
 
@@ -178,4 +157,17 @@ function CheckDevice({
   ) : null;
 }
 
-export default CheckDevice;
+export default defineComponent({
+  name: 'CheckDevice',
+  component: CheckDevice,
+  csv: 'session',
+  simulate: () => {
+    const deviceInfo = {
+      windowWidth: 1920, windowHeight: 1080, screenWidth: 1920, screenHeight: 1080,
+      browser: 'Simulated', browserVersion: '1.0', isMobile: false,
+      operatingSystem: 'Simulated', hasWebAudio: true, hasFullscreen: true,
+      hasWebcam: true, hasMicrophone: true,
+    };
+    return { responseData: deviceInfo };
+  },
+});

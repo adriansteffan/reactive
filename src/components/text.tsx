@@ -1,24 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { BaseComponentProps, now } from '../mod';
-import { registerSimulation } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
+import { BaseComponentProps } from '../core/component';
+import { now } from '../utils/time';
+import { defineComponent } from '../core/component';
 import { uniform } from '../utils/distributions';
-import { useTheme, t } from '../utils/theme';
+import { useTheme, t } from '../runner/theme';
 
-registerFlattener('Text', 'text');
-
-registerSimulation('Text', (trialProps, _experimentState, simulators, participant) => {
-  if (trialProps.duration != null) {
-    return { responseData: {}, participantState: participant, duration: trialProps.duration };
-  }
-  const result = simulators.respond(trialProps, participant);
-  return { responseData: result.value, participantState: result.participantState, duration: result.value.reactionTime };
-}, {
-  respond: (_input: any, participant: any) => ({
-    value: { key: 'button', time: Date.now(), reactionTime: uniform(500, 2000) },
-    participantState: participant,
-  }),
-});
+/** Which key or the button ended the screen. Screens with a duration record nothing. */
+export type TextResponse = { key?: string; reactionTimeMs?: number };
 
 function Text({
   content,
@@ -28,23 +16,22 @@ function Text({
   centered = false,
   next,
   animate = false,
-  allowedKeys = false,
-  duration,
+  allowedResponseKeys = false,
+  durationMs,
 }: {
-  content: React.ReactNode;
+  content?: React.ReactNode;
   buttonText?: string;
-  onButtonClick?: () => void;
   className?: string;
   containerClass?: string;
   centered?: boolean;
   animate?: boolean;
-  allowedKeys?: string[] | boolean;
-  /** Auto-advance after N ms. When set, no button is shown and key presses are ignored. */
-  duration?: number;
-} & BaseComponentProps) {
+  allowedResponseKeys?: string[] | boolean;
+  /** Auto-advance after this many milliseconds. When set, no button is shown and key presses are ignored. */
+  durationMs?: number;
+} & BaseComponentProps<TextResponse>) {
   const th = t(useTheme());
   const startTimeRef = useRef<number>(0);
-  const timed = duration != null;
+  const timed = durationMs != null;
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -52,9 +39,9 @@ function Text({
 
   useEffect(() => {
     if (!timed) return;
-    const timer = setTimeout(() => next({}), duration);
+    const timer = setTimeout(() => next({}), durationMs);
     return () => clearTimeout(timer);
-  }, [timed, duration, next]);
+  }, [timed, durationMs, next]);
 
   useEffect(() => {
     if (timed) return;
@@ -64,41 +51,33 @@ function Text({
       const keypressTime = now();
 
       const isKeyAllowed =
-        allowedKeys === true || (Array.isArray(allowedKeys) && allowedKeys.includes(event.key));
+        allowedResponseKeys === true || (Array.isArray(allowedResponseKeys) && allowedResponseKeys.includes(event.key));
 
       if (isKeyAllowed) {
         event.preventDefault();
-        const reactionTime = keypressTime - startTimeRef.current;
+        const reactionTimeMs = keypressTime - startTimeRef.current;
 
-        next({
-          key: event.key,
-          time: keypressTime,
-          reactionTime: reactionTime,
-        });
+        next({ key: event.key, reactionTimeMs });
       }
     };
 
-    if (allowedKeys) {
+    if (allowedResponseKeys) {
       window.addEventListener('keydown', handleKeyPress);
     }
 
     return () => {
-      if (allowedKeys) {
+      if (allowedResponseKeys) {
         window.removeEventListener('keydown', handleKeyPress);
       }
     };
-  }, [next, allowedKeys, timed]);
+  }, [next, allowedResponseKeys, timed]);
 
   const handleClick = () => {
     const clickTime = now();
 
-    const reactionTime = clickTime - startTimeRef.current;
+    const reactionTimeMs = clickTime - startTimeRef.current;
 
-    next({
-      key: 'button',
-      time: clickTime,
-      reactionTime: reactionTime,
-    });
+    next({ key: 'button', reactionTimeMs });
   };
 
   return (
@@ -131,4 +110,24 @@ function Text({
   );
 }
 
-export default Text;
+export default defineComponent({
+  name: 'Text',
+  component: Text,
+  csv: 'text',
+  simulate: ({ props, simulators, participant }) => {
+    if (props.durationMs != null) {
+      return { responseData: {}, durationMs: props.durationMs };
+    }
+    const result = simulators.respond({ props, participant });
+    return {
+      responseData: result.value,
+      participantState: result.participantState,
+      durationMs: result.value.reactionTimeMs,
+    };
+  },
+  defaultSimulators: {
+    respond: () => ({
+      value: { key: 'button', reactionTimeMs: uniform(500, 2000) },
+    }),
+  },
+});

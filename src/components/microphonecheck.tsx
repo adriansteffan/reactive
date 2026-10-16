@@ -1,12 +1,9 @@
-import { useState, useEffect } from 'react';
-import { VoiceRecorder } from './voicerecorder';
-import { registerSimulation, noopSimulate } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
-import { BaseComponentProps } from '../utils/common';
-import { useTheme, t } from '../utils/theme';
-
-registerFlattener('MicrophoneCheck', 'session');
-registerSimulation('MicrophoneCheck', noopSimulate, {});
+import { type ReactNode, useState, useEffect } from 'react';
+import { Recorder } from './recorder';
+import { noopSimulate } from '../core/simulation';
+import { defineComponent } from '../core/component';
+import { BaseComponentProps } from '../core/component';
+import { useTheme, t } from '../runner/theme';
 
 interface MicrophoneDevice {
   deviceId: string;
@@ -16,9 +13,11 @@ interface MicrophoneDevice {
 function MicrophoneSelect({
   onMicrophoneSelect,
   disabled = false,
+  placeholder,
 }: {
   onMicrophoneSelect: (deviceId: string) => void;
   disabled?: boolean;
+  placeholder: string;
 }) {
   const th = t(useTheme());
   const [microphones, setMicrophones] = useState<MicrophoneDevice[]>([]);
@@ -60,7 +59,7 @@ function MicrophoneSelect({
   };
 
   const selectedLabel =
-    microphones.find((mic) => mic.deviceId === selectedMic)?.label || 'Select Microphone';
+    microphones.find((mic) => mic.deviceId === selectedMic)?.label || placeholder;
 
   return (
     <div className='relative w-64 mx-auto mt-8 mb-8'>
@@ -93,7 +92,49 @@ function MicrophoneSelect({
   );
 }
 
-const MicrophoneCheck = ({ next, updateStore, animate = false, discardLabel }: BaseComponentProps & { animate?: boolean; discardLabel?: string }) => {
+const MicrophoneCheck = ({
+  next,
+  updateStore,
+  animate = false,
+  discardLabel,
+  content = (
+    <>
+      <h1 className='text-3xl mb-6 font-semibold'>Let's test your microphone!</h1>
+      <p>
+        In this experiment, you will need to answer some questions verbally. To make sure that we
+        don't lose your input, please select your preferred microphone using the menu below...
+      </p>
+    </>
+  ),
+  recordingContent = (
+    <p>
+      ... and use the recording button below to make a test recording of your voice. After
+      stopping the recording, you can use the play button to play back the audio.
+    </p>
+  ),
+  playbackContent = (
+    <p>
+      Can you hear yourself? Great! You can continue on to the next step. <br /> If you can't hear
+      your voice, try one of the other options from the list or check any physical mute switches on
+      your microphone. Be sure to also check that your computer audio is turned on so you can
+      actually listen back to your test recording!
+    </p>
+  ),
+  buttonText = 'Next',
+  placeholder = 'Select Microphone',
+}: BaseComponentProps & {
+  animate?: boolean;
+  discardLabel?: string;
+  /** Shown above the microphone menu. */
+  content?: ReactNode;
+  /** Shown above the recording button. */
+  recordingContent?: ReactNode;
+  /** Shown once a test recording exists, above the button. */
+  playbackContent?: ReactNode;
+  buttonText?: string;
+  /** Shown in the microphone menu until a microphone is selected. */
+  placeholder?: string;
+}) => {
   const th = t(useTheme());
   const [recordingExists, setRecordingExists] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -101,30 +142,23 @@ const MicrophoneCheck = ({ next, updateStore, animate = false, discardLabel }: B
 
   const handleMicSelect = (id: string) => {
     setSelectedDeviceId(id);
-    updateStore({ audioInputId: id });
+    updateStore({ __audioInputId: id });
   };
 
   return (
     <div className={`min-h-screen ${th.containerBg}`}>
       <div className={`max-w-prose mx-auto mt-20 mb-20 px-4 ${animate ? 'animate-fade-in opacity-0' : ''}`}>
         <article className={`prose prose-2xl ${th.prose} text-xl ${th.text} leading-relaxed`}>
-          <h1 className='text-3xl mb-6 font-semibold'>Let's test your microphone!</h1>
-          <p>
-            In this experiment, you will need to answer some questions verbally. To make sure that we
-            don't lose your input, please select your preferred microphone using the menu below...
-          </p>
+          {content}
         </article>
-        <MicrophoneSelect onMicrophoneSelect={handleMicSelect} disabled={isRecording} />
+        <MicrophoneSelect onMicrophoneSelect={handleMicSelect} disabled={isRecording} placeholder={placeholder} />
 
         <article className={`prose prose-2xl ${th.prose} text-xl ${th.text} leading-relaxed`}>
-          <p>
-            ... and use the recording button below to make a test recording of your voice. After
-            stopping the recording, you can use the play button to play back the audio.
-          </p>
+          {recordingContent}
         </article>
 
         <div className='mt-4 mb-12'>
-          <VoiceRecorder
+          <Recorder
             onRecordingStart={() => setIsRecording(true)}
             handleSaveVoiceData={() => { setRecordingExists(true); setIsRecording(false); }}
             handleDiscardVoiceData={() => { setRecordingExists(false); setIsRecording(false); }}
@@ -138,12 +172,7 @@ const MicrophoneCheck = ({ next, updateStore, animate = false, discardLabel }: B
         {recordingExists && (
           <div className='animate-fade-in opacity-0'>
             <article className={`prose prose-2xl ${th.prose} text-xl ${th.text} leading-relaxed`}>
-              <p>
-                Can you hear yourself? Great! You can continue on to the next step. <br /> If you
-                can't hear your voice, try one of the other options from the list or check any
-                physical mute switches on your microphone. Be sure to also check that your computer
-                audio is turned on so you can actually listen back to your test recording!
-              </p>
+              {playbackContent}
             </article>
 
             <div className='mt-16 flex justify-center'>
@@ -151,7 +180,7 @@ const MicrophoneCheck = ({ next, updateStore, animate = false, discardLabel }: B
                 onClick={() => next({})}
                 className={`${th.buttonBg} cursor-pointer px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`}
               >
-                Next
+                {buttonText}
               </button>
             </div>
           </div>
@@ -161,4 +190,9 @@ const MicrophoneCheck = ({ next, updateStore, animate = false, discardLabel }: B
   );
 };
 
-export default MicrophoneCheck;
+export default defineComponent({
+  name: 'MicrophoneCheck',
+  component: MicrophoneCheck,
+  csv: 'session',
+  simulate: noopSimulate,
+});

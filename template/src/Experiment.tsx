@@ -1,13 +1,21 @@
-/** biome-ignore-all lint/suspicious/noExplicitAny: trial props and participant state are loosely typed on purpose */
-import { useState, useRef } from 'react';
-import { ExperimentRunner, BaseComponentProps, ExperimentConfig, registerSimulation, registerFlattener, sampleParticipants, prepareTimeline } from '@adriansteffan/reactive';
-
-
-const config: ExperimentConfig = { showProgressBar: true };
+import { useRef, useState } from 'react';
+import {
+  type BaseComponentProps,
+  defineComponent,
+  defineExperiment,
+  PlainInput,
+  sampleParticipants,
+  Text,
+  Upload,
+} from '@adriansteffan/reactive';
 
 // --- Custom Components ---
 
-const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number }) => {
+// A named function, so that hot reloading keeps the trial's state when this file changes
+function CustomTrialView({
+  next,
+  maxCount,
+}: BaseComponentProps<{ totalTimeMs: number; clicks: number }> & { maxCount: number }) {
   const [count, setCount] = useState(0);
   const startTime = useRef(performance.now());
 
@@ -17,13 +25,14 @@ const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number
         <strong>Custom Component</strong>
       </h1>
       <br />
-      This is a custom component component. Click the button {maxCount} times to progress
+      This is a custom component. Click the button {maxCount} times to progress
       <br />
       <button
+        type='button'
         onClick={() => {
           setCount(count + 1);
           if (count + 1 === maxCount) {
-            next({ totalTime: performance.now() - startTime.current, clicks: maxCount });
+            next({ totalTimeMs: performance.now() - startTime.current, clicks: maxCount });
           }
         }}
         className='mt-4 px-4 py-2 bg-blue-500 text-white rounded-sm hover:bg-blue-600 transition-colors'
@@ -32,45 +41,45 @@ const CustomTrial = ({ next, maxCount }: BaseComponentProps & { maxCount: number
       </button>
     </>
   );
-};
+}
 
-// Register a flattener to control how this trial's data appears in the CSV.
-// 'customtrial' is the default CSV file name — override per-item with the csv field.
-registerFlattener('CustomTrial', 'customtrial');
-
-// Register a simulation for the custom trial.
-// The decision function determines how fast the participant clicks.
-// The simulate function uses the trial logic (clicking maxCount times) to produce response data.
-registerSimulation('CustomTrial', (trialProps, _experimentState, simulators, participant) => {
-  let totalTime = 0;
-  for (let i = 0; i < (trialProps.maxCount || 1); i++) {
-    const result = simulators.click(trialProps, participant);
-    participant = result.participantState;
-    totalTime += result.value;
-  }
-  return { responseData: { totalTime, clicks: trialProps.maxCount }, participantState: participant, duration: totalTime };
-}, {
-  click: (_trialProps: any, participant: any) => ({
-    value: 200 + Math.random() * 500,
-    participantState: participant,
-  }),
+const CustomTrial = defineComponent({
+  name: 'CustomTrial',
+  component: CustomTrialView,
+  // The CSV file this component's data goes into, which a trial can change with .csv()
+  csv: 'customtrial',
+  // simulate replays the trial, asking the click simulator how fast the participant clicks
+  simulate: ({ props, simulators, participant }) => {
+    let totalTimeMs = 0;
+    for (let i = 0; i < props.maxCount; i++) {
+      const result = simulators.click({ props, participant });
+      participant = result.participantState ?? participant;
+      totalTimeMs += result.value;
+    }
+    return {
+      responseData: { totalTimeMs, clicks: props.maxCount },
+      participantState: participant,
+      durationMs: totalTimeMs,
+    };
+  },
+  defaultSimulators: {
+    click: () => ({ value: 200 + Math.random() * 500 }),
+  },
 });
 
-const CustomQuestion = () => {
-  return (
-    <>
-      <p>This is a custom question</p>
-    </>
-  );
-};
+// --- Experiment ---
 
-// --- Timeline ---
-
-const experiment = prepareTimeline([
-  {
-    name: 'introtext',
-    type: 'Text',
-    props: {
+export default defineExperiment({
+  config: { showProgressBar: true },
+  simulation: {
+    seed: 42,
+    createParticipants: () =>
+      sampleParticipants('sobol', 10, {
+        needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+      }).map((p) => ({ ...p, nickname: `participant_${p.index}` })),
+  },
+  timeline: [
+    Text.trial('introtext', {
       buttonText: "Let's Begin",
       animate: true,
       content: (
@@ -82,92 +91,27 @@ const experiment = prepareTimeline([
           This is a basic text component. <br />
         </>
       ),
-    },
-  },
-  {
-    name: 'nickname',
-    type: 'PlainInput',
-    props: {
+    }),
+
+    PlainInput.trial('nickname', {
       content: <p>What is your nickname?</p>,
       buttonText: 'Submit',
       placeholder: 'Enter your nickname',
-    },
-    simulators: {
-      respond: (_trialProps: any, participant: any) => ({
-        value: participant.nickname,
-        participantState: participant,
-      }),
-    },
-  },
-  {
-    name: 'customtrial',
-    type: 'CustomTrial',
-    simulate: true,
-    props: {
-      maxCount: 5,
-    },
-  },
-  {
-    name: 'survey',
-    type: 'Quest',
-    props: {
-      surveyJson: {
-        pages: [
-          {
-            elements: [
-              {
-                type: 'rating',
-                name: 'examplequestion',
-                title: 'We can use all of the surveyjs components in the framework',
-                isRequired: true,
-                rateMin: 1,
-                rateMax: 6,
-                minRateDescription: 'Not at all',
-                maxRateDescription: 'Extremely',
-              },
-              {
-                title: 'Cutom Question',
-                type: 'CustomQuestion',
-              },
-            ],
-          },
-        ],
-      },
-    },
-  },
-  {
-    name: 'upload',
-    type: 'Upload',
-    props: {
-      autoUpload: false,
-    }
-  },
-  {
-    name: 'finaltext',
-    type: 'Text',
-    props: {
-      content: <>Thank you for participating in our study, you can now close the browser window.</>,
-    },
-  },
-]);
+    }).simulators({
+      respond: ({ participant }) => ({ value: participant.nickname }),
+    }),
 
-// --- Simulation config ---
-const simulationConfig = {
-  seed: 42,
-  participants: () => sampleParticipants('sobol', 10, {
-    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
-  }).map((p) => ({ ...p, nickname: `participant_${p.index}` })),
-};
+    CustomTrial.trial('customtrial', { maxCount: 5 }),
 
-export default function Experiment() {
-  return (
-    <ExperimentRunner
-      config={config}
-      timeline={experiment}
-      components={{CustomTrial}}
-      questions={{CustomQuestion}}
-      hybridParticipant={{ id: 0, nickname: 'test' }}
-      simulationConfig={simulationConfig}
-    />
-  );
-}
+    Upload.trial('upload'),
+
+    Text.trial('finaltext', ({ get }) => ({
+      content: (
+        <>
+          Thank you for participating in our study, {get(PlainInput, 'nickname').value}. You can now
+          close the browser window.
+        </>
+      ),
+    })),
+  ],
+});

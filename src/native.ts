@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { StatusBar } from '@capacitor/status-bar';
 import { ImmersiveMode } from '@adriansteffan/immersive-mode';
-import { FileBackend, registerNative } from './utils/native';
+import { FileBackend, registerNative } from './core/platform';
 
 const isAndroid = Capacitor.getPlatform() === 'android';
 

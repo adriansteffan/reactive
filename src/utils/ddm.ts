@@ -1,10 +1,8 @@
-import { normal, uniform } from './distributions';
+import { type NormalSpec, normal, type UniformSpec, uniform } from './distributions';
 
 // --- Distribution & Parameter Types ---
 
-export type NormalDist = { type: 'normal'; mean: number; sd: number };
-export type UniformDist = { type: 'uniform'; min: number; max: number };
-export type ParameterDef = number | NormalDist | UniformDist;
+export type ParameterDef = number | NormalSpec | UniformSpec;
 
 export type BoundaryDef =
   | number            // Symmetric: upper is +b, lower is -b
@@ -12,24 +10,24 @@ export type BoundaryDef =
 
 export type CollapseDef = {
   rate: number;   // Speed at which boundaries shrink per ms
-  delay?: number; // Pause in ms (from phase start) before collapse begins
+  delayMs?: number; // Pause (from phase start) before collapse begins
 };
 
 // --- Post-Stimulus Strategy Types ---
 
 export type ContinueStrategy = {
   type: 'continue';
-  residualDrift?: number;      // Drift rate after stimOffset (Default: 0)
+  residualDrift?: number;      // Drift rate after stimOffsetMs (Default: 0)
   noiseMultiplier?: number; // Multiplier for noiseLevel (Default: 1)
 };
 
 export type CollapseStrategy = {
   type: 'collapse';
-  collapseDef: CollapseDef; // Takes over boundary dynamics after stimOffset
+  collapseDef: CollapseDef; // Takes over boundary dynamics after stimOffsetMs
 };
 
 export type SnapshotStrategy = {
-  type: 'snapshot'; // Immediate forced choice at stimOffset
+  type: 'snapshot'; // Immediate forced choice at stimOffsetMs
 };
 
 export type PostStimStrategyDef = ContinueStrategy | CollapseStrategy | SnapshotStrategy;
@@ -44,11 +42,11 @@ export interface DDMTrialParams {
   noiseLevel: ParameterDef;
 
   // Timing parameters
-  sensoryDelay?: ParameterDef; // Dead time before accumulation (ms)
-  motorDelay?: ParameterDef;   // Dead time for physical execution (ms)
-  timeLimit: number;           // Maximum allowed trial duration (ms)
-  stimOffset: number;          // Timestamp when stimulus vanishes (ms)
-  dt?: number;                 // Resolution in ms (Default: 1)
+  sensoryDelayMs?: ParameterDef; // Dead time before accumulation
+  motorDelayMs?: ParameterDef;   // Dead time for physical execution
+  timeLimitMs: number;           // Maximum allowed trial duration
+  stimOffsetMs: number;          // Timestamp when stimulus vanishes
+  dtMs?: number;               // Resolution (Default: 1)
 
   // Global behaviors
   contaminationRate?: number;    // Probability (0-1) of a random guess
@@ -62,7 +60,7 @@ export interface DDMTrialParams {
 
 export interface DDMTrialResult {
   choice: 0 | 1 | null;
-  rt: number;              // Total reaction time including delays (ms)
+  rtMs: number;            // Total reaction time including delays
   finalEvidence: number;   // Accumulator value at trial end
   isContaminated: boolean; // True if trial was a random lapse
 }
@@ -71,7 +69,7 @@ export interface DDMTrialResult {
 
 function resolveParam(def: ParameterDef): number {
   if (typeof def === 'number') return def;
-  if (def.type === 'normal') return normal(def.mean, def.sd);
+  if (def.distribution === 'normal') return normal(def.mean, def.sd);
   return uniform(def.min, def.max);
 }
 
@@ -82,7 +80,7 @@ function resolveParamClamped(def: ParameterDef): number {
 // --- Simulation ---
 
 export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
-  const dt = params.dt ?? 1;
+  const dt = params.dtMs ?? 1;
   const sqrtDt = Math.sqrt(dt);
 
   // A1. Resolve starting point
@@ -92,7 +90,7 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
   if (params.contaminationRate && uniform(0, 1) < params.contaminationRate) {
     return {
       choice: uniform(0, 1) < 0.5 ? 0 : 1,
-      rt: uniform(0, params.timeLimit),
+      rtMs: uniform(0, params.timeLimitMs),
       finalEvidence: startingPoint,
       isContaminated: true,
     };
@@ -101,8 +99,8 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
   // A3. Resolve remaining distributions for this trial
   const baseDrift = resolveParam(params.driftRate);
   const baseNoise = Math.max(0, resolveParam(params.noiseLevel));
-  const sensoryDelay = params.sensoryDelay != null ? resolveParamClamped(params.sensoryDelay) : 0;
-  const motorDelay = params.motorDelay != null ? resolveParamClamped(params.motorDelay) : 0;
+  const sensoryDelay = params.sensoryDelayMs != null ? resolveParamClamped(params.sensoryDelayMs) : 0;
+  const motorDelay = params.motorDelayMs != null ? resolveParamClamped(params.motorDelayMs) : 0;
 
   // A4. Resolve boundaries
   let currentUpper: number;
@@ -122,17 +120,17 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
   let choice: 0 | 1 | null = null;
 
   // B. Simulation loop
-  while (time < params.timeLimit) {
+  while (time < params.timeLimitMs) {
     time += dt;
 
     let currentDrift = baseDrift;
     let currentNoise = baseNoise;
 
-    if (time <= params.stimOffset) {
+    if (time <= params.stimOffsetMs) {
       // Phase 1: Stimulus visible
       if (params.stimulusCollapse) {
         const elapsed = time - sensoryDelay;
-        if (elapsed > (params.stimulusCollapse.delay ?? 0)) {
+        if (elapsed > (params.stimulusCollapse.delayMs ?? 0)) {
           currentUpper -= params.stimulusCollapse.rate * dt;
           currentLower += params.stimulusCollapse.rate * dt;
         }
@@ -145,7 +143,7 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
         const distToLower = Math.abs(evidence - currentLower);
         return {
           choice: distToUpper <= distToLower ? 1 : 0,
-          rt: time + motorDelay,
+          rtMs: time + motorDelay,
           finalEvidence: evidence,
           isContaminated: false,
         };
@@ -155,8 +153,8 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
       } else {
         // collapse
         currentDrift = 0;
-        const elapsed = time - params.stimOffset;
-        if (elapsed > (strategy.collapseDef.delay ?? 0)) {
+        const elapsed = time - params.stimOffsetMs;
+        if (elapsed > (strategy.collapseDef.delayMs ?? 0)) {
           currentUpper -= strategy.collapseDef.rate * dt;
           currentLower += strategy.collapseDef.rate * dt;
         }
@@ -196,35 +194,35 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
   if (boundaryHit) {
     rt = time + motorDelay;
   } else {
-    // timeLimit reached; no decision made
-    rt = params.timeLimit;
+    // timeLimitMs reached; no decision made
+    rt = params.timeLimitMs;
     choice = null;
   }
 
-  return { choice, rt, finalEvidence: evidence, isContaminated: false };
+  return { choice, rtMs: rt, finalEvidence: evidence, isContaminated: false };
 }
 
 export function mapDDMChoice(
   choice: 0 | 1 | null,
-  validKeys: string[],
+  allowedResponseKeys: string[],
   correctResponse?: string | string[],
 ): string | null {
-  if (choice == null || validKeys.length === 0) return null;
+  if (choice == null || allowedResponseKeys.length === 0) return null;
   const correctKeys = Array.isArray(correctResponse)
     ? correctResponse.map((k) => k.toLowerCase())
     : correctResponse ? [correctResponse.toLowerCase()] : null;
 
   if (!correctKeys) {
-    return validKeys[Math.floor(uniform(0, validKeys.length))];
+    return allowedResponseKeys[Math.floor(uniform(0, allowedResponseKeys.length))];
   }
 
   if (choice === 1) {
-    const matches = validKeys.filter((k) => correctKeys.includes(k.toLowerCase()));
+    const matches = allowedResponseKeys.filter((k) => correctKeys.includes(k.toLowerCase()));
     if (matches.length > 0) return matches[Math.floor(uniform(0, matches.length))];
   } else {
-    const wrong = validKeys.filter((k) => !correctKeys.includes(k.toLowerCase()));
+    const wrong = allowedResponseKeys.filter((k) => !correctKeys.includes(k.toLowerCase()));
     if (wrong.length > 0) return wrong[Math.floor(uniform(0, wrong.length))];
   }
 
-  return validKeys[Math.floor(uniform(0, validKeys.length))];
+  return allowedResponseKeys[Math.floor(uniform(0, allowedResponseKeys.length))];
 }

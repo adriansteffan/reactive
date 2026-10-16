@@ -25,13 +25,7 @@
       "preset": "recommended",
       "a11y": "off",
       "complexity": "off",
-      "style": {
-        "preset": "none",
-        "useComponentExportOnlyModules": {
-          "level": "warn",
-          "options": { "allowConstantExport": true }
-        }
-      },
+      "style": "off",
       "suspicious": {
         "noArrayIndexKey": "off"
       }

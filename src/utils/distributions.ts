@@ -1,14 +1,47 @@
+import type { AsyncLocalStorage } from 'node:async_hooks';
+
 // --- Pseudorandom samplers (seedable) ---
 
 // Mersenne Twister MT19937, Matsumoto & Nishimura (1998), https://doi.org/10.1145/272991.272995
-// Returns the generator's 32-bit integer stream.
-function mt19937(seed: number): () => number {
+// Returns the generator's 32-bit integer stream. A seed of several numbers is used as the
+// reference init_by_array does, so that keys like [seed, purpose, index] never share a stream.
+function mt19937(seed: number | readonly number[]): () => number {
   const state = new Uint32Array(624);
   let index = 624;
-  state[0] = seed;
-  for (let i = 1; i < 624; i++) {
-    state[i] = Math.imul(1812433253, state[i - 1] ^ (state[i - 1] >>> 30)) + i;
+  const initialize = (value: number) => {
+    state[0] = value;
+    for (let i = 1; i < 624; i++) {
+      state[i] = Math.imul(1812433253, state[i - 1] ^ (state[i - 1] >>> 30)) + i;
+    }
+  };
+
+  if (typeof seed === 'number') {
+    initialize(seed);
+  } else {
+    initialize(19650218);
+    let i = 1;
+    let j = 0;
+    for (let k = Math.max(624, seed.length); k > 0; k--) {
+      state[i] = (state[i] ^ Math.imul(state[i - 1] ^ (state[i - 1] >>> 30), 1664525)) + seed[j] + j;
+      i++;
+      j++;
+      if (i >= 624) {
+        state[0] = state[623];
+        i = 1;
+      }
+      if (j >= seed.length) j = 0;
+    }
+    for (let k = 623; k > 0; k--) {
+      state[i] = (state[i] ^ Math.imul(state[i - 1] ^ (state[i - 1] >>> 30), 1566083941)) - i;
+      i++;
+      if (i >= 624) {
+        state[0] = state[623];
+        i = 1;
+      }
+    }
+    state[0] = 0x80000000;
   }
+
   return () => {
     if (index === 624) {
       for (let i = 0; i < 624; i++) {
@@ -32,20 +65,67 @@ function unitFromMt19937(next: () => number): () => number {
 }
 
 let random: () => number = Math.random;
+// The stream of a running withSeed, which takes precedence over all others
+let override: (() => number) | undefined;
+// Participants simulated at the same time each draw from their own stream, which follows them across awaits
+let streams: AsyncLocalStorage<() => number> | undefined;
+let draws = 0;
 
-function seedDistributions(seed: number): void {
+// Every draw of the samplers, and of Math.random once a seed is set, comes from here
+function next(): number {
+  draws++;
+  return (override ?? streams?.getStore() ?? random)();
+}
+
+function seedDistributions(seed: number | readonly number[]): void {
   random = unitFromMt19937(mt19937(seed));
-  Math.random = random;
+  Math.random = next;
+}
+
+// Runs fn with its own seeded stream, then continues the stream that was active before
+function withSeed<T>(seed: number, fn: () => T): T {
+  const previousOverride = override;
+  const previousMathRandom = Math.random;
+  override = unitFromMt19937(mt19937(seed));
+  Math.random = next;
+  try {
+    return fn();
+  } finally {
+    override = previousOverride;
+    Math.random = previousMathRandom;
+  }
+}
+
+/**
+ * Runs fn with its own seeded stream, which stays with fn across awaits, so that participants
+ * simulated at the same time draw exactly as if each ran alone. Only available in Bun.
+ */
+function withStream<T>(seed: number | readonly number[], fn: () => Promise<T>): Promise<T> {
+  streams ??= new (process.getBuiltinModule('async_hooks').AsyncLocalStorage)();
+  Math.random = next;
+  return streams.run(unitFromMt19937(mt19937(seed)), fn);
+}
+
+/** Calls fn and counts the random numbers drawn meanwhile, through Math.random or the samplers. */
+async function countDraws<T>(fn: () => Promise<T>): Promise<[T, number]> {
+  const previousMathRandom = Math.random;
+  const start = draws;
+  Math.random = next;
+  try {
+    return [await fn(), draws - start];
+  } finally {
+    Math.random = previousMathRandom;
+  }
 }
 
 function uniform(min: number, max: number): number {
-  return min + (max - min) * random();
+  return min + (max - min) * next();
 }
 
-// Box-Muller transform; 1 - random() lies in (0, 1], so the logarithm stays finite
+// Box-Muller transform; 1 - next() lies in (0, 1], so the logarithm stays finite
 function normal(mu: number, sigma: number): number {
-  const radius = Math.sqrt(-2 * Math.log(1 - random()));
-  return mu + sigma * radius * Math.cos(2 * Math.PI * random());
+  const radius = Math.sqrt(-2 * Math.log(1 - next()));
+  return mu + sigma * radius * Math.cos(2 * Math.PI * next());
 }
 
 // Knuth's multiplication method. exp(-lambda) underflows for large means, so those are drawn
@@ -55,10 +135,10 @@ function poisson(lambda: number): number {
   let count = 0;
   for (let remaining = lambda; remaining > 0; remaining -= 500) {
     const limit = Math.exp(-Math.min(remaining, 500));
-    let product = random();
+    let product = next();
     while (product > limit) {
       count++;
-      product *= random();
+      product *= next();
     }
   }
   return count;
@@ -334,7 +414,7 @@ function draw(spec: DimensionSpec): number {
   return resolveTransform(spec)(uniform(0, 1));
 }
 
-export { normal, poisson, uniform, seedDistributions, sobol, halton, sampleParticipants, draw };
+export { normal, poisson, uniform, seedDistributions, withSeed, withStream, countDraws, sobol, halton, sampleParticipants, draw };
 // Exported for the tests, not part of the public API
 export { mt19937, standardNormalQuantile, poissonQuantile, radicalInverse };
 export type { DimensionSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod };

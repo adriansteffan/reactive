@@ -6,15 +6,10 @@ import argparse
 
 
 def find_participant_dirs(data_dir):
-    """Return participant directories that contain .webm audio files."""
-    dirs = []
-    for entry in sorted(os.listdir(data_dir)):
-        full = os.path.join(data_dir, entry)
-        if not os.path.isdir(full):
-            continue
-        if any(f.endswith(".webm") for f in os.listdir(full)):
-            dirs.append(full)
-    return dirs
+    """Return the directories under data_dir, at any depth, that contain .webm audio files."""
+    return sorted(
+        root for root, _, files in os.walk(data_dir) if any(f.endswith(".webm") for f in files)
+    )
 
 
 def find_audio_files(participant_dir):

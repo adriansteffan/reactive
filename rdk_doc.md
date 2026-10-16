@@ -6,17 +6,13 @@ Will have to have a manual go at all of this to create an actually decent refere
 ## Basic Usage
 
 ```typescript
-{
-  name: 'rdk_trial',
-  type: 'RandomDotKinematogram',
-  props: {
-    validKeys: ['arrowleft', 'arrowright'],
-    correctResponse: 'arrowright',
-    duration: 2000,
-    direction: 90,
-    coherence: 0.5,
-  },
-}
+RandomDotKinematogram.trial('rdk_trial', {
+  allowedResponseKeys: ['arrowleft', 'arrowright'],
+  correctResponse: 'arrowright',
+  durationMs: 2000,
+  direction: 90,
+  coherence: 0.5,
+})
 ```
 
 ## Parameters
@@ -25,10 +21,10 @@ Will have to have a manual go at all of this to create an actually decent refere
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `validKeys` | `string[]` | `[]` | Valid keyboard responses. Empty array = any key valid |
+| `allowedResponseKeys` | `string[] \| boolean` | `true` | Keys that count as a response; `true` for any key |
 | `correctResponse` | `string \| string[]` | `undefined` | The correct response(s) for this trial |
-| `duration` | `number` | `1000` | Duration in ms that dots are shown (response window). Total trial time = `fixationTime + duration`. Use `-1` for infinite duration |
-| `stimulusDuration` | `number` | `undefined` | How long to show stimulus in ms. Defaults to `duration`. Set lower than `duration` to hide stimulus while still accepting responses |
+| `durationMs` | `number` | `1000` | Duration in ms that dots are shown (response window). Total trial time = `fixationTimeMs + durationMs`. Use `-1` for infinite duration |
+| `stimulusDurationMs` | `number` | `undefined` | How long to show stimulus in ms. Defaults to `durationMs`. Set lower than `durationMs` to hide stimulus while still accepting responses |
 | `responseEndsTrial` | `boolean` | `true` | Whether response ends the trial immediately |
 
 ### Dot Motion
@@ -41,7 +37,7 @@ Will have to have a manual go at all of this to create an actually decent refere
 | `coherence` | `number` | `0.5` | Proportion of dots moving coherently (0-1) |
 | `opposite` | `number` | `0` | Proportion moving in opposite direction (0 to 1-coherence) |
 | `speed` | `number` | `60` | Pixels per second (frame-rate independent) |
-| `dotLifetime` | `number` | `-1` | Milliseconds before dot is replaced (-1 = infinite) |
+| `dotLifetimeMs` | `number` | `-1` | Milliseconds before dot is replaced (-1 = infinite) |
 | `updateRate` | `number` | `undefined` | Update rate in Hz. `undefined` = update every frame |
 
 ### Dot Appearance
@@ -95,8 +91,8 @@ When a dot exits the aperture boundary, `reinsertMode` controls where it reappea
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `showFixation` | `boolean` | `false` | Show fixation cross |
-| `fixationTime` | `number` | `500` | Duration in ms to show fixation before dots appear. Added to `duration` for total trial time |
+| `showFixation` | `boolean` | `true` | Show a fixation cross, during the fixation time and while the dots move |
+| `fixationTimeMs` | `number` | `500` | Duration in ms to show fixation before dots appear. Added to `durationMs` for total trial time |
 | `fixationWidth` | `number` | `15` | Width in pixels |
 | `fixationHeight` | `number` | `15` | Height in pixels |
 | `fixationColor` | `string` | `"white"` | Color |
@@ -144,10 +140,10 @@ The component returns the following data object when the trial ends:
 
 ```typescript
 {
-  rt: number | null,              // Reaction time in ms (null if no response)
+  rtMs: number | null,            // Reaction time (null if no response)
   response: string | null,        // Key pressed (null if no response)
   correct: boolean | null,        // Whether response was correct (null if no correctResponse specified)
-  duration: number,               // Duration the trial was set to run
+  durationMs: number,             // How long the trial was set to run
   direction: number,              // Direction of coherent motion
   coherence: number,              // Coherence level
   framesDisplayed: number         // Number of frames actually displayed
@@ -159,166 +155,136 @@ The component returns the following data object when the trial ends:
 ### Simple Left/Right Motion Discrimination
 
 ```typescript
-{
-  name: 'motion_discrimination',
-  type: 'RandomDotKinematogram',
-  props: {
-    validKeys: ['arrowleft', 'arrowright'],
-    correctResponse: 'arrowright',
-    duration: 2000,
+RandomDotKinematogram.trial('motion_discrimination', {
+  allowedResponseKeys: ['arrowleft', 'arrowright'],
+  correctResponse: 'arrowright',
+  durationMs: 2000,
 
-    direction: 90,              // Rightward
-    coherence: 0.7,             // 70% coherence
-    dotCount: 150,
-    dotRadius: 3,
-    speed: 120,                 // Pixels per second
+  direction: 90,              // Rightward
+  coherence: 0.7,             // 70% coherence
+  dotCount: 150,
+  dotRadius: 3,
+  speed: 120,                 // Pixels per second
 
-    apertureShape: 'circle',
-    apertureWidth: 500,
+  apertureShape: 'circle',
+  apertureWidth: 500,
 
-    showFixation: true,
-    showBorder: true,
-  },
-}
+  showFixation: true,
+  showBorder: true,
+})
 ```
 
 ### High Difficulty Task
 
 ```typescript
-{
-  name: 'difficult_trial',
-  type: 'RandomDotKinematogram',
-  props: {
-    coherence: 0.1,             // Only 10% coherent
-    direction: 180,             // Downward
-    duration: 3000,
+RandomDotKinematogram.trial('difficult_trial', {
+  coherence: 0.1,             // Only 10% coherent
+  direction: 180,             // Downward
+  durationMs: 3000,
 
-    dotCount: 300,
-    speed: 60,                  // Slower movement (pixels per second)
+  dotCount: 300,
+  speed: 60,                  // Slower movement (pixels per second)
 
-    noiseMovement: 'randomWalk',
-    reassignEveryMs: 0,  // reassign every update (harder variant)
-  },
-}
+  noiseMovement: 'randomWalk',
+  reassignEveryMs: 0,  // reassign every update (harder variant)
+})
 ```
 
 ### Four-Direction Choice
 
 ```typescript
-{
-  name: 'four_direction',
-  type: 'RandomDotKinematogram',
-  props: {
-    validKeys: ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
-    correctResponse: 'arrowup',
+RandomDotKinematogram.trial('four_direction', {
+  allowedResponseKeys: ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
+  correctResponse: 'arrowup',
 
-    direction: 0,               // Upward
-    coherence: 0.5,
-    duration: 2500,
-  },
-}
+  direction: 0,               // Upward
+  coherence: 0.5,
+  durationMs: 2500,
+})
 ```
 
 ### Opposite Motion
 
 ```typescript
-{
-  name: 'opposite_motion',
-  type: 'RandomDotKinematogram',
-  props: {
-    direction: 90,              // Rightward
-    coherence: 0.4,             // 40% rightward
-    opposite: 0.4,     // 40% leftward
-    // 20% random
+RandomDotKinematogram.trial('opposite_motion', {
+  direction: 90,              // Rightward
+  coherence: 0.4,             // 40% rightward
+  opposite: 0.4,     // 40% leftward
+  // 20% random
 
-    validKeys: ['arrowleft', 'arrowright'],
-    correctResponse: 'arrowright',
-  },
-}
+  allowedResponseKeys: ['arrowleft', 'arrowright'],
+  correctResponse: 'arrowright',
+})
 ```
 
 ### Staircasing Coherence
 
 ```typescript
-// Example of varying coherence across trials
+// Example of varying coherence across trials; the list goes into the timeline as it is
 const coherenceLevels = [0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 0.95];
 
-coherenceLevels.forEach((coh, index) => ({
-  name: `rdk_${index}`,
-  type: 'RandomDotKinematogram',
-  props: {
+const rdkTrials = coherenceLevels.map((coh, index) =>
+  RandomDotKinematogram.trial(`rdk_${index}`, {
     coherence: coh,
     direction: Math.random() < 0.5 ? 90 : 270,  // Random left/right
-    duration: 2000,
-    validKeys: ['arrowleft', 'arrowright'],
-  },
-}));
+    durationMs: 2000,
+    allowedResponseKeys: ['arrowleft', 'arrowright'],
+  }),
+);
 ```
 
 ### Colored Coherent Dots
 
 ```typescript
-{
-  name: 'colored_coherent',
-  type: 'RandomDotKinematogram',
-  props: {
-    direction: 90,              // Rightward
-    coherence: 0.3,             // 30% coherent
+RandomDotKinematogram.trial('colored_coherent', {
+  direction: 90,              // Rightward
+  coherence: 0.3,             // 30% coherent
 
-    dotColor: 'white',          // Incoherent dots are white
-    coherentDotColor: 'red',    // Coherent dots are red
-    backgroundColor: '#1a1a1a',
+  dotColor: 'white',          // Incoherent dots are white
+  coherentDotColor: 'red',    // Coherent dots are red
+  backgroundColor: '#1a1a1a',
 
-    dotCount: 200,
-    speed: 120,                 // Pixels per second
+  dotCount: 200,
+  speed: 120,                 // Pixels per second
 
-    validKeys: ['arrowleft', 'arrowright'],
-    correctResponse: 'arrowright',
-    duration: 3000,
-  },
-}
+  allowedResponseKeys: ['arrowleft', 'arrowright'],
+  correctResponse: 'arrowright',
+  durationMs: 3000,
+})
 ```
 
 ### Late Responses (Post-Stimulus)
 
 ```typescript
-{
-  name: 'late_response_trial',
-  type: 'RandomDotKinematogram',
-  props: {
-    duration: 3000,               // Total response window: 3 seconds
-    stimulusDuration: 1000,       // Dots visible for 1 second, then blank
+RandomDotKinematogram.trial('late_response_trial', {
+  durationMs: 3000,               // Total response window: 3 seconds
+  stimulusDurationMs: 1000,       // Dots visible for 1 second, then blank
 
-    direction: 90,
-    coherence: 0.7,
+  direction: 90,
+  coherence: 0.7,
 
-    validKeys: ['arrowleft', 'arrowright'],
-    correctResponse: 'arrowright',
+  allowedResponseKeys: ['arrowleft', 'arrowright'],
+  correctResponse: 'arrowright',
 
-    showFixation: true,           // Fixation remains visible
-  },
-}
+  showFixation: true,           // Fixation remains visible
+})
 ```
 
 ### Character & Emoji Dots
 
 ```typescript
-{
-  name: 'emoji_rdk',
-  type: 'RandomDotKinematogram',
-  props: {
-    direction: 90,
-    coherence: 0.5,
+RandomDotKinematogram.trial('emoji_rdk', {
+  direction: 90,
+  coherence: 0.5,
 
-    dotCharacter: '🔴',          // Use red circle emoji instead of circles!
-    dotRadius: 4,                // Controls size (font size = dotRadius * 2.5)
+  dotCharacter: '🔴',          // Use red circle emoji instead of circles!
+  dotRadius: 4,                // Controls size (font size = dotRadius * 2.5)
 
-    backgroundColor: '#1a1a1a',
+  backgroundColor: '#1a1a1a',
 
-    validKeys: ['arrowleft', 'arrowright'],
-    duration: 2000,
-  },
-}
+  allowedResponseKeys: ['arrowleft', 'arrowright'],
+  durationMs: 2000,
+})
 ```
 
 **More Examples:**

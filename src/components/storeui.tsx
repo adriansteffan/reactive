@@ -1,9 +1,6 @@
-import { BaseComponentProps } from '../mod';
+import { BaseComponentProps } from '../core/component';
 import React, { useState, useEffect } from 'react';
-import { registerSimulation } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
-
-registerFlattener('StoreUI', 'storeui');
+import { defineComponent } from '../core/component';
 
 interface BaseFieldConfig {
   type: 'string' | 'integer' | 'float' | 'boolean';
@@ -45,12 +42,7 @@ function buildFieldValues(fields: FieldConfig[], store?: Record<string, any>): R
   return values;
 }
 
-registerSimulation('StoreUI', (trialProps, experimentState, _simulators, participant) => {
-  const values = buildFieldValues(trialProps.fields || [], experimentState.store);
-  return { responseData: values, participantState: participant, storeUpdates: values };
-}, {});
-
-interface StoreUIProps extends BaseComponentProps {
+interface StoreUIProps extends BaseComponentProps<Record<string, any>> {
   title?: string;
   description?: string;
   fields: FieldConfig[];
@@ -332,4 +324,12 @@ function StoreUI({
   );
 }
 
-export default StoreUI;
+export default defineComponent({
+  name: 'StoreUI',
+  component: StoreUI,
+  csv: 'storeui',
+  simulate: ({ props, store }) => {
+    const values = buildFieldValues(props.fields || [], store);
+    return { responseData: values, storeUpdates: values };
+  },
+});

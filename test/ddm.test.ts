@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { simulateDDMTrial, mapDDMChoice } from './ddm';
-import { seedDistributions } from './distributions';
+import { simulateDDMTrial, mapDDMChoice } from '../src/utils/ddm';
+import { seedDistributions } from '../src/utils/distributions';
 
 beforeEach(() => {
   seedDistributions(42);
@@ -11,8 +11,8 @@ const baseParams = {
   boundaries: 0.1 as const,
   startingPoint: 0,
   noiseLevel: 0.003,
-  timeLimit: 2000,
-  stimOffset: 2000,
+  timeLimitMs: 2000,
+  stimOffsetMs: 2000,
   postStimStrategy: { type: 'continue' as const },
 };
 
@@ -20,7 +20,7 @@ describe('simulateDDMTrial', () => {
   it('returns a valid result shape', () => {
     const result = simulateDDMTrial(baseParams);
     expect([0, 1, null]).toContain(result.choice);
-    expect(result.rt).toBeGreaterThan(0);
+    expect(result.rtMs).toBeGreaterThan(0);
     expect(typeof result.finalEvidence).toBe('number');
     expect(result.isContaminated).toBe(false);
   });
@@ -37,27 +37,27 @@ describe('simulateDDMTrial', () => {
     const result = simulateDDMTrial({
       ...baseParams,
       driftRate: 1, // very high drift for instant decision
-      sensoryDelay: 100,
-      motorDelay: 50,
+      sensoryDelayMs: 100,
+      motorDelayMs: 50,
     });
-    expect(result.rt).toBeGreaterThanOrEqual(150);
+    expect(result.rtMs).toBeGreaterThanOrEqual(150);
   });
 
   it('clamps sensory and motor delays to >= 0', () => {
     const result = simulateDDMTrial({
       ...baseParams,
       driftRate: 1,
-      sensoryDelay: { type: 'normal', mean: -1000, sd: 1 },
-      motorDelay: { type: 'normal', mean: -1000, sd: 1 },
+      sensoryDelayMs: { distribution: 'normal', mean: -1000, sd: 1 },
+      motorDelayMs: { distribution: 'normal', mean: -1000, sd: 1 },
     });
-    expect(result.rt).toBeGreaterThanOrEqual(0);
+    expect(result.rtMs).toBeGreaterThanOrEqual(0);
   });
 
   it('clamps noise level to >= 0', () => {
     // Should not throw even with a negative noise param
     const result = simulateDDMTrial({
       ...baseParams,
-      noiseLevel: { type: 'normal', mean: -10, sd: 0.1 },
+      noiseLevel: { distribution: 'normal', mean: -10, sd: 0.1 },
     });
     expect(result).toBeDefined();
   });
@@ -67,10 +67,10 @@ describe('simulateDDMTrial', () => {
       ...baseParams,
       driftRate: 0,
       noiseLevel: 0, // no noise, no drift — never reaches boundary
-      timeLimit: 100,
+      timeLimitMs: 100,
     });
     expect(result.choice).toBeNull();
-    expect(result.rt).toBe(100);
+    expect(result.rtMs).toBe(100);
   });
 
   it('supports asymmetric boundaries', () => {
@@ -86,8 +86,8 @@ describe('simulateDDMTrial', () => {
   it('contamination returns isContaminated with valid rt', () => {
     const result = simulateDDMTrial({ ...baseParams, contaminationRate: 1.0 });
     expect(result.isContaminated).toBe(true);
-    expect(result.rt).toBeGreaterThanOrEqual(0);
-    expect(result.rt).toBeLessThanOrEqual(baseParams.timeLimit);
+    expect(result.rtMs).toBeGreaterThanOrEqual(0);
+    expect(result.rtMs).toBeLessThanOrEqual(baseParams.timeLimitMs);
   });
 
   it('contamination sets finalEvidence to startingPoint', () => {
@@ -102,43 +102,43 @@ describe('simulateDDMTrial', () => {
 });
 
 describe('snapshot strategy', () => {
-  it('forces choice at stimOffset based on boundary proximity', () => {
+  it('forces choice at stimOffsetMs based on boundary proximity', () => {
     const result = simulateDDMTrial({
       ...baseParams,
       driftRate: 0.01, // positive drift, evidence moves toward upper
-      stimOffset: 50,
+      stimOffsetMs: 50,
       postStimStrategy: { type: 'snapshot' },
     });
     expect<(number | null)[]>([0, 1]).toContain(result.choice);
     expect(result.isContaminated).toBe(false);
   });
 
-  it('rt reflects stimOffset timing, not timeLimit', () => {
+  it('rt reflects stimOffsetMs timing, not timeLimitMs', () => {
     const result = simulateDDMTrial({
       ...baseParams,
-      driftRate: 0.0001, // slow drift, won't hit boundary before stimOffset
+      driftRate: 0.0001, // slow drift, won't hit boundary before stimOffsetMs
       noiseLevel: 0.0001,
-      sensoryDelay: 0,
-      motorDelay: 100,
-      stimOffset: 200,
-      timeLimit: 5000,
+      sensoryDelayMs: 0,
+      motorDelayMs: 100,
+      stimOffsetMs: 200,
+      timeLimitMs: 5000,
       postStimStrategy: { type: 'snapshot' },
     });
-    // rt should be around stimOffset + motorDelay, not timeLimit
-    expect(result.rt).toBeLessThan(5000);
-    expect(result.rt).toBeGreaterThanOrEqual(200);
+    // rt should be around stimOffsetMs + motorDelayMs, not timeLimitMs
+    expect(result.rtMs).toBeLessThan(5000);
+    expect(result.rtMs).toBeGreaterThanOrEqual(200);
   });
 });
 
 describe('continue strategy', () => {
-  it('defaults to zero drift after stimOffset', () => {
-    // With zero drift and no noise after stimOffset, evidence should freeze
+  it('defaults to zero drift after stimOffsetMs', () => {
+    // With zero drift and no noise after stimOffsetMs, evidence should freeze
     const result = simulateDDMTrial({
       ...baseParams,
       driftRate: 0,
       noiseLevel: 0,
-      stimOffset: 10,
-      timeLimit: 100,
+      stimOffsetMs: 10,
+      timeLimitMs: 100,
       postStimStrategy: { type: 'continue' },
     });
     expect(result.choice).toBeNull(); // no drift, no noise — timeout
@@ -152,8 +152,8 @@ describe('collapse strategy', () => {
       ...baseParams,
       driftRate: 0,
       noiseLevel: 0.001,
-      stimOffset: 0,
-      timeLimit: 10000,
+      stimOffsetMs: 0,
+      timeLimitMs: 10000,
       postStimStrategy: {
         type: 'collapse',
         collapseDef: { rate: 0.001 },
@@ -168,26 +168,26 @@ describe('collapse strategy', () => {
       ...baseParams,
       driftRate: 0,
       noiseLevel: 0.0001,
-      stimOffset: 0,
-      timeLimit: 10000,
+      stimOffsetMs: 0,
+      timeLimitMs: 10000,
       postStimStrategy: {
         type: 'collapse',
-        collapseDef: { rate: 0.001, delay: 0 },
+        collapseDef: { rate: 0.001, delayMs: 0 },
       },
     });
     const delayed = simulateDDMTrial({
       ...baseParams,
       driftRate: 0,
       noiseLevel: 0.0001,
-      stimOffset: 0,
-      timeLimit: 10000,
+      stimOffsetMs: 0,
+      timeLimitMs: 10000,
       postStimStrategy: {
         type: 'collapse',
-        collapseDef: { rate: 0.001, delay: 500 },
+        collapseDef: { rate: 0.001, delayMs: 500 },
       },
     });
     // Delayed collapse should take longer (or at least not be faster)
-    expect(delayed.rt).toBeGreaterThanOrEqual(fast.rt);
+    expect(delayed.rtMs).toBeGreaterThanOrEqual(fast.rtMs);
   });
 });
 
@@ -196,7 +196,7 @@ describe('mapDDMChoice', () => {
     expect(mapDDMChoice(null, ['a', 'b'])).toBeNull();
   });
 
-  it('returns null for empty validKeys', () => {
+  it('returns null for empty allowedResponseKeys', () => {
     expect(mapDDMChoice(1, [])).toBeNull();
   });
 

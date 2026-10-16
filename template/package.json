@@ -11,9 +11,7 @@
     "build": "bun build.ts",
     "simulate": "bun simulate.ts",
     "typecheck": "bun check",
-    "lint": "biome lint --error-on-warnings",
-    "transcribe": "docker compose run --rm transcribe",
-    "transcribe:gpu": "docker compose run --rm transcribe-gpu"
+    "lint": "biome lint --error-on-warnings"
   },
   "dependencies": {
     "@adriansteffan/reactive": "RP_VERSION",

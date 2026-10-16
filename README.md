@@ -21,28 +21,240 @@ Then follow the instructions shown there and in the created `README.md`
 
 ### Usage
 
-For now, refer to the `Experiment.tsx` in the template project to find out how to define an experiment, and add custom trials and questions!
+An experiment is defined in `src/Experiment.tsx` of the template project, which exports `defineExperiment(...)`:
+
+```tsx
+import { defineExperiment, PlainInput, Text, Upload } from '@adriansteffan/reactive';
+
+export default defineExperiment({
+  config: { showProgressBar: true },
+  timeline: [
+    Text.trial('welcome', { content: <p>Welcome!</p>, buttonText: 'Start' }),
+    PlainInput.trial('nickname', { content: <p>What is your nickname?</p> }),
+    Text.trial('thanks', ({ get }) => ({
+      content: <p>Thank you, {get(PlainInput, 'nickname').value}!</p>,
+    })),
+    Upload.trial('upload'),
+  ],
+});
+```
+
+The other fields of `defineExperiment` are `params` (below) and `simulation` (see [Simulation](#simulation)).
 
 Premade components available so far:
 
 * Text: A simple display of Text and a Button
-* MicCheck: used to test the voice recording feature and choose a preferred microphone to use
-* CanvasBlock: TODO DOC
-* IF_BLOCK: TODO DOC
-* IF_GOTO: TODO DOC
-* MARKER: TODO DOC
-* UPDATE_STORE: TODO DOC
-* StoreUI: TODO DOC
-* DeviceCheck: TODO DOC
-* ProlificEnd: TODO DOC
-* Quest: SurveyJS questionnaires
+* PlainInput: A text input with a prompt
+* MicrophoneCheck: used to test the voice recording feature and choose a preferred microphone to use
+* CanvasBlock: A sequence of canvas slides with keyboard responses, for timed tasks
+* StoreUI: A form that writes its fields to the store
+* CheckDevice: Gathers information about the participant's device and can stop participants whose device does not fit
+* EnterFullscreen / ExitFullscreen
+* ProlificEnding: Shows the Prolific completion code
+* Quest (extra): SurveyJS questionnaires
     * ... all questiontypes supported by SurveyJS can be used
     * voicerecorder: a custom question type that allows participants to record voice
-* Tutorial: A paginated slide deck with navigation, dot indicators, and optional interactive slides via `useTutorialSlide`
+    * your own question types, as React components passed by name to `customQuestions`
+* Tutorial (extra): A paginated slide deck with navigation, dot indicators, and optional interactive slides via `useTutorialSlide`
 * RandomDotKinematogram: A random dot kinematogram (RDK) stimulus for motion perception experiments
 * VoiceRecording: A standalone voice recording trial with pause/stop controls, optional minimum duration warning, and confirmation dialog
-* Upload: Uploads the collected data on a button press by the participant 
+* Upload: Uploads the collected data on a button press by the participant
 
+Quest and Tutorial are extras: they need packages of their own, so a new project leaves them out. Add them in the project's root directory with
+
+```
+bunx @adriansteffan/reactive add quest tutorial
+```
+
+and import them from their own entry points:
+
+```tsx
+import { Quest } from '@adriansteffan/reactive/quest';
+import { Tutorial, useTutorialSlide } from '@adriansteffan/reactive/tutorial';
+```
+
+An experiment that does not use them neither installs them nor sends them to its participants.
+
+### Trials
+
+`Component.trial(name?, props)` puts a component into the timeline. The name is optional, but it identifies the trial in the data and is needed to read its result later. Props are checked against the component; a component with required props needs them here.
+
+Further settings are chained. Every method returns a new trial and leaves the one it was called on unchanged, so a partly configured trial can serve as a base for several others. Passing `undefined` leaves a setting as it is, which keeps optional settings inline:
+
+```tsx
+const feedback = Text.trial({ buttonText: 'Continue' });
+
+feedback.name('slow').props({ content: <p>Take your time.</p> }),
+Text.trial('instructions').metadata(isPractice ? { practice: true } : undefined),
+```
+
+| Method | Description |
+|---|---|
+| `.name(name)` | Renames the trial, for variants of a base trial |
+| `.props(props)` | Merges props into the trial's props |
+| `.metadata(values, { nested? })` | Extra columns for this trial's rows (see [Metadata](#metadata)) |
+| `.csv(file)` | The CSV file(s) for this trial's rows instead of its component's; `null` keeps them out |
+| `.simulators(simulators)` | Replaces some of the component's simulators (see [Simulation](#simulation)) |
+| `.collectRefreshRate(enabled?)` | Measures the screen's refresh rate while the trial runs, for later canvas trials |
+| `.hideSettings(names \| true)` | Hides the component's settings from the settings page |
+
+Times are in milliseconds everywhere, in props as in the recorded data, and their names end in `Ms`: `durationMs`, `reactionTimeMs`, and each row's `startMs` and `endMs`.
+
+### Reading results
+
+Props, metadata, conditions and store updates can be functions of the timeline context (`TimelineContext`), which they receive when the trial runs. Its `get` returns the response of an earlier trial, typed by its component:
+
+```tsx
+const nickname = PlainInput.trial('nickname', { content: <p>What is your nickname?</p> });
+
+Text.trial(({ get }) => ({ content: <p>Hello {get(nickname).value}</p> }));
+Text.trial(({ get }) => ({ content: <p>Hello {get(PlainInput, 'nickname').value}</p> }));
+```
+
+A trial can be read through the trial itself or through its component and name. `get` throws if the trial has not run yet; `getOptional` returns `undefined` instead, for trials that may have been skipped. Asking for a name that is not in the timeline stops the experiment during development and simulation; for real participants it is logged instead. The timeline context also holds `data`, every row recorded so far, and `store`.
+
+These callbacks must not change the context's `data` or `store`: they are frozen during development and simulation, so trying throws. The store changes only through `updateStore` (below) and through components.
+
+### Control flow
+
+The timeline is a list of trials and blocks. Lists can be nested, and `false`, `null` and `undefined` are skipped, so pieces of a timeline can be combined like React children:
+
+```tsx
+timeline: [
+  welcomeAndConsent,
+  group === 'vn' ? [soundCheck, visualNovel] : vignette,
+  group === 'vn' && credits,
+  upload,
+]
+```
+
+This covers choices that are fixed before the participant starts. Choices that depend on their answers use blocks, which are decided when the participant reaches them:
+
+```tsx
+const clickedSlowly = ({ get }: TimelineContext) => get(CustomTrial, 'customtrial').totalTimeMs > 3000;
+
+ifBlock(clickedSlowly, [Text.trial({ content: <p>Take your time.</p> })]).else([
+  Text.trial({ content: <p>That was quick!</p> }),
+]),
+whileBlock(({ store }) => (store.attempts ?? 0) < 3, [practiceRound]),
+updateStore(({ store }) => ({ attempts: (store.attempts ?? 0) + 1 })),
+marker('retry'),
+ifGoto(({ get }) => !get(Quiz, 'quiz').passed, 'retry'),
+```
+
+A condition written as a named function, like `clickedSlowly`, can be reused in several blocks and props without storing a flag. `updateStore` is for values that carry forward, such as a bonus.
+
+Within one timeline, two different trials of the same component cannot share a name, unless they sit in different branches of the same `ifBlock`.
+
+### Params
+
+Params are the experiment's inputs. They are declared once, read from the URL, and passed to `timeline`, which then becomes a function that runs once per participant:
+
+```tsx
+export default defineExperiment({
+  params: {
+    group: {
+      values: ['vn', 'scenario'],
+      default: () => (Math.random() < 0.5 ? 'vn' : 'scenario'),
+      description: 'Which version of the study the participant sees',
+    },
+    rounds: { default: 3 },
+  },
+  timeline: ({ group, rounds }) => [
+    group === 'vn' ? visualNovel : vignette,
+    Array.from({ length: rounds }, (_, i) => Round.trial(`round_${i}`)),
+  ],
+});
+```
+
+* A param is read from the URL by its key (`?group=scenario&rounds=5`), otherwise its default is used. A default that is a function is called once per participant.
+* With `values`, the param is typed as one of them (`'vn' | 'scenario'`), and a URL value outside them stops the experiment with an error. Without `values`, the param takes the type of its default.
+* The resolved values are recorded in the data. Simulated participants can set them (see [Simulation](#simulation)).
+* `timeline` may use any JavaScript, such as `shuffle` or loops. Its random draws are seeded per participant, and the seed (`buildSeed`) is recorded, so the exact timeline a participant saw can be rebuilt later.
+* Params exist only inside `timeline`. Parts of the timeline in other files that need one become functions that take it, and components get it as a prop.
+
+### Typed store
+
+The store's shape can be declared once, anywhere in the project:
+
+```tsx
+declare module '@adriansteffan/reactive' {
+  interface ExperimentStore {
+    bonus: number;
+  }
+}
+```
+
+The timeline context's `store`, the `updateStore` block, and the `store` and `updateStore` that components receive are then checked against it. Without a declaration, the store is untyped.
+
+### Custom components
+
+`defineComponent` turns a React component into one that can be used in the timeline:
+
+```tsx
+function ReactionView({ next, target }: BaseComponentProps<{ rtMs: number }> & { target: string }) {
+  ...
+  next({ rtMs });
+}
+
+export default defineComponent({
+  name: 'Reaction',
+  component: ReactionView,
+  csv: 'reactions', // optional, see Data Saving
+  simulate: ({ props, simulators, participant }) => { ... }, // optional, see Simulation
+  defaultSimulators: { ... }, // optional
+});
+```
+
+`BaseComponentProps<R>` gives the component `next`, which records its response of type `R` and moves on, along with `data`, `store`, `updateStore` and `name`, the trial's name. Only `name` and `component` are required. The name identifies the component in the data, since function names do not survive minification. A defined component is still an ordinary React component.
+
+Write the component as a named function, as above, rather than inline in `defineComponent`: hot reloading then keeps the state of a trial that is on screen when its file changes.
+
+A component can declare params of its own, in the same format as the experiment's. The settings page lists them whenever the component is in the timeline, the URL can set them, and the component reads their values with `useParams(params)`, typed like the experiment's. Upload's `upload` and `download` switches work this way:
+
+```tsx
+const params = {
+  showFeedback: { default: true, description: 'Show feedback after each response' },
+} as const;
+
+function ReactionView(...) {
+  const { showFeedback } = useParams(params); // boolean
+  ...
+}
+
+defineComponent({ name: 'Reaction', component: ReactionView, params });
+```
+
+`as const` keeps the `values` of a param as a union of them, as `defineExperiment` does.
+
+A component that talks to the experiment's server, such as a multiplayer game or a streamed API response, reaches the routes in `server.ts` at `getBackendUrl()`. That is `/backend` in the browser and the simulation's own server while simulating, so the component and its `simulate` can use the same call:
+
+```tsx
+const response = await fetch(`${getBackendUrl()}/match`, { method: 'POST', body: JSON.stringify({ id }) });
+```
+
+Simulated participants run at the same time against that one server, so they can also interact through it.
+
+### Hot reloading
+
+Edits to the experiment or to its components keep the participant where they are: the timeline is rebuilt with the same params and seed, the trial on screen stays mounted with its state, and it receives its new props. An edit that removes the trial on screen falls back to the same position.
+
+### Settings page
+
+`/settings` builds a link for a run. It lists the experiment's params, then the settings: the general ones (`dev`) and those of the components in the selected trials, by component. Below them come the trials, which follow the params entered above. The settings follow which trials are checked, as they would in the run, so excluding a trial drops the settings of components that only it uses. Checking only some trials runs just those, by name or position, through `?includeSubset=` and `?excludeSubset=`.
+
+### Dev panel
+
+`?dev=true` adds a panel that shows the current trial's props, the store and all data recorded so far.
+
+### Turning features off
+
+The settings page and the dev panel are available wherever the experiment runs, including a deployed study, which is often run through the settings page. A study that should not offer one of them can turn it off in the project's `.env`:
+
+```
+PUBLIC_DISABLE_SETTINGS=TRUE
+PUBLIC_DISABLE_DEV=TRUE
+```
 
 
 ## Simulation
@@ -51,35 +263,44 @@ Reactive includes a simulation system that lets you run experiments headlessly, 
 
 ### Quick start
 
-Define your participant generator in `Experiment.tsx`:
+Define your participant generator in `defineExperiment`:
 
 ```tsx
-export const simulationConfig = {
-  seed: 42, // optional: makes simulations fully reproducible
-  participants: () => sampleParticipants('sobol', 10, {
-    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
-  }),
-};
+export default defineExperiment({
+  simulation: {
+    seed: 42, // optional: makes simulations fully reproducible
+    createParticipants: () => sampleParticipants('sobol', 10, {
+      needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+    }),
+  },
+  timeline: [ ... ],
+});
 ```
 
-### Simulating URL params (e.g. Prolific IDs)
+### Setting params and URL params
 
-To produce simulated runs whose session CSV matches real Prolific runs (so payout/analysis scripts work on both), attach a `urlParams` object to each simulated participant. These flow into the metadata trial as unregistered params and land in the CSV with a `url_` prefix.
+A simulated participant's `params` set the experiment's params, for example to split participants evenly between groups:
+
+```tsx
+createParticipants: () => sampleParticipants('sobol', 10, { ... }).map((p, i) => ({
+  ...p,
+  params: { group: i % 2 ? 'vn' : 'scenario' },
+})),
+```
+
+To produce simulated runs whose session CSV matches real Prolific runs (so payout/analysis scripts work on both), attach a `urlParams` object to each simulated participant. These are recorded like URL params the experiment does not declare, and land in the CSV with a `url_` prefix.
 
 ```tsx
 import { sampleParticipants, prolificId } from '@adriansteffan/reactive';
 
-export const simulationConfig = {
-  seed: 42,
-  participants: () => sampleParticipants('sobol', 10, {
-    needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
-  }).map((p) => ({
-    ...p,
-    urlParams: {
-      PROLIFIC_PID: prolificId(),
-    },
-  })),
-};
+createParticipants: () => sampleParticipants('sobol', 10, {
+  needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+}).map((p) => ({
+  ...p,
+  urlParams: {
+    PROLIFIC_PID: prolificId(),
+  },
+})),
 ```
 
 Available generators: `prolificId()` (24-char alphanumeric), `alphanumericId(length)` for custom lengths.
@@ -94,91 +315,78 @@ This starts the backend on a free port, simulates all participants through the e
 
 ### How it works
 
-Each built-in component (Text, Quest, CanvasBlock, Upload, etc.) registers a **simulate function** and **default simulators**. The simulate function contains the trial logic. The simulators are replaceable decision functions that model participant behavior at each interaction point.
+Each built-in component (Text, Quest, CanvasBlock, Upload, etc.) has a **simulate function** and **default simulators**. The simulate function contains the trial logic. The simulators are replaceable decision functions that model participant behavior at each interaction point.
 
 For example, Quest's simulate function iterates through questions and calls `simulators.answerQuestion()` for each one. The default `answerQuestion` picks random valid answers. You can override it to model specific participant behavior.
 
+Simulators and simulate functions take a single object, so each one names only what it uses. A simulator receives `props` and `participant`, plus whatever the simulate function passes along (`question`, for `answerQuestion`). It returns its decision, and a new `participantState` if the participant changed; without one, the participant stays as it was.
+
 ### Overriding simulators on a trial
 
-Add a `simulators` property to any timeline item to override specific decision functions:
+`.simulators()` replaces specific decision functions for one trial:
 
 ```tsx
-{
-  type: 'PlainInput',
-  props: { content: <p>What is your name?</p> },
-  simulators: {
-    respond: (_trialProps, participant) => ({
-      value: participant.nickname,
-      participantState: participant,
-    }),
-  },
-}
+PlainInput.trial('name', { content: <p>What is your name?</p> }).simulators({
+  respond: ({ participant }) => ({ value: participant.nickname }),
+}),
 ```
 
-The override is merged with the registered defaults — you only need to specify the decision functions you want to change.
+The override is merged with the component's defaults — you only need to specify the decision functions you want to change.
 
 ### Custom components
 
-Register a simulation for your custom components using `registerSimulation`:
+Give your custom components a simulation in `defineComponent`:
 
 ```tsx
-registerSimulation('MyTrial',
+export default defineComponent({
+  name: 'MyTrial',
+  component: MyTrialView,
   // Simulate function: uses shared trial logic + decision functions
-  (trialProps, experimentState, simulators, participant) => {
-    const choice = simulators.decide(trialProps, participant);
+  simulate: ({ props, simulators, participant }) => {
+    const choice = simulators.decide({ props, participant });
     return { responseData: { choice: choice.value }, participantState: choice.participantState };
   },
   // Default simulators: one per decision point
-  {
-    decide: (_trialProps, participant) => ({
-      value: 'default_choice',
-      participantState: participant,
-    }),
+  defaultSimulators: {
+    decide: () => ({ value: 'default_choice' }),
   },
-);
+});
 ```
 
-The simulate function orchestrates the trial logic. The decision functions are the parts where a human would interact — these are what users override to model different participant behaviors.
+A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data`, `store`, `get`, `getOptional`), so a simulation can depend on earlier answers. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participantState ?? participant`).
 
-### Hybrid mode
-
-During development, you can auto-advance simulated trials while manually interacting with others. Add `?hybridSimulation=true` to the URL during development:
-
-```
-http://localhost:8001?hybridSimulation=true
-```
-
-Trials with `simulators` or `simulate: true` defined on them will auto-advance. Trials without them render normally for human interaction.
-
-Hybrid mode is enabled by default during development. For production, set `PUBLIC_DISABLE_HYBRID_SIMULATION=true` in `.env` to disable it regardless of URL parameters.
+The simulate function orchestrates the trial logic. The decision functions are the parts where a human would interact — these are what users override to model different participant behaviors. Its `responseData` is checked against the response type the component records with `next`. A component without `simulate` works normally, but a simulation stops at its trials with an error.
 
 ### Reproducible simulations
 
 Add `seed` to your simulation config to make runs fully reproducible:
 
 ```tsx
-export const simulationConfig = {
+simulation: {
   seed: 42,
-  participants: () => sampleParticipants('sobol', 100, {
+  createParticipants: () => sampleParticipants('sobol', 100, {
     needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
     agreeableness: { distribution: 'normal', mean: 3.0, sd: 1.0 },
     age: { distribution: 'uniform', min: 18, max: 65 },
   }),
-};
+},
 ```
 
-Each simulated participant runs in its own subprocess. The `seed` controls two separate phases:
+Participants are simulated in one process, several at a time (`concurrency`, by default the number of CPU cores). The `seed` controls two separate phases:
 
-- **Participant generation**: The `participants` factory function is called with the base `seed` (same for all workers), so every worker generates the same participant list.
-- **Simulation behavior**: Module-level randomness (group assignment, trial order) and simulator callbacks are seeded with `seed + participantIndex`, so each participant gets a unique but reproducible random stream.
+- **Participant generation**: `createParticipants` is called with the base `seed` when the simulation starts, so the list is the same in every run, and stays the same while you edit the experiment.
+- **Simulation behavior**: Each participant draws from its own random stream, seeded with the `seed` and the participant's index. The streams of the participant list and of every participant never overlap, also between runs with different seeds, so many seeded runs give independent datasets. The stream covers params' defaults, the timeline's own random draws (trial order) and simulator callbacks. The stream follows the participant across waits, so participants simulated at the same time draw exactly as if each ran alone.
 
-Without `seed`, simulations use random entropy and will vary between runs. When seeded, `Math.random()` is also patched to use the seeded PRNG, so existing code and third-party libraries are automatically reproducible.
+Without `seed`, simulations use random entropy and will vary between runs. `Math.random()` is also routed through these streams, so existing code and third-party libraries are automatically reproducible.
 
-**Note:** Do not close over module-level random values into the factory function — module-level code runs with a per-worker seed, so captured values would differ between workers. Keep all participant generation logic inside the factory.
+`createParticipants` produces the participants when the simulation starts. That way anything drawn at random in it is drawn from the seed, and a fixed list works the same way:
 
 ```tsx
-// Good: all randomness is inside the factory
-participants: () => {
+// Fixed
+createParticipants: () => [{ id: 1, speed: 2 }, { id: 2, speed: 0.5 }],
+
+// Drawn
+createParticipants: () => {
   const base = sampleParticipants('random', 100, {
     openness: { distribution: 'normal', mean: 3.5, sd: 0.8 },
   });
@@ -188,16 +396,14 @@ participants: () => {
     id: i,
   }));
 },
-
-// Bad: module-level value captured into factory
-const noise = normal(0, 1); // different per worker!
-participants: () => [{ trait: noise }],
 ```
+
+**Note:** Random numbers drawn at the top of a file, outside params' defaults and the timeline function, are drawn once and shared by every simulated participant, while real participants each get their own. The simulation warns when the experiment draws random numbers while it loads.
 
 To model distinct populations, combine them inside the factory:
 
 ```tsx
-participants: () => {
+createParticipants: () => {
   const smokers = sampleParticipants('sobol', 50, {
     alertness: { distribution: 'normal', mean: 2.8, sd: 0.7 },
   }).map((p) => ({ ...p, smoker: true }));
@@ -216,10 +422,10 @@ participants: () => {
 |---|---|---|
 | Text | `respond` | Click button, random reaction time |
 | PlainInput | `respond` | Returns `'simulated_input'` |
-| Quest | `answerQuestion` | Random valid answer per question type |
-| CanvasBlock | `respondToSlide` | Random key from `allowedKeys`, random RT |
-| Tutorial | `respondToSlide` | Advances through slides, no interaction data |
-| RandomDotKinematogram | `respond` | Random key from `validKeys`, random RT (may timeout) |
+| Quest | `answerQuestion`, also given `question` | Random valid answer per question type |
+| CanvasBlock | `respondToSlide`, also given `slide` | Random key from `allowedResponseKeys`, random RT |
+| Tutorial | `respondToSlide`, also given `slideIndex` | Advances through slides, no interaction data |
+| RandomDotKinematogram | `respond` | Random key from `allowedResponseKeys`, random RT (may timeout) |
 | Upload | *(none)* | Builds CSVs and POSTs to backend |
 | StoreUI | *(none)* | Uses field default values |
 | CheckDevice | *(none)* | Returns simulated device info |
@@ -229,57 +435,56 @@ participants: () => {
 
 ## Data Saving
 
-Reactive automatically builds CSV files from experiment data using a registry-based system. Each component type registers a default CSV target, and the Upload component discovers these at the end of the experiment.
+Reactive automatically builds CSV files from experiment data. Each component names a default CSV file for its rows, and the Upload component builds the files at the end of the experiment.
 
 ### How it works
 
-Each component type registers where its data should go via `registerFlattener`:
+Each component declares where its data should go with the `csv` option of `defineComponent`:
 
 ```tsx
-registerFlattener('PlainInput', 'session');           // merge into session CSV
-registerFlattener('CanvasBlock', 'canvas', flattenFn); // own CSV with custom flattener
-registerFlattener('ProlificEnding', null);             // no CSV output
+defineComponent({ name: 'PlainInput', component: PlainInput, csv: 'session' });             // merge into session CSV
+defineComponent({ name: 'CanvasBlock', component: CanvasBlock, csv: 'canvas', flatten });    // own CSV with custom flattener
+defineComponent({ name: 'ProlificEnding', component: ProlificEnding, csv: null });           // no CSV output
 ```
 
-Built-in components come pre-registered. The Upload component produces CSVs automatically with no props needed:
+Without `csv`, a component's rows go to a CSV named after the component in lowercase. Built-in components come configured. The Upload component produces CSVs automatically with no props needed:
 
 ```tsx
-{ name: 'upload', type: 'Upload' }
+Upload.trial('upload')
 ```
 
 ### Built-in defaults
 
 | Component | Default CSV | Notes |
 |---|---|---|
-| PlainInput, Quest, CheckDevice, EnterFullscreen, ExitFullscreen, MicrophoneCheck | `session` | Merged into single session row, namespaced by trial name |
+| PlainInput, Quest, CheckDevice, EnterFullscreen, ExitFullscreen, MicrophoneCheck, VoiceRecording | `session` | Merged into single session row, namespaced by trial name |
 | Text | `text` | One row per Text component |
 | CanvasBlock | `canvas` | One row per slide, with built-in flattener |
 | StoreUI | `storeui` | One row per StoreUI occurrence |
-| Tutorial | `session` | Merged into session row |
 | RandomDotKinematogram | `rdk` | One row per RDK trial |
-| ProlificEnding, Upload, RequestFilePermission | *(none)* | No CSV output |
+| ProlificEnding, Upload, RequestFilePermission, Tutorial | *(none)* | No CSV output |
 
 ### Output files
 
 For a session `abc123`, the Upload component produces:
 - `abc123.raw.json` — full raw data
-- `session.abc123.{timestamp}.csv` — one row with params, userAgent, and all session-level trial data namespaced by trial name (e.g. `nickname_value`, `devicecheck_browser`)
+- `session.abc123.{timestamp}.csv` — one row with params, userAgent, `buildSeed`, and all session-level trial data namespaced by trial name (e.g. `nickname_value`, `devicecheck_browser`)
 - `canvas.abc123.{timestamp}.csv` — multi-row CSV from CanvasBlock trials
 - One CSV per additional group (text, storeui, or any custom group)
 
-### Per-item CSV override
+### Per-trial CSV override
 
-Override the default target on any timeline item:
+Override the default target on any trial:
 
 ```tsx
-{ name: 'practice', type: 'CanvasBlock', csv: 'practice', ... }  // separate from main canvas
-{ name: 'main',     type: 'CanvasBlock', ... }                   // uses default 'canvas'
+CanvasBlock.trial('practice', { timeline: practiceSlides }).csv('practice'), // separate from main canvas
+CanvasBlock.trial('main', { timeline: mainSlides }),                         // uses default 'canvas'
 ```
 
 Route a trial to multiple CSVs with an array:
 
 ```tsx
-{ name: 'survey', type: 'Quest', csv: ['session', 'survey'], ... }  // both session row and own file
+Quest.trial('survey', { surveyJson }).csv(['session', 'survey']), // both session row and own file
 ```
 
 ### Adding session-level data
@@ -288,81 +493,81 @@ Use `sessionData` on Upload to inject extra fields into the session CSV:
 
 ```tsx
 // Static
-{
-  type: 'Upload',
-  props: {
-    sessionData: { group: 'control', experimentVersion: 2 },
-  },
-}
+Upload.trial('upload', { sessionData: { experimentVersion: 2 } }),
 
-// Dynamic (computed from store/data)
-{
-  type: 'Upload',
-  props: (data, store) => ({
-    sessionData: { group: store.assignedGroup, condition: store.condition },
-  }),
-}
+// Dynamic (computed from the store or earlier results)
+Upload.trial('upload', ({ store, get }) => ({
+  sessionData: { bonus: store.bonus, choice: get(Story, 'story').choice },
+})),
 ```
 
 ### Custom flatteners
 
-Register a flattener for custom components to control how `responseData` becomes CSV rows:
+Give a custom component a `flatten` function to control how `responseData` becomes CSV rows:
 
 ```tsx
-registerFlattener('MyGame', 'games', (item) => {
-  return item.responseData.moves.map((move) => ({
-    moveType: move.type,
-    score: move.score,
-  }));
+defineComponent({
+  name: 'MyGame',
+  component: MyGame,
+  csv: 'games',
+  flatten: (item) =>
+    item.responseData.moves.map((move) => ({
+      moveType: move.type,
+      score: move.score,
+    })),
 });
 ```
 
-Each row automatically gets standard trial fields prefixed with `trial_` (`trial_index`, `trial_name`, `trial_start`, etc.) plus any metadata from the timeline item. The flattener output overwrites these if keys collide.
+Each row automatically gets standard trial fields prefixed with `trial_` (`trial_index`, `trial_name`, `trial_startMs`, etc.) plus any metadata from the trial. The flattener output overwrites these if keys collide.
 
 ### Array flattener
 
 For components whose `responseData` is an array of objects (like CanvasBlock), use the built-in `arrayFlattener` instead of writing your own. Each array element becomes a CSV row with a `block` column set to the trial name:
 
 ```tsx
-import { registerFlattener, arrayFlattener } from '@adriansteffan/reactive';
+import { arrayFlattener, defineComponent } from '@adriansteffan/reactive';
 
-registerFlattener('MyBlockTrial', 'blocks', arrayFlattener);
+defineComponent({ name: 'MyBlockTrial', component: MyBlockTrial, csv: 'blocks', flatten: arrayFlattener });
 ```
 
 ### Multi-CSV components
 
-Call `registerFlattener` multiple times for one component to produce multiple CSV files:
+Map several files to their flatteners to produce multiple CSV files from one component:
 
 ```tsx
-registerFlattener('SportsGame', 'sports_actions', (item) => flattenActions(item.responseData));
-registerFlattener('SportsGame', 'sports_players', (item) => flattenPlayers(item.responseData));
-registerFlattener('SportsGame', 'sports_matches', (item) => flattenMatches(item.responseData));
+defineComponent({
+  name: 'SportsGame',
+  component: SportsGame,
+  csv: {
+    sports_actions: (item) => flattenActions(item.responseData),
+    sports_players: (item) => flattenPlayers(item.responseData),
+    sports_matches: (item) => flattenMatches(item.responseData),
+  },
+});
 ```
 
 ### Upload props
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `sessionID` | `string` | random UUID | Custom session identifier used in filenames and folder names |
+| `sessionId` | `string` | random UUID | Custom session identifier used in filenames and folder names |
 | `sessionData` | `Record<string, any>` | — | Extra key-value pairs added to the session CSV row |
-| `generateFiles` | `(sessionID, data, store) => FileUpload[]` | — | Produce custom files alongside auto-generated CSVs |
+| `generateFiles` | `({ sessionId, data, store }) => FileUpload[]` | — | Produce custom files alongside auto-generated CSVs |
 | `uploadRaw` | `boolean` | `true` | Include raw JSON dump of all trial data |
-| `autoUpload` | `boolean` | `false` | Upload immediately on mount instead of showing a submit button |
+| `autoUpload` | `boolean` | `true` | Upload as soon as the screen appears; `false` shows a submit button first |
+| `buttonText` | `string` | `'Submit Data'` | The submit button, with `autoUpload: false` |
+| `retryButtonText` | `string` | `'Try Again'` | The button shown after a failed upload |
+| `parentFolder` | `string` | — | A folder for the session's folder to go into, on the server (`data/<parentFolder>/<sessionId>`) and in the apps |
 
 ### Metadata
 
-Add `metadata` to timeline items to include extra columns in every CSV row that trial produces:
+Add metadata to a trial to include extra columns in every CSV row it produces:
 
 ```tsx
-{
-  name: 'block1',
-  type: 'CanvasBlock',
-  metadata: { difficulty: 'hard', block: 2 },
-  props: { ... },
-}
+CanvasBlock.trial('block1', { timeline: slides }).metadata({ difficulty: 'hard', block: 2 }),
 ```
 
-For session-level items, metadata is namespaced by trial name (e.g. `block1_difficulty`). For non-session items, metadata columns appear unprefixed.
+For session-level trials, metadata is namespaced by trial name (e.g. `block1_difficulty`). For non-session trials, metadata columns appear unprefixed. With `.metadata(values, { nested: true })`, the values go into a single `metadata` column instead. Metadata can also be a function of the timeline context.
 
 
 ## Utilities
@@ -370,34 +575,30 @@ For session-level items, metadata is namespaced by trial name (e.g. `block1_diff
 Reactive exports helper functions for common experiment-building tasks.
 
 ```tsx
-import { shuffle, sample, chunk, pipe, normal, uniform, poisson, seedDistributions, sobol, halton, sampleParticipants } from '@adriansteffan/reactive';
+import { shuffle, sample, chunk, normal, uniform, poisson, sobol, halton, sampleParticipants } from '@adriansteffan/reactive';
 ```
 
 ### Array functions
 
-These are available both as standalone functions and as Array prototype extensions (after calling `registerArrayExtensions()`).
+These are available both as standalone functions and as methods of every array.
 
 | Function | Signature | Description |
 |---|---|---|
 | `shuffle` | `shuffle(arr)` | Returns a new array with elements randomly reordered (Fisher-Yates) |
 | `sample` | `sample(arr, n?)` | Returns `n` random elements from the array (default 1, with replacement) |
-| `chunk` | `chunk(arr, n)` | Splits the array into `n` roughly equal chunks |
-| `pipe` | `pipe(arr, fn)` | Passes the array to `fn` and returns the result |
+| `chunk` | `chunk(arr, n)` | Splits the array into chunks of `n` items; the last chunk holds what is left |
+| `.pipe` | `arr.pipe(fn)` | Passes the array to `fn` and returns the result (method only) |
 
-As prototype methods:
+As methods, they chain:
 
 ```tsx
-import { registerArrayExtensions } from '@adriansteffan/reactive';
-registerArrayExtensions();
-
-const trials = [1, 2, 3, 4, 5].shuffle();
-const picked = trials.sample(2);
-const blocks = trials.chunk(3);
+const blocks = [1, 2, 3, 4, 5, 6].shuffle().chunk(3); // two blocks of three, in random order
+const practice = blocks.pipe(([first]) => first.sample(2));
 ```
 
 ### Distributions
 
-Random number generators backed by [@stdlib](https://github.com/stdlib-js/stdlib), useful for writing realistic simulations.
+Random number generators, useful for writing realistic simulations.
 
 | Function | Signature | Description |
 |---|---|---|
@@ -405,20 +606,7 @@ Random number generators backed by [@stdlib](https://github.com/stdlib-js/stdlib
 | `normal` | `normal(mu, sigma)` | Sample from a normal (Gaussian) distribution with mean `mu` and standard deviation `sigma` |
 | `poisson` | `poisson(lambda)` | Sample from a Poisson distribution with rate `lambda` |
 
-All built-in simulation functions use these distributions internally.
-
-#### Global seeding
-
-Call `seedDistributions` to seed all three generators from a single seed, making simulation runs fully reproducible:
-
-```tsx
-import { seedDistributions } from '@adriansteffan/reactive';
-
-seedDistributions(42);
-// All subsequent calls to normal(), uniform(), poisson() produce the same sequence
-```
-
-Without seeding, the generators use random entropy (non-reproducible, same as `Math.random()`).
+All built-in simulation functions use these distributions internally. During a simulation they draw from the participant's seeded stream (see [Reproducible simulations](#reproducible-simulations)).
 
 ### Quasi-Monte Carlo sequences
 
@@ -483,7 +671,7 @@ The first argument is the sampling method: `'sobol'`, `'halton'`, or `'random'`.
 
 ### Drift Diffusion Model (DDM)
 
-`simulateDDMTrial` simulates a single 2AFC trial. Parameters can be fixed numbers or distributions (`{ type: 'normal', mean, sd }` / `{ type: 'uniform', min, max }`) for inter-trial variability.
+`simulateDDMTrial` simulates a single 2AFC trial. Parameters can be fixed numbers or distributions (`{ distribution: 'normal', mean, sd }` / `{ distribution: 'uniform', min, max }`) for inter-trial variability.
 
 ```tsx
 import { simulateDDMTrial, mapDDMChoice } from '@adriansteffan/reactive';
@@ -493,13 +681,13 @@ const result = simulateDDMTrial({
   boundaries: 0.1,        // symmetric: +0.1 / -0.1
   startingPoint: 0,
   noiseLevel: 0.003,
-  sensoryDelay: { type: 'uniform', min: 100, max: 200 },
-  motorDelay: { type: 'uniform', min: 50, max: 100 },
-  timeLimit: 2000,
-  stimOffset: 1000,
+  sensoryDelayMs: { distribution: 'uniform', min: 100, max: 200 },
+  motorDelayMs: { distribution: 'uniform', min: 50, max: 100 },
+  timeLimitMs: 2000,
+  stimOffsetMs: 1000,
   postStimStrategy: { type: 'continue' },
 });
-// → { choice: 0 | 1 | null, rt, finalEvidence, isContaminated }
+// → { choice: 0 | 1 | null, rtMs, finalEvidence, isContaminated }
 
 // Map DDM choice to a key press (null-safe)
 mapDDMChoice(result.choice, ['f', 'j'], 'f');
@@ -507,12 +695,12 @@ mapDDMChoice(result.choice, ['f', 'j'], 'f');
 
 `boundaries` can also be a `[lower, upper]` tuple for asymmetric boundaries. `choice` is `null` on timeout.
 
-After the stimulus disappears (`stimOffset`), the `postStimStrategy` takes over:
+After the stimulus disappears (`stimOffsetMs`), the `postStimStrategy` takes over:
 - `{ type: 'continue' }` — keep accumulating (optional `residualDrift`, `noiseMultiplier`)
 - `{ type: 'snapshot' }` — forced choice by boundary proximity
-- `{ type: 'collapse', collapseDef: { rate, delay? } }` — boundaries shrink, drift drops to 0
+- `{ type: 'collapse', collapseDef: { rate, delayMs? } }` — boundaries shrink, drift drops to 0
 
-Boundaries can also collapse during viewing via `stimulusCollapse: { rate, delay? }`.
+Boundaries can also collapse during viewing via `stimulusCollapse: { rate, delayMs? }`.
 
 The RDK component uses this as its default simulator with parameters from Ratcliff & McKoon (2008), converted to ms time steps.
 
@@ -524,7 +712,7 @@ The RDK component uses this as its default simulator with parameters from Ratcli
 Place early in your timeline to let participants select and test their microphone:
 
 ```tsx
-{ type: 'MicrophoneCheck' }
+MicrophoneCheck.trial()
 ```
 
 The selected device ID is stored automatically and used by all subsequent recording components.
@@ -534,40 +722,36 @@ The selected device ID is stored automatically and used by all subsequent record
 A standalone trial where participants record their voice. The "Continue" button only appears after a recording is made.
 
 ```tsx
-{
-  type: 'VoiceRecording',
-  props: {
-    content: <p>Please describe what you saw.</p>,
-  },
-}
+VoiceRecording.trial('description', {
+  content: <p>Please describe what you saw.</p>,
+})
 ```
 
 With minimum duration enforcement; shows a warning when paused if the recording is too short:
 
 ```tsx
-{
-  type: 'VoiceRecording',
-  props: {
-    content: <p>Please describe your decision in detail.</p>,
-    minDuration: 15000,
-  },
-}
+VoiceRecording.trial('decision', {
+  content: <p>Please describe your decision in detail.</p>,
+  minDurationMs: 15000,
+})
 ```
 
-When `minDuration` is set, only pause and discard buttons are shown. When not set, pause, stop, and discard buttons appear with playback after stopping.
+When `minDurationMs` is set, only pause and discard buttons are shown. When not set, pause, stop, and discard buttons appear with playback after stopping.
 
 | Prop | Default | Description |
 |---|---|---|
 | `content` | — | Prompt text/JSX |
-| `buttonText` | `'Continue'` / `'Save & Continue'` (with minDuration) | Button text |
+| `buttonText` | `'Continue'` / `'Save & Continue'` (with minDurationMs) | Button text |
 | `shortButtonText` | `'Continue without improving'` | Button text when recording is too short |
 | `shortRecordingWarning` | Generic message | Warning text for short recordings |
-| `minDuration` | — | Minimum recording duration in ms |
+| `minDurationMs` | — | Minimum recording duration |
 | `showVisualizer` | `true` | Show volume level meter |
 | `eagerUpload` | `true` | Upload audio immediately after recording |
 | `animate` | `false` | Fade-in animation |
 
 Audio recordings are automatically extracted as separate `.webm` files during upload and eagerly uploaded to reduce final upload size. The trial `name` is used in the filename.
+
+To transcribe the recordings with Whisper in Docker, add the transcription setup to the project with `bunx @adriansteffan/reactive add transcription`; the project's README explains how to run it.
 
 
 ## LLM Integration
@@ -739,7 +923,9 @@ After the first participant is run, a folder with the name of your app will appe
 
 ## Development
 
-The package is published as TypeScript source, so there is no build step. Check it with
+`ARCHITECTURE.md` explains how the library is put together. The package is published as TypeScript source, so there is no build step. `sideEffects` in `package.json` lists the files that do something when they are imported: the CSS, the array methods and the native integration. A project's production build leaves out every other file it does not use, so a new file that has to run on import belongs on that list.
+
+Check it with
 
 ```
 bun test

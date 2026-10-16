@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { uuidv4 } from './ids';
+import { uuidv4 } from '../src/utils/ids';
 
 describe('uuidv4', () => {
   const ids = Array.from({ length: 100000 }, uuidv4);

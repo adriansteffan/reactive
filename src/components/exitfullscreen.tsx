@@ -1,13 +1,11 @@
 import { useCallback, useRef, useEffect } from 'react';
-import { BaseComponentProps, isFullscreen } from '../utils/common';
-import { registerSimulation, noopSimulate } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
-import { getNative } from '../utils/native';
+import { BaseComponentProps } from '../core/component';
+import { isFullscreen } from '../utils/fullscreen';
+import { noopSimulate } from '../core/simulation';
+import { defineComponent } from '../core/component';
+import { getNative } from '../core/platform';
 
-registerFlattener('ExitFullscreen', 'session');
-registerSimulation('ExitFullscreen', noopSimulate, {});
-
-export default function ExitFullscreen({
+function ExitFullscreen({
   next,
   updateStore,
   delayMs = 0,
@@ -65,7 +63,7 @@ export default function ExitFullscreen({
   }, [handleFullscreenChangeForFallback, removeListenersAndTimeout]);
 
   useEffect(() => {
-    updateStore({ _fullscreenGuard: null });
+    updateStore({ __fullscreenGuard: null });
     const performExitFullscreen = async () => {
       if (!isFullscreen()) {
         next({});
@@ -110,3 +108,10 @@ export default function ExitFullscreen({
 
   return null;
 }
+
+export default defineComponent({
+  name: 'ExitFullscreen',
+  component: ExitFullscreen,
+  csv: 'session',
+  simulate: noopSimulate,
+});

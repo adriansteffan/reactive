@@ -14,7 +14,7 @@ bun install
 
 - `src/Experiment.tsx`: the experiment
 - `public/`: static files, served from the site root (`public/images/cat.png` is available at `/images/cat.png`)
-- `server.ts`: serves the experiment and the upload backend; add your own routes to `api`
+- `server.ts`: serves the experiment and the route that saves uploaded data, which comes from the library (`uploadRoutes`); add your own routes to `api`, which components reach at `getBackendUrl()` (also in simulations)
 - `.env`: committed settings. Only `PUBLIC_` variables reach the experiment, and every one it reads must be defined here. Secrets such as API keys go in `.env.local`, which is not committed.
 - `data/`: uploaded data
 
@@ -42,6 +42,8 @@ docker compose up -d --build
 
 and stop it with `docker compose down`. To update, run `git pull` and start it again with the same command.
 
+The settings page and the `?dev=true` panel are available in the deployed study too. To turn one off, set `PUBLIC_DISABLE_SETTINGS` or `PUBLIC_DISABLE_DEV` to `TRUE` in `.env`.
+
 The app listens on port 8001 (see `docker-compose.yaml`). Expose it with a reverse proxy (Apache Virtualhosts or Nginx Server Blocks); [this guide](https://gist.github.com/adriansteffan/48c9bda7237a8a7fcc5bb6987c8e1790) explains how for our setup. The `PUBLIC_` variables are baked in when the image is built, so rebuild after changing `.env`.
 
 Uploaded data is stored in `data/` in the root directory of the cloned repo.
@@ -53,15 +55,15 @@ You can simulate your experiment headlessly to generate synthetic data, test you
 
 ### Setup
 
-Define your participant generator and simulation config in `Experiment.tsx`:
+Define your participant generator in the `simulation` field of `defineExperiment` in `Experiment.tsx`:
 
 ```tsx
-export const simulationConfig = {
-  participants: {
-    generator: (i) => ({ id: i, nickname: `participant_${i}` }),
-    count: 10,
+export default defineExperiment({
+  simulation: {
+    createParticipants: () => Array.from({ length: 10 }, (_, i) => ({ id: i, nickname: `participant_${i}` })),
   },
-};
+  timeline: [ ... ],
+});
 ```
 
 ### Running
@@ -74,41 +76,28 @@ This starts the backend, simulates all participants through the experiment, and 
 
 ### Customizing participant behavior
 
-Each trial component has default decision functions that model participant behavior. Override them per-trial using the `simulators` property on a timeline item:
+Each trial component has default decision functions that model participant behavior. Override them per trial with `.simulators()`:
 
 ```tsx
-{
-  type: 'PlainInput',
-  props: { content: <p>What is your name?</p> },
-  simulators: {
-    respond: (_trialProps, participant) => ({
-      value: participant.nickname,
-      participantState: participant,
-    }),
-  },
-}
+PlainInput.trial('name', { content: <p>What is your name?</p> }).simulators({
+  respond: ({ participant }) => ({ value: participant.nickname }),
+}),
 ```
 
 ### Custom components
 
-Register simulations for your custom trial components using `registerSimulation`. See the `CustomTrial` example in `Experiment.tsx` and the [reactive README](https://github.com/adriansteffan/reactive) for details.
-
-### Hybrid mode
-
-During development, auto-advance simulated trials while manually interacting with others:
-
-Add `?hybridSimulation=true` to the URL:
-
-```
-http://localhost:8001?hybridSimulation=true
-```
-
-Trials with `simulators` or `simulate: true` defined will auto-advance. Others render normally for human interaction. Hybrid mode is enabled by default during development. For production, set `PUBLIC_DISABLE_HYBRID_SIMULATION=true` in `.env` to disable it.
+Give your custom components a simulation in their `defineComponent` call. See the `CustomTrial` example in `Experiment.tsx` and the [reactive README](https://github.com/adriansteffan/reactive) for details.
 
 
 ## Transcription
 
-Automatically transcribe voice recordings from experiment data using Docker. Requires [Docker](https://docs.docker.com/engine/install/) to be installed.
+Automatically transcribe voice recordings from experiment data using Docker. Requires [Docker](https://docs.docker.com/engine/install/) to be installed. The transcription setup is left out of new projects; add it in the root directory with
+
+```
+bunx @adriansteffan/reactive add transcription
+```
+
+which creates `transcription/` and the scripts below.
 
 ### CPU (faster-whisper)
 
@@ -129,7 +118,18 @@ bun run transcribe -- --overwrite       # re-transcribe even if transcriptions.c
 bun run transcribe -- --model small     # use a different model
 ```
 
-Output: `transcriptions.csv` in each participant's data directory with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
+Output: `transcriptions.<sessionId>.csv` in each session's data directory, wherever it is under `data/`, with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
+
+
+## Extra components
+
+Quest (SurveyJS questionnaires) and Tutorial (slide decks) need packages of their own, so they are left out until you add them:
+
+```
+bunx @adriansteffan/reactive add quest tutorial
+```
+
+Then import them from `@adriansteffan/reactive/quest` and `@adriansteffan/reactive/tutorial`.
 
 
 ## Android and iOS apps

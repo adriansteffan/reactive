@@ -22,3 +22,8 @@ export function registerNative(integration: NativeIntegration) {
 export function getNative(): NativeIntegration | null {
   return nativeIntegration;
 }
+
+/** `native` when the experiment runs as an Android or iOS app. */
+export type Platform = 'native' | 'web';
+
+export const getPlatform = (): Platform => (getNative() ? 'native' : 'web');

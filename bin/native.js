@@ -23,10 +23,12 @@ function run(args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-// The library's optional peer dependencies are exactly the packages its native integration needs
+// At the versions the library declares as its peer dependencies
 const peers = library.peerDependencies;
 const capacitorVersion = peers['@capacitor/core'];
-const nativePlugins = Object.keys(library.peerDependenciesMeta).map((name) => `${name}@${peers[name]}`);
+const nativePlugins = ['@capacitor/core', '@capacitor/filesystem', '@capacitor/status-bar', '@adriansteffan/immersive-mode'].map(
+  (name) => `${name}@${peers[name]}`,
+);
 
 run(['add', ...nativePlugins, `@capacitor/android@${capacitorVersion}`, `@capacitor/ios@${capacitorVersion}`]);
 run(['add', '--dev', `@capacitor/cli@${capacitorVersion}`]);

@@ -25,8 +25,8 @@ declare global {
     pipe<U>(fn: (arr: Array<T>) => U): U;
     
     /**
-     * Splits array into chunks
-     * @param n Number of chunks to create
+     * Splits array into chunks of n items; the last chunk holds what is left
+     * @param n Number of items per chunk
      */
     chunk(n: number): Array<Array<T>>;
 
@@ -82,20 +82,10 @@ export function shuffle<T>(array: T[]): T[] {
 }
 
 /**
- * Applies a function to an array
- */
-export function pipe<T, U>(array: T[], fn: (arr: T[]) => U): U {
-  return fn(array);
-}
-
-/**
- * Splits array into chunks
+ * Splits array into chunks of n items; the last chunk holds what is left
  */
 export function chunk<T>(array: T[], n: number): T[][] {
-  const size = Math.ceil(array.length / n);
-  return Array.from({ length: Math.ceil(array.length / size) }, (_, i) =>
-    array.slice(i * size, i * size + size),
-  );
+  return Array.from({ length: Math.ceil(array.length / n) }, (_, i) => array.slice(i * n, i * n + n));
 }
 
 /**
@@ -113,53 +103,31 @@ export function sum(array: number[]): number {
   return array.reduce((a, b) => a + b, 0);
 }
 
-/**
- * Registers array methods on the Array prototype.
- * Call this function once to make array methods available globally.
- * 
- * Example:
- * ```
- * import { registerArrayExtensions } from '@adriansteffan/reactive/array';
- * registerArrayExtensions();
- * 
- * const myArray = [1, 2, 3, 4, 5];
- * myArray.shuffle();
- * ```
- */
-export function registerArrayExtensions(): void {
-  if (typeof Array.prototype.sample !== 'function') {
-    Array.prototype.sample = function <T>(this: T[], n?: number, options?: SampleOptions): T[] {
-      return sample(this, n, options);
-    };
-  }
-  
-  if (typeof Array.prototype.shuffle !== 'function') {
-    Array.prototype.shuffle = function <T>(this: T[]): T[] {
-      return shuffle(this);
-    };
-  }
-  
-  if (typeof Array.prototype.pipe !== 'function') {
-    Array.prototype.pipe = function <T, U>(this: T[], fn: (arr: T[]) => U): U {
-      return pipe(this, fn);
-    };
-  }
-  
-  if (typeof Array.prototype.mean !== 'function') {
-    Array.prototype.mean = function (this: number[]): number {
-      return mean(this);
-    };
-  }
+const methods = {
+  sample(this: unknown[], n?: number, options?: SampleOptions) {
+    return sample(this, n, options);
+  },
+  shuffle(this: unknown[]) {
+    return shuffle(this);
+  },
+  pipe(this: unknown[], fn: (arr: unknown[]) => unknown) {
+    return fn(this);
+  },
+  chunk(this: unknown[], n: number) {
+    return chunk(this, n);
+  },
+  mean(this: number[]) {
+    return mean(this);
+  },
+  sum(this: number[]) {
+    return sum(this);
+  },
+};
 
-  if (typeof Array.prototype.sum !== 'function') {
-    Array.prototype.sum = function (this: number[]): number {
-      return sum(this);
-    };
-  }
-
-  if (typeof Array.prototype.chunk !== 'function') {
-    Array.prototype.chunk = function <T>(this: T[], n: number): T[][] {
-      return chunk(this, n);
-    };
+// Added to every array when the library loads. They are not enumerable, so that for...in over an
+// array does not list them, and a built-in method of the same name is left in place.
+for (const [name, method] of Object.entries(methods)) {
+  if (!(name in Array.prototype)) {
+    Object.defineProperty(Array.prototype, name, { value: method, writable: true, configurable: true });
   }
 }

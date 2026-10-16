@@ -1,58 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { BaseComponentProps } from '../utils/common';
-import { VoiceRecorder, VoiceRecorderHandle } from './voicerecorder';
-import { registerSimulation } from '../utils/simulation';
-import { registerFlattener, generateAudioFilename } from '../utils/upload';
-import { useTheme, t } from '../utils/theme';
-import { HiExclamationTriangle } from 'react-icons/hi2';
+import { BaseComponentProps } from '../core/component';
+import { Recorder, RecorderHandle } from './recorder';
+import { defineComponent } from '../core/component';
+import { generateAudioFilename, markRecordingUploaded } from '../core/files';
+import { useTheme, t } from '../runner/theme';
+import { ExclamationTriangleIcon } from './icons';
 import { textToWebmBase64, probeAudioDurationMs } from '../utils/tts';
-import { post } from '../utils/request';
+import { post } from '../core/backend';
 
 // 0.5s 440Hz sine tone, Opus codec; fallback when system TTS/ffmpeg unavailable
 const DUMMY_AUDIO_BASE64 = 'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAARQEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggE/TbuMU6uEHFO7a1OsggQ67AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNTguNzYuMTAwV0GNTGF2ZjU4Ljc2LjEwMESJiEB/wAAAAAAAFlSua+KuAQAAAAAAAFnXgQFzxYhRMt5OPJYVP5yBACK1nIN1bmSGhkFfT1BVU1aqg2MuoFa7hATEtACDgQLhkZ+BAbWIQOdwAAAAAABiZIEQY6KTT3B1c0hlYWQBATgBgLsAAAAAABJUw2dAm3NzAQAAAAAAACdjwIBnyAEAAAAAAAAaRaOHRU5DT0RFUkSHjUxhdmY1OC43Ni4xMDBzcwEAAAAAAABgY8CLY8WIUTLeTjyWFT9nyAEAAAAAAAAjRaOHRU5DT0RFUkSHlkxhdmM1OC4xMzQuMTAwIGxpYm9wdXNnyKJFo4hEVVJBVElPTkSHlDAwOjAwOjAwLjUwODAwMDAwMAAAH0O2dUJU54EAo5GBAACACINtgtAc/epJ/gE/wKOZgQAVgAinGl2KmC5fWspQj0PpJrkNsG40QKOVgQApgAihLxDkXfvcBBqwyPJFmpFgo5OBAD2ACKE40Hcyqlc9/1ttqV84o5SBAFGACKE40Hcyql5YIeRahOZfwKOXgQBlgAihTMA96uabsR453W080Xeb9h6jkYEAeYAIoTjQdzKqXDNU2kjGo5aBAI2ACKDZbPIJxX8xM7SEPNZetOMco5OBAKGACKE40Hcyqla9XawRHUWoo5OBALWACKE40Hcyqmb1XKO++uAQo5SBAMmACKEvEORd+8XekK1/rf/rrKOVgQDdgAihONB3MqpWRgIfsDV4YBUIo5OBAPGACKE40Hcyql5SyE1S2QFAo5SBAQWACKE40Hcyqla+8h2o+iaxgKOVgQEZgAihONB3MqpeqdUAtSaZmdKAo5OBAS2ACKFIA0bVUn3Jmsi7ollwo5OBAUGACKE40Hcyql6pt6b1uh3oo5WBAVWACKEvEORd+9/La7aeTKZnv/CjlYEBaYAIoTjO/AZGOE9OIX9kO96+gKOTgQF9gAihONB3MqpekAQ00UpCUKOTgQGRgAihSANG1VJz2oSiMZRZKqOQgQGlgAihONB3MqpeqbeK3KORgQG5gAihLxDkXfvfy2sJCQyjmoEBzYAIosXU/J/RyZHEovOUhd6Ypj7UPC8Bo5uBAeGACKRIuuxKsgM4Wle7xUaBZDTNWofASYGgAQAAAAAAABuhkoEB9QAIBkQ+QjevBKpbiF1qJHWihADN/mAcU7trkbuPs4EAt4r3gQHxggHg8IED';
 
 export { DUMMY_AUDIO_BASE64 };
-
-registerFlattener('VoiceRecording', 'session');
-registerSimulation('VoiceRecording', async (_trialProps, _experimentState, simulators, participant) => {
-  const respond = simulators.respondTTS ?? simulators.respondBase64;
-  const result = await respond(_trialProps, participant);
-  const { participantState } = result;
-
-  let data64: string;
-  if (simulators.respondTTS) {
-    const text = result.value as string;
-    const ttsResult = await textToWebmBase64(text);
-    if (!ttsResult) throw new Error('TTS failed. Ensure say/espeak and ffmpeg are installed.');
-    data64 = ttsResult;
-  } else {
-    data64 = result.value as string;
-  }
-
-  // Exact duration via ffprobe, fall back to estimate from file size
-  const recordingDuration = (await probeAudioDurationMs(data64)) ?? Math.round(data64.length / 4);
-  return {
-    responseData: {
-      type: 'audiorecording',
-      data64,
-      timestamp: new Date().toISOString(),
-      recordingDuration,
-    },
-    participantState,
-    duration: recordingDuration,
-  };
-}, {
-  /** Returns text to be spoken via platform TTS. Default: generic test sentence. */
-  respondTTS: (_input: any, participant: any) => ({
-    value: 'This is a simulated voice recording for testing purposes.',
-    participantState: participant,
-  }),
-  /** Returns raw base64-encoded WebM audio directly. Default: dummy 0.5s sine tone. */
-  respondBase64: (_input: any, participant: any) => ({
-    value: DUMMY_AUDIO_BASE64,
-    participantState: participant,
-  }),
-});
 
 function VoiceRecording({
   content,
@@ -62,23 +21,23 @@ function VoiceRecording({
   containerClass,
   next,
   store,
-  minDuration,
+  minDurationMs,
   shortRecordingWarning,
   showVisualizer = true,
   eagerUpload = true,
   animate = false,
   name,
-  silenceWarningSec,
+  silenceWarningMs,
   silenceWarningText,
 }: BaseComponentProps & {
   content?: React.ReactNode;
   buttonText?: string;
-  /** Button text when recording is shorter than minDuration. Defaults to buttonText. */
+  /** Button text when recording is shorter than minDurationMs. Defaults to buttonText. */
   shortButtonText?: string;
   className?: string;
   containerClass?: string;
-  /** Minimum recording duration in ms. If shorter, a warning is shown when paused. */
-  minDuration?: number;
+  /** Minimum recording duration. If shorter, a warning is shown when paused. */
+  minDurationMs?: number;
   /** Custom warning text for short recordings. */
   shortRecordingWarning?: React.ReactNode;
   /** Show the volume level meter during recording. Default true. */
@@ -86,35 +45,33 @@ function VoiceRecording({
   /** Upload audio immediately after recording to reduce final upload size. Default true. */
   eagerUpload?: boolean;
   animate?: boolean;
-  name?: string;
-  /** Seconds of continuous silence before a "speak up" banner appears. Disabled when undefined. */
-  silenceWarningSec?: number;
+  /** Milliseconds of continuous silence before a "speak up" banner appears. Disabled when undefined. */
+  silenceWarningMs?: number;
   /** Text shown in the silence banner. */
   silenceWarningText?: string;
 }) {
   const th = t(useTheme());
-  const resolvedButtonText = buttonText ?? (minDuration != null ? 'Save & Continue' : 'Continue');
-  const recorderRef = useRef<VoiceRecorderHandle>(null);
+  const resolvedButtonText = buttonText ?? (minDurationMs != null ? 'Save & Continue' : 'Continue');
+  const recorderRef = useRef<RecorderHandle>(null);
   const pendingContinueRef = useRef(false);
 
   const [recordingData, setRecordingData] = useState<object | null>(null);
   const [paused, setPaused] = useState(false);
   const [pausedDuration, setPausedDuration] = useState(0);
 
-  const isTooShort = minDuration != null && pausedDuration < minDuration;
+  const isTooShort = minDurationMs != null && pausedDuration < minDurationMs;
 
   const handleSave = (data: any) => {
     // Eager upload: POST audio to backend immediately.
     // Flag is only set after confirmed success.
     // If the POST fails, the flag stays false and the final Upload handles it.
-    if (eagerUpload && data.data64 && store?._uploadId) {
+    if (eagerUpload && data.data64 && store.__uploadId) {
       const filename = generateAudioFilename(name ?? 'recording');
       post('/data', {
-        sessionId: store._uploadId,
+        sessionId: store.__uploadId,
         files: [{ filename, content: data.data64, encoding: 'base64' }],
       }).then(() => {
-        data._audioPreUploaded = true;
-        data._audioPreUploadedFilename = filename;
+        markRecordingUploaded(data, filename);
       }).catch(() => { /* ignore — final Upload handles it */ });
     }
 
@@ -152,14 +109,14 @@ function VoiceRecording({
         )}
 
         <div className='pt-6'>
-        <VoiceRecorder
+        <Recorder
           ref={recorderRef}
           handleSaveVoiceData={handleSave}
           handleDiscardVoiceData={() => { setRecordingData(null); setPaused(false); }}
-          showStop={minDuration == null}
-          showDiscard={minDuration != null}
+          showStop={minDurationMs == null}
+          showDiscard={minDurationMs != null}
           showVisualizer={showVisualizer}
-          silenceWarningSec={silenceWarningSec}
+          silenceWarningMs={silenceWarningMs}
           silenceWarningText={silenceWarningText}
           onPause={handlePause}
           onResume={handleResume}
@@ -168,15 +125,15 @@ function VoiceRecording({
 
         {paused && isTooShort && (
           <div className={`mt-8 flex items-start space-x-3 p-4 border-2 ${th.buttonBorder} ${th.text} ${animate ? 'animate-fade-in opacity-0' : ''}`}>
-            <HiExclamationTriangle className='w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5' />
+            <ExclamationTriangleIcon className='w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5' />
             <p className='text-sm'>
               {shortRecordingWarning ?? 'Your recording seems quite short. Please consider adding more detail to your description.'}
             </p>
           </div>
         )}
 
-        {/* Continue button (visible when paused, minDuration mode only) */}
-        {paused && minDuration != null && (
+        {/* Continue button (visible when paused, minDurationMs mode only) */}
+        {paused && minDurationMs != null && (
           <div className={`mt-8 flex justify-center ${animate ? 'animate-fade-in opacity-0' : ''}`}>
             <button
               onClick={finalize}
@@ -187,7 +144,7 @@ function VoiceRecording({
           </div>
         )}
 
-        {/* Continue button after recording is stopped (non-minDuration mode) */}
+        {/* Continue button after recording is stopped (non-minDurationMs mode) */}
         {recordingData && !paused && (
           <div className={`mt-16 flex justify-center ${animate ? 'animate-fade-in opacity-0' : ''}`}>
             <button
@@ -203,4 +160,43 @@ function VoiceRecording({
   );
 }
 
-export default VoiceRecording;
+export default defineComponent({
+  name: 'VoiceRecording',
+  component: VoiceRecording,
+  csv: 'session',
+  simulate: async ({ props, simulators, participant }) => {
+    // A trial can set respondTTS to undefined to use the base64 simulator instead
+    const { respondTTS } = simulators as Partial<typeof simulators>;
+    const result = await (respondTTS ?? simulators.respondBase64)({ props, participant });
+    const { participantState } = result;
+
+    let data64: string;
+    if (respondTTS) {
+      const text = result.value as string;
+      const ttsResult = await textToWebmBase64(text);
+      if (!ttsResult) throw new Error('TTS failed. Ensure say/espeak and ffmpeg are installed.');
+      data64 = ttsResult;
+    } else {
+      data64 = result.value as string;
+    }
+
+    // Exact duration via ffprobe, fall back to estimate from file size
+    const recordingDurationMs = (await probeAudioDurationMs(data64)) ?? Math.round(data64.length / 4);
+    return {
+      responseData: {
+        type: 'audiorecording',
+        data64,
+        timestamp: new Date().toISOString(),
+        recordingDurationMs,
+      },
+      participantState,
+      durationMs: recordingDurationMs,
+    };
+  },
+  defaultSimulators: {
+    /** Returns text to be spoken via platform TTS. Default: generic test sentence. */
+    respondTTS: () => ({ value: 'This is a simulated voice recording for testing purposes.' }),
+    /** Returns raw base64-encoded WebM audio directly. Default: dummy 0.5s sine tone. */
+    respondBase64: () => ({ value: DUMMY_AUDIO_BASE64 }),
+  },
+});

@@ -4,6 +4,7 @@
     "includes": [
       "src/**",
       "bin/**",
+      "test/**",
       "!!**/template"
     ]
   },

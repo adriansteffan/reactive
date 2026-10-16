@@ -3,6 +3,7 @@ import {
   sobol,
   halton,
   seedDistributions,
+  withStream,
   normal,
   uniform,
   poisson,
@@ -10,7 +11,7 @@ import {
   mt19937,
   standardNormalQuantile,
   poissonQuantile,
-} from './distributions';
+} from '../src/utils/distributions';
 
 // Known Sobol sequence values (1D, Van der Corput base 2, skipping the zero point)
 // Reference: https://en.wikipedia.org/wiki/Van_der_Corput_sequence
@@ -239,6 +240,27 @@ describe('mt19937', () => {
     // The C++ standard requires this value as the 10000th output of std::mt19937
     expect(outputs[9999]).toBe(4123659995);
     expect(outputs.reduce((a, b) => a + b, 0)).toBe(21571313423311);
+  });
+
+  it('matches the reference implementation for a seed of several numbers', () => {
+    // The first outputs of mt19937ar.c's test program, which seeds with init_by_array
+    const next = mt19937([0x123, 0x234, 0x345, 0x456]);
+    expect(Array.from({ length: 10 }, next)).toEqual([
+      1067595299, 955945823, 477289528, 4107218783, 4228976476, 3344332714, 3355579695, 227628506,
+      810200273, 2591290167,
+    ]);
+  });
+});
+
+describe('streams seeded with several numbers', () => {
+  const firstDraws = (seed: number[]) => withStream(seed, async () => draws(5, () => uniform(0, 1)).join());
+
+  it('do not overlap when keys differ in any part, unlike adding an index to a seed', async () => {
+    seedDistributions([42, 0]);
+    const list = draws(5, () => uniform(0, 1)).join();
+    expect(await firstDraws([42, 1, 0])).not.toBe(list);
+    expect(await firstDraws([43, 1, 0])).not.toBe(await firstDraws([42, 1, 1]));
+    expect(await firstDraws([42, 1, 7])).toBe(await firstDraws([42, 1, 7]));
   });
 });
 

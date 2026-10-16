@@ -1,0 +1,30 @@
+services:
+  transcribe:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    volumes:
+      - ../data:/data
+      - model-cache:/root/.cache/huggingface
+    environment:
+      - DATA_DIR=/data
+
+  transcribe-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    volumes:
+      - ../data:/data
+      - model-cache:/root/.cache/huggingface
+    environment:
+      - DATA_DIR=/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  model-cache:

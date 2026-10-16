@@ -100,6 +100,9 @@ To get started:
 if (process.argv[2] === 'native') {
   rl.close();
   await import('./native.js');
+} else if (process.argv[2] === 'add') {
+  rl.close();
+  await import('./add.js');
 } else {
   main();
 }

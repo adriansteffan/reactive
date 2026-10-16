@@ -1,50 +1,107 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
-
 import {
-  compileTimeline,
   advanceToNextContent,
-  applyMetadata,
-  TimelineItem,
-  UnifiedBytecodeInstruction,
-  ExecuteContentInstruction,
-  Store,
-  TrialResult,
-  CanvasResultData,
-} from '../utils/bytecode';
-import { BaseComponentProps, isFullscreen, now } from '../utils/common';
-import { registerSimulation, ParticipantState } from '../utils/simulation';
-import { registerFlattener, arrayFlattener } from '../utils/upload';
+  BLOCK,
+  type BlockSpec,
+  compileTimeline,
+  type ExecuteContentInstruction,
+  type Instruction,
+} from '../core/bytecode';
+import { type BaseComponentProps, defineComponent, type ParticipantState } from '../core/component';
+import { arrayFlattener } from '../core/files';
+import { applyMetadata } from '../core/rows';
+import type { Store } from '../core/store';
 import { uniform } from '../utils/distributions';
+import { isFullscreen } from '../utils/fullscreen';
+import { now } from '../utils/time';
 
-registerFlattener('CanvasBlock', 'canvas', arrayFlattener);
+/** One recorded slide: the key pressed, if any, and its timing. */
+export type CanvasResultData = {
+  index: number;
+  trialNumber: number;
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+  key: string | null;
+  reactionTimeMs: number | null;
+  metadata?: Record<string, any>;
+};
 
 export type SlideSimulatorResult = {
   key: string | null;
-  reactionTime: number | null;
-  participantState: ParticipantState;
+  reactionTimeMs: number | null;
+  /** Without it, the participant stays as it was. */
+  participantState?: ParticipantState;
 };
 
-export type SlideSimulator = (
-  slide: Record<string, any>,
-  participant: ParticipantState,
-) => SlideSimulatorResult;
+export type SlideSimulator = (input: {
+  slide: Record<string, any>;
+  participant: ParticipantState;
+}) => SlideSimulatorResult;
 
 interface CanvasSlide {
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-  displayDuration?: number;
-  responseTimeLimit?: number;
+  displayDurationMs?: number;
+  responseTimeLimitMs?: number;
   endSlideOnResponse?: boolean;
   hideOnResponse?: boolean;
   ignoreData?: boolean;
-  allowedKeys?: string[] | boolean;
+  allowedResponseKeys?: string[] | boolean;
   metadata?:
     | Record<string, any>
-    | ((data?: TrialResult[], store?: Store) => Record<string, any>);
+    | ((data?: CanvasResultData[], store?: Store) => Record<string, any>);
   nestMetadata?: boolean;
   simulate?: SlideSimulator;
 }
 
-type DynamicCanvasSlideGenerator = (data: TrialResult[], store: Store) => CanvasSlide;
+type DynamicCanvasSlideGenerator = (data: CanvasResultData[], store: Store) => CanvasSlide;
+
+type Condition = (data: CanvasResultData[], store: Store) => boolean;
+
+/** CanvasBlock's own timeline: slides, plus control flow written as objects with `(data, store)` callbacks. */
+export type CanvasTimelineItem =
+  | CanvasSlide
+  | DynamicCanvasSlideGenerator
+  | { type: 'IF_BLOCK'; cond: Condition; timeline: CanvasTimelineItem[] }
+  | { type: 'WHILE_BLOCK'; cond: Condition; timeline: CanvasTimelineItem[] }
+  | { type: 'UPDATE_STORE'; fun: (data: CanvasResultData[], store: Store) => Record<string, any> }
+  | { type: 'MARKER'; id: string }
+  | { type: 'IF_GOTO'; cond: Condition; marker: string };
+
+type CanvasCtx = { data: CanvasResultData[]; store: Store };
+
+const block = (spec: BlockSpec<CanvasCtx>) => ({ [BLOCK]: spec });
+
+// Translates the control-flow objects into the blocks the shared compiler understands
+function toBlocks(items: CanvasTimelineItem[]): unknown[] {
+  return items.map((item) => {
+    if (typeof item !== 'object' || !('type' in item)) return item;
+    const when = (cond: Condition) => ({ data, store }: CanvasCtx) => cond(data, store);
+    switch (item.type) {
+      case 'IF_BLOCK':
+        return block({ kind: 'if', cond: when(item.cond), items: toBlocks(item.timeline) });
+      case 'WHILE_BLOCK':
+        return block({ kind: 'while', cond: when(item.cond), body: toBlocks(item.timeline) });
+      case 'UPDATE_STORE':
+        return block({ kind: 'updateStore', update: ({ data, store }: CanvasCtx) => item.fun(data, store) });
+      case 'MARKER':
+        return block({ kind: 'marker', id: item.id });
+      case 'IF_GOTO':
+        return block({ kind: 'ifGoto', cond: when(item.cond), marker: item.marker });
+      default:
+        return item;
+    }
+  });
+}
+
+// What a slide instruction holds: a slide, or a function that makes one from the data so far
+type SlideContent = CanvasSlide | DynamicCanvasSlideGenerator;
+
+const compileCanvasTimeline = (timeline: CanvasTimelineItem[]) =>
+  compileTimeline<SlideContent, CanvasCtx>(toBlocks(timeline), (slide) => slide as SlideContent);
+
+const slideMetadata = (slide: CanvasSlide, data: CanvasResultData[], store: Store) =>
+  typeof slide.metadata === 'function' ? slide.metadata(data, store) : slide.metadata;
 
 function isDynamicCanvasSlideGenerator(content: any): content is DynamicCanvasSlideGenerator {
   return typeof content === 'function';
@@ -55,14 +112,14 @@ function isCanvasSlide(content: any): content is CanvasSlide {
 }
 
 type CanvasBlockProps = {
-  timeline: TimelineItem[];
+  timeline: CanvasTimelineItem[];
   width?: number | string;
   height?: number | string;
   styleCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
   initCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-} & BaseComponentProps;
+} & BaseComponentProps<CanvasResultData[]>;
 
-export default function CanvasBlock({
+function CanvasBlock({
   next,
   updateStore,
   timeline,
@@ -72,14 +129,14 @@ export default function CanvasBlock({
   styleCanvas,
   initCanvas,
 }: CanvasBlockProps) {
-  const { instructions, markers } = useMemo(() => compileTimeline(timeline), [timeline]);
+  const { instructions, markers } = useMemo(() => compileCanvasTimeline(timeline), [timeline]);
 
   const instructionPointerRef = useRef(0);
   const slideStartTimeRef = useRef<number>(0);
   const isDrawingVisibleRef = useRef<boolean>(true);
   const responseRegisteredRef = useRef<null | Record<string, any>>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataRef = useRef<TrialResult[]>([]);
+  const dataRef = useRef<CanvasResultData[]>([]);
   const storeRef = useRef<Store>(store ?? {});
   const animationFrameRef = useRef<number | null>(null);
   const contentInstructionsCompletedRef = useRef(0);
@@ -91,7 +148,7 @@ export default function CanvasBlock({
   propsRef.current = { next, updateStore, styleCanvas, initCanvas };
 
   useEffect(() => {
-    const refreshRate = store?._reactiveScreenRefreshRate;
+    const refreshRate = store?.__screenRefreshRate;
     const isValidRefreshRate =
       typeof refreshRate === 'number' && refreshRate >= 20 && refreshRate <= 300;
 
@@ -99,7 +156,7 @@ export default function CanvasBlock({
   }, [store]);
 
   const resolveSlideContent = useCallback(
-    (instruction: UnifiedBytecodeInstruction): CanvasSlide | null => {
+    (instruction: Instruction<SlideContent, CanvasCtx>): CanvasSlide | null => {
       if (instruction.type !== 'ExecuteContent') return null;
 
       const content = instruction.content;
@@ -191,11 +248,11 @@ export default function CanvasBlock({
       return;
     }
 
-    const displayDuration = currentSlide.displayDuration ?? Infinity;
-    const responseTimeLimit = currentSlide.responseTimeLimit ?? Infinity;
-    const allowedKeys = currentSlide.allowedKeys ?? false;
+    const displayDuration = currentSlide.displayDurationMs ?? Infinity;
+    const responseTimeLimit = currentSlide.responseTimeLimitMs ?? Infinity;
+    const allowedResponseKeys = currentSlide.allowedResponseKeys ?? false;
     const noKeysAllowed =
-      allowedKeys === false || (Array.isArray(allowedKeys) && allowedKeys.length === 0);
+      allowedResponseKeys === false || (Array.isArray(allowedResponseKeys) && allowedResponseKeys.length === 0);
     let shouldEndSlide = false;
 
     // if we know the screen refresh rate, add half the frame interval to the elapsed time to get more accurate time checking
@@ -255,9 +312,10 @@ export default function CanvasBlock({
     const pointer = advanceToNextContent(
       { instructions, markers },
       instructionPointerRef.current,
-      () => storeRef.current,
-      () => dataRef.current,
-      (s) => { storeRef.current = s; },
+      () => ({ data: dataRef.current, store: storeRef.current }),
+      (updates) => {
+        storeRef.current = { ...storeRef.current, ...updates };
+      },
     );
     instructionPointerRef.current = pointer;
 
@@ -275,8 +333,8 @@ export default function CanvasBlock({
     const currentSlide = resolveSlideContent(instructions[pointer]);
     if (currentSlide) {
       drawSlideInternal(currentSlide);
-      const displayDuration = currentSlide.displayDuration ?? Infinity;
-      const responseTimeLimit = currentSlide.responseTimeLimit ?? Infinity;
+      const displayDuration = currentSlide.displayDurationMs ?? Infinity;
+      const responseTimeLimit = currentSlide.responseTimeLimitMs ?? Infinity;
       if (displayDuration !== Infinity || responseTimeLimit !== Infinity) {
         animationFrameRef.current = requestAnimationFrame(tick);
       }
@@ -301,21 +359,25 @@ export default function CanvasBlock({
       processControlFlow();
       return;
     }
-    const instruction = instructions[currentPointer] as ExecuteContentInstruction;
+    const instruction = instructions[currentPointer] as ExecuteContentInstruction<SlideContent>;
     const slide = resolveSlideContent(instruction);
 
     if (slide && !slide.ignoreData) {
       let trialData = {
         index: instructionPointerRef.current,
         trialNumber: contentInstructionsCompletedRef.current - 1,
-        start: slideStartTimeRef.current,
-        end: endTime,
-        duration: endTime - slideStartTimeRef.current,
+        startMs: slideStartTimeRef.current,
+        endMs: endTime,
+        durationMs: endTime - slideStartTimeRef.current,
         key: responseData ? responseData.key : null,
-        reactionTime: responseData ? responseData.reactionTime : null,
+        reactionTimeMs: responseData ? responseData.reactionTimeMs : null,
       } as CanvasResultData;
 
-      trialData = applyMetadata(trialData, slide, dataRef.current, storeRef.current);
+      trialData = applyMetadata(
+        trialData,
+        slideMetadata(slide, dataRef.current, storeRef.current),
+        slide.nestMetadata,
+      );
 
       dataRef.current.push(trialData);
     }
@@ -336,11 +398,11 @@ export default function CanvasBlock({
       const currentSlide = resolveSlideContent(instruction);
       if (!currentSlide) return;
 
-      const responseTimeLimit = currentSlide.responseTimeLimit ?? Infinity;
+      const responseTimeLimit = currentSlide.responseTimeLimitMs ?? Infinity;
       const isWithinTimeLimit = keypressTime - slideStartTimeRef.current < responseTimeLimit;
-      const allowedKeys = currentSlide.allowedKeys ?? false;
+      const allowedResponseKeys = currentSlide.allowedResponseKeys ?? false;
       const isKeyAllowed =
-        allowedKeys === true || (Array.isArray(allowedKeys) && allowedKeys.includes(event.key));
+        allowedResponseKeys === true || (Array.isArray(allowedResponseKeys) && allowedResponseKeys.includes(event.key));
 
       if (isKeyAllowed && isWithinTimeLimit) {
         const endSlideOnResponse = currentSlide.endSlideOnResponse ?? true;
@@ -350,8 +412,7 @@ export default function CanvasBlock({
           if (!responseRegisteredRef.current && !ignoreData) {
             responseRegisteredRef.current = {
               key: event.key,
-              time: keypressTime,
-              reactionTime: keypressTime - slideStartTimeRef.current,
+              reactionTimeMs: keypressTime - slideStartTimeRef.current,
             };
           }
 
@@ -509,69 +570,98 @@ export default function CanvasBlock({
   );
 }
 
-// --- Default simulator ---
+export default defineComponent({
+  name: 'CanvasBlock',
+  component: CanvasBlock,
+  csv: 'canvas',
+  flatten: arrayFlattener,
+  simulate: ({ props, store, simulators, participant }) => {
+    const timeline = props.timeline;
+    if (!timeline) return { responseData: [] };
 
-registerSimulation('CanvasBlock', (trialProps, experimentState, simulators, participant) => {
-  const timeline = trialProps.timeline;
-  if (!timeline) return { responseData: [], participantState: participant };
+    const bytecode = compileCanvasTimeline(timeline);
+    const innerData: CanvasResultData[] = [];
+    let innerStore: Store = { ...store };
+    let currentTime = 0;
+    let slideNumber = 0;
 
-  const bytecode = compileTimeline(timeline);
-  const innerData: CanvasResultData[] = [];
-  let innerStore: Store = { ...(experimentState.store || {}) };
-  let currentTime = 0;
-  let slideNumber = 0;
+    const getContext = () => ({ data: innerData, store: innerStore });
+    const applyStoreUpdates = (updates: Record<string, any>) => {
+      innerStore = { ...innerStore, ...updates };
+    };
 
-  const getStore = () => innerStore;
-  const getData = () => innerData as TrialResult[];
-  const onUpdateStore = (s: Store) => { innerStore = s; };
+    let pointer = advanceToNextContent(bytecode, 0, getContext, applyStoreUpdates);
 
-  let pointer = advanceToNextContent(bytecode, 0, getStore, getData, onUpdateStore);
+    while (pointer < bytecode.instructions.length) {
+      const content = (bytecode.instructions[pointer] as ExecuteContentInstruction<SlideContent>).content;
+      const slide = typeof content === 'function' ? content(innerData, innerStore) : content;
 
-  while (pointer < bytecode.instructions.length) {
-    let slide = (bytecode.instructions[pointer] as ExecuteContentInstruction).content;
-    if (typeof slide === 'function') slide = slide(innerData, innerStore);
+      const result = slide.simulate
+        ? slide.simulate({ slide, participant })
+        : simulators.respondToSlide({ props, participant, slide });
+      participant = result.participantState ?? participant;
 
-    const sim = slide.simulate || simulators.respondToSlide;
-    const result = sim(slide, participant);
-    participant = result.participantState;
+      if (!slide.ignoreData) {
+        const duration = slide.displayDurationMs || result.reactionTimeMs || 1000;
 
-    if (!slide.ignoreData) {
-      const duration = slide.displayDuration || result.reactionTime || 1000;
+        let td: CanvasResultData = {
+          index: pointer,
+          trialNumber: slideNumber,
+          startMs: currentTime,
+          endMs: currentTime + duration,
+          durationMs: duration,
+          key: result.key,
+          reactionTimeMs: result.reactionTimeMs,
+        };
 
-      let td: CanvasResultData = {
-        index: pointer,
-        trialNumber: slideNumber,
-        start: currentTime,
-        end: currentTime + duration,
-        duration,
-        key: result.key,
-        reactionTime: result.reactionTime,
-      };
+        td = applyMetadata(td, slideMetadata(slide, innerData, innerStore), slide.nestMetadata);
 
-      td = applyMetadata(td, slide, innerData, innerStore);
+        innerData.push(td);
+        currentTime += duration;
+      }
 
-      innerData.push(td);
-      currentTime += duration;
+      slideNumber++;
+      pointer = advanceToNextContent(bytecode, pointer + 1, getContext, applyStoreUpdates);
     }
 
-    slideNumber++;
-    pointer = advanceToNextContent(bytecode, pointer + 1, getStore, getData, onUpdateStore);
-  }
-
-  return { responseData: innerData, participantState: participant, storeUpdates: innerStore, duration: currentTime };
-}, {
-  respondToSlide: (slide: any, participant: any) => {
-    const keys = slide.allowedKeys;
-    if (keys === true) {
-      return { key: ' ', reactionTime: uniform(200, 800), participantState: participant };
-    }
-    if (Array.isArray(keys) && keys.length > 0) {
-      return {
-        key: keys[Math.floor(uniform(0, keys.length))],
-        reactionTime: uniform(200, 800),
-        participantState: participant,
-      };
-    }
-    return { key: null, reactionTime: null, participantState: participant };
+    return { responseData: innerData, participantState: participant, storeUpdates: innerStore, durationMs: currentTime };
+  },
+  defaultSimulators: {
+    respondToSlide: ({ slide }): SlideSimulatorResult => {
+      const keys = (slide as CanvasSlide).allowedResponseKeys;
+      if (keys === true) {
+        return { key: ' ', reactionTimeMs: uniform(200, 800) };
+      }
+      if (Array.isArray(keys) && keys.length > 0) {
+        return { key: keys[Math.floor(uniform(0, keys.length))], reactionTimeMs: uniform(200, 800) };
+      }
+      return { key: null, reactionTimeMs: null };
+    },
   },
 });
+
+/** Slides that count down from `seconds`, one second each, recording nothing. */
+export function canvasCountdown(seconds: number): CanvasSlide[] {
+  if (seconds <= 0) {
+    return [];
+  }
+  return Array.from({ length: seconds }, (_, i) => {
+    const number = seconds - i;
+
+    return {
+      draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+        ctx.save();
+
+        ctx.fillStyle = 'black';
+        ctx.font = `bold ${Math.min(w, h) * 0.02 * 2}px sans-serif`; // Make countdown text larger
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(number.toString(), w / 2, h / 2);
+
+        ctx.restore();
+      },
+      displayDurationMs: 1000,
+      ignoreData: true,
+    };
+  });
+}

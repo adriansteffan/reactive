@@ -1,13 +1,24 @@
-import { BaseComponentProps } from '../utils/common';
-import { useEffect, useState } from 'react';
-import { registerSimulation, noopSimulate } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
-import { getNative } from '../utils/native';
+import { BaseComponentProps } from '../core/component';
+import { type ReactNode, useEffect, useState } from 'react';
+import { noopSimulate } from '../core/simulation';
+import { defineComponent } from '../core/component';
+import { getNative } from '../core/platform';
 
-registerFlattener('RequestFilePermission', null);
-registerSimulation('RequestFilePermission', noopSimulate, {});
-
-export default function RequestFilePermission({ next }: BaseComponentProps) {
+function RequestFilePermission({
+  next,
+  content = (
+    <>
+      <p>Storage permission is required to save your data.</p>
+      <p>Please grant permission when prompted.</p>
+      <p>If there is no popup, go to "Settings" {">"} "Apps" {">"} "Name of the App" {">"} "Permissions" {">"} "Storage" {">"} "Allow"</p>
+    </>
+  ),
+  buttonText = 'Try Again',
+}: BaseComponentProps & {
+  /** Shown when the app may not save files. */
+  content?: ReactNode;
+  buttonText?: string;
+}) {
   const [permissionStatus, setPermissionStatus] = useState('checking');
   
   useEffect(() => {
@@ -32,15 +43,20 @@ export default function RequestFilePermission({ next }: BaseComponentProps) {
   
   return (
     <div className="flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10">
-      <p>Storage permission is required to save your data.</p>
-      <p>Please grant permission when prompted.</p>
-      <p>If there is no popup, go to "Settings" {">"} "Apps" {">"} "Name of the App" {">"} "Permissions" {">"} "Storage" {">"} "Allow"</p>
+      {content}
       <button 
         onClick={() => setPermissionStatus('checking')} 
         className="mt-8 bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none"
       >
-        Try Again
+        {buttonText}
       </button>
     </div>
   );
 }
+
+export default defineComponent({
+  name: 'RequestFilePermission',
+  component: RequestFilePermission,
+  csv: null,
+  simulate: noopSimulate,
+});

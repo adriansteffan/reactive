@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { HiMicrophone, HiStop, HiTrash, HiPause } from 'react-icons/hi2';
-import { useTheme, t } from '../utils/theme';
-import { useAudioDeviceId } from '../utils/audiodevice';
+import { MicrophoneIcon, PauseIcon, StopIcon, TrashIcon } from './icons';
+import { useTheme, t } from '../runner/theme';
+import { useAudioDeviceId } from '../runner/contexts';
 
 interface RecordingData {
   blob: Blob;
@@ -88,11 +88,11 @@ const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ s
   );
 };
 
-export interface VoiceRecorderHandle {
+export interface RecorderHandle {
   stop: () => void;
 }
 
-export interface VoiceRecorderProps {
+export interface RecorderProps {
   question?: { value: RecordingData | null };
   handleSaveVoiceData: (data: object) => void;
   handleDiscardVoiceData: () => void;
@@ -104,8 +104,8 @@ export interface VoiceRecorderProps {
   showDiscard?: boolean;
   /** Label for the post-recording discard button. */
   discardLabel?: string;
-  /** If set, show a "speak up" banner after this many seconds of continuous silence. Disabled when undefined. */
-  silenceWarningSec?: number;
+  /** If set, show a "speak up" banner after this many milliseconds of continuous silence. Disabled when undefined. */
+  silenceWarningMs?: number;
   /** Text shown in the silence banner. */
   silenceWarningText?: string;
   onRecordingStart?: () => void;
@@ -113,7 +113,7 @@ export interface VoiceRecorderProps {
   onResume?: () => void;
 }
 
-export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>(({
+export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
   question: _question,
   handleSaveVoiceData,
   handleDiscardVoiceData,
@@ -123,7 +123,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
   showVisualizer = true,
   showDiscard = true,
   discardLabel = 'New Recording',
-  silenceWarningSec,
+  silenceWarningMs,
   silenceWarningText = 'We can\'t hear you — please speak up',
   onRecordingStart,
   onPause,
@@ -166,9 +166,9 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
   useImperativeHandle(ref, () => ({ stop: stopRecording }));
 
   // Silence detection: analyze the mic stream every 100ms; trigger banner when
-  // RMS stays below threshold for silenceWarningSec seconds continuously.
+  // RMS stays below threshold for silenceWarningMs continuously.
   useEffect(() => {
-    if (!audioStream || !silenceWarningSec || isPaused) {
+    if (!audioStream || !silenceWarningMs || isPaused) {
       setShowSilenceBanner(false);
       return;
     }
@@ -191,7 +191,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
       const rms = Math.sqrt(sum / timeData.length);
       if (rms < 0.02) {
         silenceMs += 100;
-        if (silenceMs >= silenceWarningSec * 1000) setShowSilenceBanner(true);
+        if (silenceMs >= silenceWarningMs) setShowSilenceBanner(true);
       } else {
         silenceMs = 0;
         setShowSilenceBanner(false);
@@ -204,7 +204,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
       audioCtx.close();
       setShowSilenceBanner(false);
     };
-  }, [audioStream, silenceWarningSec, isPaused]);
+  }, [audioStream, silenceWarningMs, isPaused]);
 
   const startRecording = async () => {
     try {
@@ -283,7 +283,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
         url: url,
         data64: base64Data,
         timestamp: new Date().toISOString(),
-        recordingDuration: durationRef.current,
+        recordingDurationMs: durationRef.current,
       });
     }
   };
@@ -331,7 +331,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
           className={`${btnBase} ${th.buttonBg}`}
           aria-label='Start Recording'
         >
-          <HiMicrophone className={`w-6 h-6 ${th.buttonText}`} />
+          <MicrophoneIcon className={`w-6 h-6 ${th.buttonText}`} />
         </button>
       )}
 
@@ -345,9 +345,9 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
               aria-label={isPaused ? 'Resume Recording' : 'Pause Recording'}
             >
               {isPaused ? (
-                <HiMicrophone className={`w-6 h-6 ${th.buttonText}`} />
+                <MicrophoneIcon className={`w-6 h-6 ${th.buttonText}`} />
               ) : (
-                <HiPause className={`w-6 h-6 ${th.buttonText}`} />
+                <PauseIcon className={`w-6 h-6 ${th.buttonText}`} />
               )}
             </button>
           )}
@@ -357,7 +357,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
               className={`${btnBase} bg-red-500 text-white`}
               aria-label='Stop Recording'
             >
-              <HiStop className='w-6 h-6' />
+              <StopIcon className='w-6 h-6' />
             </button>
           )}
           {showDiscard && isPaused && (
@@ -366,7 +366,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
               className={`${btnBase} ${th.buttonBg}`}
               aria-label='Discard Recording'
             >
-              <HiTrash className={`w-6 h-6 ${th.buttonText}`} />
+              <TrashIcon className={`w-6 h-6 ${th.buttonText}`} />
             </button>
           )}
         </div>
@@ -401,7 +401,7 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
               onClick={discardRecording}
               className={`border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer flex items-center space-x-2 px-4 py-2 ${th.text} rounded-xl transition-colors duration-200`}
             >
-              <HiTrash className='w-4 h-4' />
+              <TrashIcon className='w-4 h-4' />
               <span>{discardLabel}</span>
             </button>
           </div>
@@ -411,16 +411,3 @@ export const VoiceRecorder = forwardRef<VoiceRecorderHandle, VoiceRecorderProps>
   );
 });
 
-
-export default function VoicerecorderQuestionComponent({
-  setValue,
-}: {
-  setValue: (data: object | null) => void;
-}) {
-  return (
-    <VoiceRecorder
-      handleSaveVoiceData={(data) => setValue(data)}
-      handleDiscardVoiceData={() => setValue(null)}
-    />
-  );
-}

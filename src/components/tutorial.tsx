@@ -1,30 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useContext, createContext, ReactNode } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
-import { BaseComponentProps } from '../mod';
-import { registerSimulation } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
-import { useTheme, t } from '../utils/theme';
-
-registerFlattener('Tutorial', null);
-
-registerSimulation('Tutorial', (trialProps, _experimentState, simulators, participant) => {
-  const slideCount = trialProps.slides?.length ?? 0;
-  const slideData: Record<number, Record<string, unknown>> = {};
-  let totalDuration = 0;
-  for (let i = 0; i < slideCount; i++) {
-    const result = simulators.respondToSlide(i, trialProps, participant);
-    participant = result.participantState;
-    slideData[i] = result.value ?? {};
-    totalDuration += result.duration ?? 500;
-  }
-  return { responseData: { slides: slideData }, participantState: participant, duration: totalDuration };
-}, {
-  respondToSlide: (_slideIndex: number, _trialProps: any, participant: any) => ({
-    value: {},
-    participantState: participant,
-    duration: 500,
-  }),
-});
+import { BaseComponentProps } from '../core/component';
+import { defineComponent } from '../core/component';
+import { useTheme, t } from '../runner/theme';
 
 interface TutorialSlideContextValue {
   setCanProgress: (canProgress: boolean) => void;
@@ -60,10 +38,11 @@ export const useTutorialSlide = ({ locked = false } = {}) => {
   };
 };
 
-export interface TutorialProps extends BaseComponentProps {
+export interface TutorialProps
+  extends BaseComponentProps<{ slides: Record<number, Record<string, unknown>> }> {
   slides: ReactNode[];
-  /** Fade duration in seconds (default: 0.3) */
-  fadeDuration?: number;
+  /** Fade duration in milliseconds (default: 300) */
+  fadeDurationMs?: number;
   finishText?: string;
   containerClass?: string;
   /** Key to go forward (default: 'ArrowRight', set to false to disable) */
@@ -72,27 +51,22 @@ export interface TutorialProps extends BaseComponentProps {
   backKey?: string | false;
   /** Slide-down + fade-in entrance animation (default: false) */
   animate?: boolean;
-  /** Color mode for dot indicators (default: 'light') */
-  theme?: 'light' | 'dark';
 }
 
 const NAV_BTN_BASE =
   'px-4 py-3 border-2 font-bold text-lg rounded-xl transition-all duration-100 outline-none focus:outline-none focus:ring-0';
 
-export const Tutorial = ({
+const TutorialComponent = ({
   next,
   slides,
-  fadeDuration = 0.3,
+  fadeDurationMs = 300,
   finishText = 'Start',
   containerClass,
   animate = false,
   nextKey = 'ArrowRight',
   backKey = 'ArrowLeft',
-  theme,
 }: TutorialProps) => {
-  const contextTheme = useTheme();
-  const resolvedTheme = theme ?? contextTheme;
-  const th = t(resolvedTheme);
+  const th = t(useTheme());
 
   const NAV_BTN_ACTIVE = `${NAV_BTN_BASE} ${th.buttonBg} ${th.buttonText} ${th.buttonBorder} ${th.buttonShadow} cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`;
   const NAV_BTN_DISABLED = `${NAV_BTN_BASE} ${th.buttonDisabledBg} ${th.buttonDisabledText} ${th.buttonDisabledBorder} ${th.buttonDisabledShadow} cursor-default`;
@@ -182,7 +156,7 @@ export const Tutorial = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: fadeDuration }}
+              transition={{ duration: fadeDurationMs / 1000 }}
               style={{
                 position: 'absolute',
                 inset: 0,
@@ -250,3 +224,23 @@ export const Tutorial = ({
     </LayoutGroup>
   );
 };
+
+export const Tutorial = defineComponent({
+  name: 'Tutorial',
+  component: TutorialComponent,
+  csv: null,
+  simulate: ({ props, simulators, participant }) => {
+    const slideData: Record<number, Record<string, unknown>> = {};
+    let totalDuration = 0;
+    for (let i = 0; i < (props.slides?.length ?? 0); i++) {
+      const result = simulators.respondToSlide({ props, participant, slideIndex: i });
+      participant = result.participantState ?? participant;
+      slideData[i] = result.value ?? {};
+      totalDuration += result.durationMs ?? 500;
+    }
+    return { responseData: { slides: slideData }, participantState: participant, durationMs: totalDuration };
+  },
+  defaultSimulators: {
+    respondToSlide: () => ({ value: {}, durationMs: 500 }),
+  },
+});

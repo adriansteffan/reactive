@@ -1,22 +1,27 @@
-import { FileUpload, Store, TrialData } from './common';
+import type { TrialData } from './rows';
+import type { Store } from './store';
+
+export interface FileUpload {
+  filename: string;
+  content: string;
+  encoding?: 'base64' | 'utf8';
+  /** Internal flag: file was already eagerly uploaded, skip in upload but include in download. */
+  _alreadyUploaded?: boolean;
+}
 
 type DataObject = {
   [key: string]: string | number | boolean | null | undefined;
 };
 
 
-const flattenerRegistry: Record<string, {
-  csv: string | null;
-  flatten?: (item: TrialData) => any[];
-}[]> = {};
+export type Flatten = (item: TrialData) => any[];
 
-export function registerFlattener(
-  type: string,
-  csv: string | null,
-  flatten?: (item: TrialData) => any[],
-) {
-  if (!flattenerRegistry[type]) flattenerRegistry[type] = [];
-  flattenerRegistry[type].push({ csv, flatten });
+// Rows only carry their component's name, so CSV routing is looked up by name
+const flatteners: Record<string, { csv: string; flatten?: Flatten }[]> = {};
+
+/** Sets the CSV files a component's rows go to, each with the function that turns a row into CSV rows. */
+export function setFlatteners(type: string, targets: { csv: string; flatten?: Flatten }[]) {
+  flatteners[type] = targets;
 }
 
 // Reusable flattener for components whose responseData is an array of objects.
@@ -73,7 +78,7 @@ export function convertArrayOfObjectsToCSV(data: DataObject[]): string {
 
 // Extracts experiment parameter values (URL params / registered params) from the initial metadata trial.
 // Each param entry has { value, defaultValue, registered, ... } — we pick value if set, otherwise the default.
-// Unregistered params (raw URL params not declared via getParam) are prefixed with `url_` so they're
+// Unregistered params (raw URL params that the experiment does not declare) are prefixed with `url_` so they're
 // visibly distinguishable from intentional study variables in the CSV.
 function extractParams(data: any[]): Record<string, any> {
   const paramsSource = data?.[0]?.responseData?.params;
@@ -90,39 +95,40 @@ function extractParams(data: any[]): Record<string, any> {
 
 // Built-in fields on every trial data object — not user data.
 // Used to distinguish user-provided metadata from framework fields when building CSVs.
-const trialBuiltinKeys = new Set(['index', 'trialNumber', 'start', 'end', 'duration', 'type', 'name', 'csv', 'responseData', 'metadata']);
+const trialBuiltinKeys = new Set(['index', 'trialNumber', 'startMs', 'endMs', 'durationMs', 'type', 'name', 'csv', 'responseData', 'metadata']);
 // Subset of builtins that represent trial identity/timing — included in non-session CSVs with trial_ prefix
-const trialInfoKeys = new Set(['index', 'trialNumber', 'start', 'end', 'duration', 'type', 'name']);
+const trialInfoKeys = new Set(['index', 'trialNumber', 'startMs', 'endMs', 'durationMs', 'type', 'name']);
 
-// Automatically builds CSV files from trial data using the flattener registry.
-// Each trial is routed to a CSV file based on: item.csv override > registry default > skipped.
+// Automatically builds CSV files from trial data.
+// Each trial is routed to a CSV file based on: the trial's .csv() > its component's csv > skipped.
 // The 'session' group is special: all trials merge into a single row, with keys namespaced
 // by trial name (e.g. 'nickname_value', 'devicecheck_browser') to avoid collisions.
 // All other groups produce multi-row CSVs, one row per trial (or more if the flattener expands them).
-function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<string, any>): FileUpload[] {
+function autoBuildCSVs(sessionId: string, data: any[], sessionData?: Record<string, any>): FileUpload[] {
   const files: FileUpload[] = [];
 
   // Group trials by their target CSV file name.
-  // A component can register multiple targets, so one trial may appear in multiple groups.
-  // A per-item csv override replaces all registered targets.
+  // A trial's .csv() can name several files, so one trial may appear in multiple groups.
   const groups: Record<string, { item: any; flatten?: (item: TrialData) => any[] }[]> = {};
   for (const item of data) {
     if (item.index === -1) continue; // skip initial metadata entry
     const csvOverride = item.csv;
-    const targets = csvOverride
-      ? (Array.isArray(csvOverride) ? csvOverride : [csvOverride]).map((csv: string) => ({ csv }))
-      : flattenerRegistry[item.type] ?? [];
+    const targets: { csv: string | null; flatten?: Flatten }[] =
+      csvOverride !== undefined
+        ? (Array.isArray(csvOverride) ? csvOverride : [csvOverride]).map((csv: string | null) => ({ csv }))
+        : flatteners[item.type] ?? [];
     for (const target of targets) {
       if (!target.csv) continue;
       if (!groups[target.csv]) groups[target.csv] = [];
-      groups[target.csv].push({ item, flatten: 'flatten' in target ? target.flatten : undefined });
+      groups[target.csv].push({ item, flatten: target.flatten });
     }
   }
 
   // 'session' group: one row per participant with metadata + responseData namespaced by trial name
   const row: Record<string, any> = {
-    sessionID,
+    sessionId,
     userAgent: data?.[0]?.responseData?.userAgent,
+    buildSeed: data?.[0]?.responseData?.buildSeed,
     ...extractParams(data),
     ...sessionData,
   };
@@ -144,7 +150,7 @@ function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<stri
   }
   if (Object.keys(row).length > 1) {
     files.push({
-      filename: `session.${sessionID}.${Date.now()}.csv`,
+      filename: `session.${sessionId}.${Date.now()}.csv`,
       content: convertArrayOfObjectsToCSV([row]),
       encoding: 'utf8' as const,
     });
@@ -178,7 +184,7 @@ function autoBuildCSVs(sessionID: string, data: any[], sessionData?: Record<stri
     });
     if (rows.length > 0) {
       files.push({
-        filename: `${csvName}.${sessionID}.${Date.now()}.csv`,
+        filename: `${csvName}.${sessionId}.${Date.now()}.csv`,
         content: convertArrayOfObjectsToCSV(rows),
         encoding: 'utf8' as const,
       });
@@ -193,60 +199,66 @@ export function generateAudioFilename(label: string): string {
   return `audio_${label}_${audioFileIndex++}_${Date.now()}.webm`;
 }
 
-// Scans trial data for audio recordings (type: 'audiorecording' with data64),
-// extracts them as separate .webm files, and replaces the binary data in-place
-// with a filename reference. This keeps CSVs and raw JSON clean.
-function extractAudioRecordings(data: any[]): FileUpload[] {
+// Recordings that VoiceRecording already sent to the backend, with the filename they were saved under
+const preUploadedRecordings = new WeakMap<object, string>();
+
+export function markRecordingUploaded(recording: object, filename: string) {
+  preUploadedRecordings.set(recording, filename);
+}
+
+// Scans trial data for audio recordings (type: 'audiorecording' with data64) and extracts them as
+// separate .webm files. The returned rows reference the files by name instead of holding the
+// binary data, which keeps CSVs and raw JSON clean.
+function extractAudioRecordings(data: any[]): { files: FileUpload[]; data: any[] } {
   const files: FileUpload[] = [];
 
-  const processRecording = (obj: any, nameHint: string) => {
-    if (obj?.type === 'audiorecording' && obj.data64) {
-      const filename = obj._audioPreUploadedFilename ?? generateAudioFilename(nameHint);
-      files.push({
-        filename,
-        content: obj.data64,
-        encoding: 'base64' as const,
-        _alreadyUploaded: !!obj._audioPreUploaded,
-      });
-      obj.audioFile = filename;
-      delete obj.data64;
-      delete obj.blob;
-      delete obj.url;
-      delete obj._audioPreUploaded;
-      delete obj._audioPreUploadedFilename;
-    }
+  const extract = (obj: any, nameHint: string) => {
+    if (obj?.type !== 'audiorecording' || !obj.data64) return obj;
+    const preUploadedFilename = preUploadedRecordings.get(obj);
+    const filename = preUploadedFilename ?? generateAudioFilename(nameHint);
+    files.push({
+      filename,
+      content: obj.data64,
+      encoding: 'base64' as const,
+      _alreadyUploaded: preUploadedFilename !== undefined,
+    });
+    const { data64: _data64, blob: _blob, url: _url, ...rest } = obj;
+    return { ...rest, audioFile: filename };
   };
 
-  for (const item of data) {
+  const rows = data.map((item) => {
     const rd = item.responseData;
-    if (!rd || typeof rd !== 'object') continue;
+    if (!rd || typeof rd !== 'object') return item;
 
     // Direct responseData is an audio recording (VoiceRecording component)
-    processRecording(rd, item.name || item.type);
+    let responseData = extract(rd, item.name || item.type);
 
     // Nested in responseData (Quest voicerecorder questions)
-    if (!Array.isArray(rd)) {
-      for (const [key, value] of Object.entries(rd)) {
-        if (value && typeof value === 'object') {
-          processRecording(value, `${item.name || item.type}_${key}`);
-        }
-      }
+    if (responseData === rd && !Array.isArray(rd)) {
+      responseData = Object.fromEntries(
+        Object.entries(rd).map(([key, value]) => [
+          key,
+          value && typeof value === 'object' ? extract(value, `${item.name || item.type}_${key}`) : value,
+        ]),
+      );
     }
-  }
 
-  return files;
+    return { ...item, responseData };
+  });
+
+  return { files, data: rows };
 }
 
 export function buildUploadFiles(config: {
-  sessionID: string;
+  sessionId: string;
   data: any[];
-  store?: Store;
-  generateFiles?: (sessionID: string, data: any[], store?: Store) => FileUpload[];
+  store: Store;
+  generateFiles?: (input: { sessionId: string; data: any[]; store: Store }) => FileUpload[];
   sessionData?: Record<string, any>;
   uploadRaw?: boolean;
 }): FileUpload[] {
   const {
-    sessionID,
+    sessionId,
     data,
     store,
     generateFiles,
@@ -254,20 +266,21 @@ export function buildUploadFiles(config: {
     uploadRaw = true,
   } = config;
 
-  const files: FileUpload[] = generateFiles ? generateFiles(sessionID, data, store) : [];
+  const files: FileUpload[] = generateFiles ? generateFiles({ sessionId, data, store }) : [];
 
   // Extract audio recordings as separate files before serialization
-  files.push(...extractAudioRecordings(data));
+  const recordings = extractAudioRecordings(data);
+  files.push(...recordings.files);
 
   if (uploadRaw) {
     files.push({
-      filename: `${sessionID}.raw.json`,
-      content: JSON.stringify(data),
+      filename: `${sessionId}.raw.json`,
+      content: JSON.stringify(recordings.data),
       encoding: 'utf8',
     });
   }
 
-  files.push(...autoBuildCSVs(sessionID, data, sessionData));
+  files.push(...autoBuildCSVs(sessionId, recordings.data, sessionData));
 
   return files;
 }

@@ -1,59 +1,37 @@
-import { BaseComponentProps } from '../mod';
+import { BaseComponentProps } from '../core/component';
 import { useState } from 'react';
-import { registerSimulation } from '../utils/simulation';
-import { registerFlattener } from '../utils/upload';
+import { defineComponent } from '../core/component';
 import { uniform } from '../utils/distributions';
-import { useTheme, t } from '../utils/theme';
-
-registerFlattener('PlainInput', 'session');
-
-registerSimulation('PlainInput', (trialProps, _experimentState, simulators, participant) => {
-  const result = simulators.respond(trialProps, participant);
-  const typingDuration = String(result.value).length * uniform(50, 150);
-  return {
-    responseData: { value: result.value },
-    participantState: result.participantState,
-    storeUpdates: trialProps.storeupdate ? trialProps.storeupdate(result.value) : undefined,
-    duration: typingDuration,
-  };
-}, {
-  respond: (_input: any, participant: any) => ({
-    value: 'simulated_input',
-    participantState: participant,
-  }),
-});
+import { useTheme, t } from '../runner/theme';
 
 function PlainInput({
   content,
-  buttonText = 'Click me',
+  buttonText = 'Continue',
   className = '',
-  centered = false,
+  centered = true,
   next,
-  updateStore,
   animate = false,
-  storeupdate,
   placeholder = 'Enter your response here',
-}: BaseComponentProps & {
-  content: React.ReactNode;
+  required = true,
+}: BaseComponentProps<{ value: string }> & {
+  content?: React.ReactNode;
   buttonText?: string;
-  onButtonClick?: () => void;
   className?: string;
   centered?: boolean;
   animate?: boolean;
-  storeupdate?: (entry: string) => { [key: string]: any };
   placeholder?: string;
+  /** Keeps the button disabled until something is entered. */
+  required?: boolean;
 }) {
   const th = t(useTheme());
   const [inputValue, setInputValue] = useState('');
+  const canSubmit = !required || inputValue.trim() !== '';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
   };
 
   const handleClick = () => {
-    if (storeupdate) {
-      updateStore(storeupdate(inputValue));
-    }
     next({ value: inputValue });
   };
 
@@ -84,7 +62,12 @@ function PlainInput({
         >
           <button
             onClick={handleClick}
-            className={`${th.buttonBg} cursor-pointer px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`}
+            disabled={!canSubmit}
+            className={`px-8 py-3 border-2 font-bold text-lg rounded-xl ${
+              canSubmit
+                ? `${th.buttonBg} ${th.buttonBorder} ${th.buttonText} ${th.buttonShadow} cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`
+                : `${th.buttonDisabledBg} ${th.buttonDisabledBorder} ${th.buttonDisabledText} ${th.buttonDisabledShadow} cursor-default`
+            }`}
           >
             {buttonText}
           </button>
@@ -95,4 +78,20 @@ function PlainInput({
   );
 }
 
-export default PlainInput;
+export default defineComponent({
+  name: 'PlainInput',
+  component: PlainInput,
+  csv: 'session',
+  simulate: ({ props, simulators, participant }) => {
+    const result = simulators.respond({ props, participant });
+    const typingDuration = String(result.value).length * uniform(50, 150);
+    return {
+      responseData: { value: result.value },
+      participantState: result.participantState,
+      durationMs: typingDuration,
+    };
+  },
+  defaultSimulators: {
+    respond: () => ({ value: 'simulated_input' }),
+  },
+});

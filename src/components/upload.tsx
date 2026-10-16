@@ -1,93 +1,37 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { uuidv4 } from '../utils/ids';
-import { post } from '../utils/request';
-import {
-  BaseComponentProps,
-  FileUpload,
-  getParam,
-  Platform,
-  registerComponentParams,
-  Store,
-  TrialData,
-} from '../utils/common';
+import { post } from '../core/backend';
+import { BaseComponentProps } from '../core/component';
+import { FileUpload } from '../core/files';
+import { Platform } from '../core/platform';
+import { TrialData } from '../core/rows';
+import { useParams } from '../runner/contexts';
 import { strToU8, zipSync, type Zippable } from 'fflate';
-import { FileBackend, getNative } from '../utils/native';
-import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../utils/upload';
-import { registerSimulation, getBackendUrl, getInitialParticipant } from '../utils/simulation';
+import { FileBackend, getNative } from '../core/platform';
+import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../core/files';
+import { type Store } from '../core/store';
+import { defineComponent } from '../core/component';
 import { uniform } from '../utils/distributions';
-import { useTheme, t } from '../utils/theme';
-
-registerSimulation('Upload', async (trialProps, experimentState, _simulators, participant) => {
-  const sessionID = trialProps.sessionID || `sim_${Date.now()}_${Math.floor(uniform(0, 36 ** 6)).toString(36)}`;
-  const files = buildUploadFiles({
-    sessionID,
-    data: experimentState.data || [],
-    store: experimentState.store,
-    generateFiles: trialProps.generateFiles,
-    sessionData: trialProps.sessionData,
-    uploadRaw: trialProps.uploadRaw ?? true,
-  });
-
-  const initialParticipant = getInitialParticipant();
-  if (initialParticipant) {
-    files.push({
-      filename: `${sessionID}_participant_initial.csv`,
-      content: convertArrayOfObjectsToCSV([initialParticipant]),
-      encoding: 'utf8',
-    });
-    files.push({
-      filename: `${sessionID}_participant_final.csv`,
-      content: convertArrayOfObjectsToCSV([participant]),
-      encoding: 'utf8',
-    });
-  }
-
-  const backendUrl = getBackendUrl();
-  if (backendUrl) {
-    const payload = {
-      sessionId: sessionID,
-      files: files.map((f) => ({ ...f, encoding: f.encoding ?? 'utf8' })),
-    };
-    const res = await fetch(`${backendUrl}/data`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      console.error(`Simulation upload failed: ${res.status} ${res.statusText}`);
-    }
-  }
-
-  return { responseData: { files }, participantState: participant };
-}, {});
+import { useTheme, t } from '../runner/theme';
 
 interface UploadPayload {
   sessionId: string;
-  _uploadId?: string;
+  uploadId?: string;
+  parentFolder?: string;
   files: FileUpload[];
 }
 
-const UPLOAD_PARAMS = [
-  {
-    name: 'upload',
-    defaultValue: true,
-    type: 'boolean' as const,
-    description: 'Upload the data at the end of the experiment?',
-  },
-  {
-    name: 'download',
-    defaultValue: false,
-    type: 'boolean' as const,
-    description: 'Locally download the data at the end of the experiment?',
-  },
-];
-registerComponentParams('Upload', UPLOAD_PARAMS);
 
 
-const getFileBackend = (parentDir?: string): { backend: FileBackend | null; type: Platform } => {
+const params = {
+  upload: { default: true, description: 'Upload the data at the end of the experiment?' },
+  download: { default: false, description: 'Locally download the data at the end of the experiment?' },
+};
+
+const getFileBackend = (parentFolder?: string): { backend: FileBackend | null; type: Platform } => {
   const native = getNative();
   return native
-    ? { backend: native.createFileBackend(parentDir), type: 'mobile' }
+    ? { backend: native.createFileBackend(parentFolder), type: 'native' }
     : { backend: null, type: 'web' };
 };
 
@@ -96,60 +40,63 @@ const getUniqueDirectoryName = async (
   backend: FileBackend,
   baseSessionId: string,
 ): Promise<string> => {
-  let uniqueSessionID = baseSessionId;
+  let uniqueSessionId = baseSessionId;
 
-  if (await backend.directoryExists(uniqueSessionID)) {
+  if (await backend.directoryExists(uniqueSessionId)) {
     let counter = 1;
-    uniqueSessionID = `${baseSessionId}_${counter}`;
+    uniqueSessionId = `${baseSessionId}_${counter}`;
 
-    while (await backend.directoryExists(uniqueSessionID)) {
+    while (await backend.directoryExists(uniqueSessionId)) {
       counter++;
-      uniqueSessionID = `${baseSessionId}_${counter}`;
+      uniqueSessionId = `${baseSessionId}_${counter}`;
     }
   }
 
-  return uniqueSessionID;
+  return uniqueSessionId;
 };
 
-export default function Upload({
+function Upload({
   data,
   next,
   store,
-  sessionID,
+  sessionId,
   generateFiles,
   sessionData,
   uploadRaw = true,
-  autoUpload = false,
-  androidFolderName,
+  autoUpload = true,
+  parentFolder,
   className,
   containerClass,
   centered,
   content,
   uploadingContent,
   errorContent,
+  buttonText = 'Submit Data',
+  retryButtonText = 'Try Again',
 }: BaseComponentProps & {
-  sessionID?: string | null;
-  generateFiles?: (sessionID: string, data: TrialData[], store?: Store) => FileUpload[];
+  sessionId?: string | null;
+  generateFiles?: (input: { sessionId: string; data: TrialData[]; store: Store }) => FileUpload[];
   sessionData?: Record<string, any>;
   uploadRaw?: boolean;
+  /** Uploads as soon as the screen appears. With `false`, participants submit with a button first. */
   autoUpload?: boolean;
-  androidFolderName?: string;
+  /** The folder the session's folder goes into, on the server and on the device. */
+  parentFolder?: string;
   className?: string;
   containerClass?: string;
   centered?: boolean;
   content?: React.ReactNode;
   uploadingContent?: React.ReactNode;
   errorContent?: React.ReactNode;
+  buttonText?: string;
+  retryButtonText?: string;
 }) {
   const [uploadState, setUploadState] = useState<'initial' | 'uploading' | 'success' | 'error'>(
     'initial',
   );
   const uploadInitiatedRef = useRef(false);
 
-  const uploadParam = UPLOAD_PARAMS.find(p => p.name === 'upload')!;
-  const downloadParam = UPLOAD_PARAMS.find(p => p.name === 'download')!;
-  const shouldUpload = getParam(uploadParam.name, uploadParam.defaultValue, uploadParam.type);
-  const shouldDownload = getParam(downloadParam.name, downloadParam.defaultValue, downloadParam.type);
+  const { upload: shouldUpload, download: shouldDownload } = useParams(params);
 
   const downloadFiles = useCallback(async (files: FileUpload[]) => {
     const entries: Zippable = {};
@@ -183,10 +130,10 @@ export default function Upload({
 
     uploadInitiatedRef.current = true;
 
-    const sessionIDUpload = sessionID ?? store?._uploadId ?? uuidv4();
+    const sessionIdUpload = sessionId ?? store.__uploadId ?? uuidv4();
 
     const files = buildUploadFiles({
-      sessionID: sessionIDUpload,
+      sessionId: sessionIdUpload,
       data,
       store,
       generateFiles,
@@ -202,8 +149,9 @@ export default function Upload({
       // Filter out eagerly uploaded files for the server upload (they're already there)
       const filesToUpload = files.filter((f) => !f._alreadyUploaded);
       const payload: UploadPayload = {
-        sessionId: sessionIDUpload,
-        ...(store?._uploadId && store._uploadId !== sessionIDUpload ? { _uploadId: store._uploadId } : {}),
+        sessionId: sessionIdUpload,
+        ...(store.__uploadId && store.__uploadId !== sessionIdUpload ? { uploadId: store.__uploadId } : {}),
+        ...(parentFolder ? { parentFolder } : {}),
         files: filesToUpload.map((file) => ({ ...file, encoding: file.encoding ?? 'utf8' })),
       };
 
@@ -213,7 +161,7 @@ export default function Upload({
       }
 
       // Get the current platform and appropriate file backend
-      const { backend, type } = getFileBackend(androidFolderName);
+      const { backend, type } = getFileBackend(parentFolder);
 
       if (type === 'web') {
         const response = await post('/data', payload);
@@ -225,12 +173,12 @@ export default function Upload({
         }
       } else if (backend) {
         try {
-          const uniqueSessionID = await getUniqueDirectoryName(backend, sessionIDUpload);
+          const uniqueSessionId = await getUniqueDirectoryName(backend, sessionIdUpload);
 
-          await backend.createDirectory(uniqueSessionID);
+          await backend.createDirectory(uniqueSessionId);
 
           for (const file of files) {
-            await backend.saveFile(file.filename, file.content, uniqueSessionID);
+            await backend.saveFile(file.filename, file.content, uniqueSessionId);
           }
 
           setUploadState('success');
@@ -245,7 +193,7 @@ export default function Upload({
       setUploadState('error');
     }
   }, [
-    sessionID,
+    sessionId,
     generateFiles,
     data,
     uploadRaw,
@@ -255,7 +203,7 @@ export default function Upload({
     next,
     store,
     sessionData,
-    androidFolderName,
+    parentFolder,
   ]);
 
   useEffect(() => {
@@ -281,7 +229,7 @@ export default function Upload({
         <>
           {content ?? <p>Thank you for participating! Please click the button below to submit your data.</p>}
           <button onClick={handleUpload} className={`mt-8 ${btnClass}`}>
-            Submit Data
+            {buttonText}
           </button>
         </>
       )}
@@ -302,7 +250,7 @@ export default function Upload({
             <p>Please try again or contact the researcher.</p>
           </div>}
           <button onClick={handleUpload} className={btnClass}>
-            Try Again
+            {retryButtonText}
           </button>
         </>
       )}
@@ -310,3 +258,43 @@ export default function Upload({
     </div>
   );
 }
+
+export default defineComponent({
+  name: 'Upload',
+  component: Upload,
+  csv: null,
+  params,
+  simulate: async ({ props, data, store, participant, initialParticipant }) => {
+    const sessionId = props.sessionId || `sim_${Date.now()}_${Math.floor(uniform(0, 36 ** 6)).toString(36)}`;
+    const files = buildUploadFiles({
+      sessionId,
+      data,
+      store,
+      generateFiles: props.generateFiles,
+      sessionData: props.sessionData,
+      uploadRaw: props.uploadRaw ?? true,
+    });
+
+    files.push({
+      filename: `${sessionId}_participant_initial.csv`,
+      content: convertArrayOfObjectsToCSV([initialParticipant]),
+      encoding: 'utf8',
+    });
+    files.push({
+      filename: `${sessionId}_participant_final.csv`,
+      content: convertArrayOfObjectsToCSV([participant]),
+      encoding: 'utf8',
+    });
+
+    const res = await post('/data', {
+      sessionId,
+      ...(props.parentFolder ? { parentFolder: props.parentFolder } : {}),
+      files: files.map((f) => ({ ...f, encoding: f.encoding ?? 'utf8' })),
+    });
+    if (!res.ok) {
+      console.error(`Simulation upload failed: ${res.status} ${res.statusText}`);
+    }
+
+    return { responseData: { files } };
+  },
+});

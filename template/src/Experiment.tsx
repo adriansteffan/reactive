@@ -70,6 +70,10 @@ const CustomTrial = defineComponent({
 // --- Experiment ---
 
 export default defineExperiment({
+  // Read from the URL (?clicks=3) or set on the settings page at /settings
+  params: {
+    clicks: { default: 5, description: 'How often the participant needs to click the button' },
+  },
   config: { showProgressBar: true },
   simulation: {
     seed: 42,
@@ -78,7 +82,7 @@ export default defineExperiment({
         needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
       }).map((p) => ({ ...p, nickname: `participant_${p.index}` })),
   },
-  timeline: [
+  timeline: ({ clicks }) => [
     Text.trial('introtext', {
       buttonText: "Let's Begin",
       animate: true,
@@ -101,7 +105,7 @@ export default defineExperiment({
       respond: ({ participant }) => ({ value: participant.nickname }),
     }),
 
-    CustomTrial.trial('customtrial', { maxCount: 5 }),
+    CustomTrial.trial('customtrial', { maxCount: clicks }),
 
     Upload.trial('upload'),
 

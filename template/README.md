@@ -62,7 +62,7 @@ export default defineExperiment({
   simulation: {
     createParticipants: () => Array.from({ length: 10 }, (_, i) => ({ id: i, nickname: `participant_${i}` })),
   },
-  timeline: [ ... ],
+  timeline: ({ clicks }) => [ ... ],
 });
 ```
 

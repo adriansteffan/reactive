@@ -1,6 +1,6 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "scripts": {
     "test": "bun test",
@@ -9,7 +9,7 @@
   },
   "bin": {
     "create-reactive-experiment": "bin/setup.js",
-    "@adriansteffan/reactive": "bin/setup.js"
+    "reactive": "bin/setup.js"
   },
   "files": [
     "src",

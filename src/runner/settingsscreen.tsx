@@ -160,6 +160,9 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
     [experiment],
   );
 
+  // Params left to a default computed for each participant, which the preview draws once
+  const drawnFields = experimentFields.filter((field) => field.computedDefault && !paramValues[field.name]);
+
   const settingGroups = useMemo(
     () =>
       Object.entries(current.settings)
@@ -395,6 +398,20 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
           <ul className='divide-y divide-gray-200'>{experimentFields.map(renderParamRow)}</ul>
         )}
       </div>
+
+      {drawnFields.length > 0 && (
+        <div className='bg-amber-50 border border-amber-200 text-amber-900 sm:rounded-md p-4 mb-8 text-sm'>
+          The settings and trials below are for{' '}
+          {drawnFields.map((field, index) => (
+            <span key={field.name}>
+              {index > 0 && ', '}
+              <code>{field.name}</code> = <code>{JSON.stringify(initial.defaults[field.name])}</code>
+            </span>
+          ))}
+          , drawn at random for this page. Each participant gets values of their own, which can build other
+          trials; choose a value above to see the trials it builds.
+        </div>
+      )}
 
       {current.error !== undefined && (
         <div className='bg-red-50 border border-red-200 text-red-800 sm:rounded-md p-4 mb-8 text-sm'>

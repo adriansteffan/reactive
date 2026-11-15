@@ -21,7 +21,9 @@ export function ParamInput({
   if (values) {
     return (
       <select className={fieldClass} value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value=''>Default</option>
+        <option value=''>
+          {defaultValue === undefined ? 'Default (computed for each participant)' : `Default (${defaultValue})`}
+        </option>
         {values.map((option) => (
           <option key={String(option)} value={String(option)}>
             {String(option)}

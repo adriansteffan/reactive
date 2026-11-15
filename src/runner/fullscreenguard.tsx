@@ -1,12 +1,16 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
-import type { Store } from '../core/store';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { isFullscreen } from '../utils/fullscreen';
 
+const SetGuardContext = createContext<(config: FullscreenGuardConfig | null) => void>(() => {});
+
+/** Turns the fullscreen guard on with a config, or off with `null`. Unlike a store change, it takes effect at once. */
+export const useSetFullscreenGuard = () => useContext(SetGuardContext);
+
 /** Asks the participant back into fullscreen while EnterFullscreen's keepFullscreen is on. */
-export function FullscreenGuard({ store }: { store: Store }) {
+export function FullscreenGuard({ children }: { children: React.ReactNode }) {
+  const [cfg, setCfg] = useState<FullscreenGuardConfig | null>(null);
   const [fs, setFs] = useState(isFullscreen());
-  const cfg = store?.__fullscreenGuard as FullscreenGuardConfig | undefined;
   const active = !!cfg;
 
   useEffect(() => {
@@ -21,8 +25,16 @@ export function FullscreenGuard({ store }: { store: Store }) {
       if (interval) clearInterval(interval);
     };
   }, [active]);
-  if (!cfg || fs) return null;
 
+  return (
+    <SetGuardContext.Provider value={setCfg}>
+      {children}
+      {cfg && !fs && <GuardPrompt cfg={cfg} />}
+    </SetGuardContext.Provider>
+  );
+}
+
+function GuardPrompt({ cfg }: { cfg: FullscreenGuardConfig }) {
   const reenter = async () => {
     const el = document.documentElement as any;
     try {

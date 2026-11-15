@@ -1,12 +1,9 @@
 import { countDraws, seedDistributions, withStream } from '../utils/distributions';
 import { setBackendUrl } from './backend';
-import { advanceToNextContent, type ExecuteContentInstruction } from './bytecode';
 import type { ParticipantState } from './component';
-import { freezeInDevelopment } from './development';
-import { type Experiment, startRun } from './experiment';
-import { createInitialRow, createTrialRow, type TrialData } from './rows';
-import type { Store } from './store';
-import { createTimelineContext, resolve, type TrialContent } from './timeline';
+import { createRunState, type Experiment, respond, startRun, trialAt } from './experiment';
+import { createExperimentData, type ExperimentData } from './rows';
+import { createTimelineContext } from './timeline';
 
 /** A simulation for components without a response, such as entering fullscreen. */
 export const noopSimulate = () => ({ responseData: {} as any });
@@ -18,61 +15,49 @@ export const noopSimulate = () => ({ responseData: {} as any });
 export async function simulateParticipant(
   experiment: Experiment<any>,
   participant: ParticipantState,
-): Promise<TrialData[]> {
+): Promise<ExperimentData> {
   const initialParticipant = { ...participant };
   let participantState = { ...participant };
 
   const run = startRun(experiment, { url: {}, overrides: participant.params });
-  const { bytecode, trials } = run.compiled;
-
-  let store: Store = freezeInDevelopment({});
-  let data: TrialData[] = freezeInDevelopment([
-    createInitialRow({ userAgent: 'simulated', url: participant.urlParams ?? {}, run, time: 0 }),
-  ]);
-
-  const getContext = () => createTimelineContext(data, store, trials);
-  const applyStoreUpdates = (updates: Record<string, any>) => {
-    store = freezeInDevelopment({ ...store, ...updates });
-  };
-
-  let trialNumber = 0;
+  const { compiled } = run;
+  let state = createRunState(
+    compiled,
+    createExperimentData({ userAgent: 'simulated', url: participant.urlParams ?? {}, run }),
+    {},
+  );
   let currentTime = 0;
 
-  let pointer = advanceToNextContent(bytecode, 0, getContext, applyStoreUpdates);
-
-  while (pointer < bytecode.instructions.length) {
-    const { content } = bytecode.instructions[pointer] as ExecuteContentInstruction<TrialContent>;
+  let content = trialAt(compiled, state.pointer);
+  while (content) {
     const { name, simulate, defaultSimulators } = content.component.reactive;
     if (!simulate) {
       throw new Error(
         `The ${name} trial '${content.name ?? 'unnamed'}' cannot be simulated, since ${name} has no simulation. Add a simulate function to its defineComponent call.`,
       );
     }
-    const context = getContext();
     const result = await simulate({
-      ...context,
-      props: resolve(content.props, context),
+      ...createTimelineContext(state.data, state.store, compiled.trials),
+      props: state.props,
       participant: participantState,
       initialParticipant,
       simulators: { ...defaultSimulators, ...content.simulators },
+      components: compiled.components,
     });
     participantState = result.participantState ?? participantState;
-    if (result.storeUpdates) applyStoreUpdates(result.storeUpdates);
 
-    trialNumber++;
     const startMs = currentTime;
     currentTime += result.durationMs ?? 0;
-
-    const row = createTrialRow(
-      content,
-      { index: pointer, trialNumber, startMs, endMs: currentTime, responseData: result.responseData },
-      getContext(),
-    );
-    data = freezeInDevelopment([...data, row]);
-    pointer = advanceToNextContent(bytecode, pointer + 1, getContext, applyStoreUpdates);
+    state = respond(compiled, state, {
+      responseData: result.responseData,
+      storeUpdates: result.storeUpdates,
+      startMs,
+      endMs: currentTime,
+    });
+    content = trialAt(compiled, state.pointer);
   }
 
-  return data;
+  return state.data;
 }
 
 

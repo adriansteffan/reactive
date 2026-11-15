@@ -2,9 +2,22 @@
 import '../utils/array';
 import type { Theme } from '../runner/theme';
 import { withSeed } from '../utils/distributions';
+import { advanceToNextContent } from './bytecode';
+import { isReservedParamName, sessionColumns, sessionPrefixes } from './columns';
+import { freezeInDevelopment } from './development';
 import { libraryParams, type ParamSpec, type ParamValues, resolveParams } from './params';
+import { createTrialRow, type ExperimentData } from './rows';
 import type { RunSimulationConfig } from './simulation';
-import { type CompiledTimeline, compileExperimentTimeline, describeEntry, type Timeline } from './timeline';
+import type { Store } from './store';
+import {
+  type CompiledTimeline,
+  compileExperimentTimeline,
+  createTimelineContext,
+  describeEntry,
+  resolve,
+  type Timeline,
+  type TrialContent,
+} from './timeline';
 
 // --- Definition ---
 
@@ -114,6 +127,13 @@ export function startRun(
   const settings = Object.fromEntries(
     Object.entries({ ...libraryParams, ...componentParams(compiled).specs }).filter(([name]) => !(name in own)),
   );
+  for (const name of Object.keys({ ...settings, ...own })) {
+    if (isReservedParamName(name)) {
+      throw new Error(
+        `A param cannot be named '${name}': the session CSV keeps ${sessionColumns.join(', ')} and names starting with ${sessionPrefixes.join(' or ')} for itself.`,
+      );
+    }
+  }
   const settingValues = resolveParams(settings, { ...sources, previous: previous?.params });
   return {
     session: { params: { ...settingValues, ...experimentValues }, buildSeed },
@@ -145,4 +165,83 @@ export function previewTimeline(
     if (!(name in own)) settings[owners[name]] = { ...settings[owners[name]], [name]: specs[name] };
   }
   return { entries: entries.map(describeEntry), settings };
+}
+
+// --- Steps ---
+
+/** Where a participant is in their run, and what they have done so far. */
+export interface RunState {
+  /** The instruction of the trial on screen, or the length of the bytecode once the run is finished. */
+  pointer: number;
+  /** Everything recorded so far: the session, and the rows of the trials that have ended. */
+  data: ExperimentData;
+  store: Store;
+  /** The props of the trial on screen, resolved once when it started. */
+  props: Record<string, any>;
+}
+
+/** The trial at `pointer`, or `undefined` once the run is finished. */
+export function trialAt(compiled: CompiledTimeline, pointer: number): TrialContent | undefined {
+  const instruction = compiled.bytecode.instructions[pointer];
+  return instruction?.type === 'ExecuteContent' ? instruction.content : undefined;
+}
+
+// Runs control flow from `from` up to the next trial and resolves that trial's props
+function advance(compiled: CompiledTimeline, data: ExperimentData, fromStore: Store, from: number): RunState {
+  const contextFor = (store: Store) => createTimelineContext(data, store, compiled.trials);
+  const { pointer, store } = advanceToNextContent(compiled.bytecode, from, fromStore, contextFor);
+  const trial = trialAt(compiled, pointer);
+  return { pointer, data, store, props: trial ? resolve(trial.props, contextFor(store)) : {} };
+}
+
+/** The state a run starts in, with its first trial on screen. */
+export function createRunState(compiled: CompiledTimeline, data: ExperimentData, store: Store): RunState {
+  return advance(compiled, freezeInDevelopment(data), freezeInDevelopment(store), 0);
+}
+
+/**
+ * Ends the trial on screen: merges the changes it made to the store, records its response, and
+ * moves on to the next trial.
+ */
+export function respond(
+  compiled: CompiledTimeline,
+  state: RunState,
+  trial: { responseData: unknown; storeUpdates?: Record<string, any>; startMs: number; endMs: number },
+): RunState {
+  const content = trialAt(compiled, state.pointer);
+  if (!content) return state;
+  const store = freezeInDevelopment({ ...state.store, ...trial.storeUpdates });
+  const row = createTrialRow(
+    content,
+    {
+      trialNumber: state.data.trials.length + 1,
+      startMs: trial.startMs,
+      endMs: trial.endMs,
+      responseData: trial.responseData,
+    },
+    createTimelineContext(state.data, store, compiled.trials),
+  );
+  const data = { ...state.data, trials: [...state.data.trials, row] };
+  return advance(compiled, freezeInDevelopment(data), store, state.pointer + 1);
+}
+
+/**
+ * After a hot reload, finds the trial that was on screen in the rebuilt timeline: the nearest
+ * trial with the same component and name, or else the next trial from the same position on.
+ */
+export function realign(previous: CompiledTimeline, compiled: CompiledTimeline, state: RunState): RunState {
+  const shown = trialAt(previous, state.pointer);
+  const { instructions } = compiled.bytecode;
+  let best = -1;
+  if (shown?.name !== undefined) {
+    instructions.forEach((instruction, index) => {
+      const same =
+        instruction.type === 'ExecuteContent' &&
+        instruction.content.type === shown.type &&
+        instruction.content.name === shown.name;
+      if (same && (best === -1 || Math.abs(index - state.pointer) < Math.abs(best - state.pointer))) best = index;
+    });
+  }
+  const from = best !== -1 ? best : Math.min(state.pointer, instructions.length);
+  return advance(compiled, state.data, state.store, from);
 }

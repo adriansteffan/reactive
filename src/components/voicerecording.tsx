@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { BaseComponentProps } from '../core/component';
 import { Recorder, RecorderHandle } from './recorder';
 import { defineComponent } from '../core/component';
-import { generateAudioFilename, markRecordingUploaded } from '../core/files';
+import { audioFilename, markRecordingUploaded } from '../core/files';
 import { useTheme, t } from '../runner/theme';
 import { ExclamationTriangleIcon } from './icons';
 import { textToWebmBase64, probeAudioDurationMs } from '../utils/tts';
@@ -20,6 +20,7 @@ function VoiceRecording({
   className = '',
   containerClass,
   next,
+  data,
   store,
   minDurationMs,
   shortRecordingWarning,
@@ -61,25 +62,26 @@ function VoiceRecording({
 
   const isTooShort = minDurationMs != null && pausedDuration < minDurationMs;
 
-  const handleSave = (data: any) => {
-    // Eager upload: POST audio to backend immediately.
-    // Flag is only set after confirmed success.
-    // If the POST fails, the flag stays false and the final Upload handles it.
-    if (eagerUpload && data.data64 && store.__uploadId) {
-      const filename = generateAudioFilename(name ?? 'recording');
+  const handleSave = (recording: any) => {
+    // Named after the trial number this trial's row will get, which makes the name unique in the session
+    const saved = { ...recording, audioFile: audioFilename(name ?? 'VoiceRecording', data.trials.length + 1) };
+    // Uploads the recording now, so the final upload is smaller; if this fails, the final upload sends it
+    if (eagerUpload && saved.data64 && store.__uploadId) {
       post('/data', {
         sessionId: store.__uploadId,
-        files: [{ filename, content: data.data64, encoding: 'base64' }],
-      }).then(() => {
-        markRecordingUploaded(data, filename);
-      }).catch(() => { /* ignore — final Upload handles it */ });
+        files: [{ filename: saved.audioFile, content: saved.data64, encoding: 'base64' }],
+      })
+        .then((response) => {
+          if (response.ok) markRecordingUploaded(saved.audioFile, saved.data64);
+        })
+        .catch(() => {});
     }
 
-    setRecordingData(data);
+    setRecordingData(saved);
     setPaused(false);
     if (pendingContinueRef.current) {
       pendingContinueRef.current = false;
-      next(data);
+      next(saved);
     }
   };
 

@@ -3,10 +3,19 @@ import Upload from '../src/components/upload';
 import { type BaseComponentProps } from '../src/core/component';
 import { urlParams } from '../src/core/params';
 import { seedDistributions } from '../src/utils/distributions';
-import { buildTimeline, componentParams, defineExperiment, previewTimeline, startRun } from '../src/core/experiment';
+import {
+  buildTimeline,
+  componentParams,
+  createRunState,
+  defineExperiment,
+  previewTimeline,
+  realign,
+  startRun,
+  trialAt,
+} from '../src/core/experiment';
 import { resolveParams } from '../src/core/params';
 import { simulateParticipant } from '../src/core/simulation';
-import { compileExperimentTimeline, describeEntry } from '../src/core/timeline';
+import { compileExperimentTimeline, describeEntry, ifBlock, type Timeline } from '../src/core/timeline';
 import { defineComponent } from '../src/core/component';
 
 const Answer = defineComponent({
@@ -84,8 +93,8 @@ describe('params', () => {
     const first = await simulateParticipant(experiment, {});
     const second = await simulateParticipant(experiment, {});
     expect(calls).toBe(2);
-    expect([first[1].responseData.value, second[1].responseData.value]).toEqual(['a', 'b']);
-    expect(first[0].responseData.params.group.value).toBe('a');
+    expect([first.trials[0].responseData.value, second.trials[0].responseData.value]).toEqual(['a', 'b']);
+    expect(first.session.params.group.value).toBe('a');
   });
 });
 
@@ -126,6 +135,14 @@ describe('building', () => {
     expect(session.params).toMatchObject({ speed: 3, dev: false });
   });
 
+  test('params cannot take the session columns the library writes', () => {
+    const withParam = (name: string) => defineExperiment({ params: { [name]: { default: 1 } }, timeline: [] });
+    for (const name of ['sessionId', 'buildSeed', 'url_source', 'session_count']) {
+      expect(() => startRun(withParam(name), { url: {} })).toThrow('cannot be named');
+    }
+    expect(() => startRun(withParam('session'), { url: {} })).not.toThrow();
+  });
+
   test('a session kept across a hot reload keeps its params and build seed', () => {
     const withParams = defineExperiment({
       params: { n: { default: () => Math.random() } },
@@ -135,12 +152,12 @@ describe('building', () => {
     expect(startRun(withParams, { url: {} }, session).session).toEqual(session);
   });
 
-  test('the first row records the params and the build seed', async () => {
+  test('the session records the params and the build seed', async () => {
     const data = await simulateParticipant(
       defineExperiment({ params: { group }, timeline: [Answer.trial()] }),
       { params: { group: 'scenario' }, urlParams: { source: 'test' } },
     );
-    const { params, buildSeed } = data[0].responseData;
+    const { params, buildSeed } = data.session;
     expect(params.group).toMatchObject({ value: 'scenario', registered: true });
     expect(params.source).toMatchObject({ value: 'test', registered: false });
     expect(typeof buildSeed).toBe('number');
@@ -168,5 +185,45 @@ describe('building', () => {
 
   test('top-level entries describe trials and blocks', () => {
     expect(describeEntry(Answer.trial('a'))).toEqual({ type: 'ParamAnswer', name: 'a' });
+  });
+});
+
+describe('hot reload', () => {
+  // A run of `timeline` with the trial at `pointer` on screen
+  const runAt = (timeline: Timeline, pointer: number) => {
+    const compiled = compileExperimentTimeline(timeline);
+    return { compiled, state: { ...createRunState(compiled, { session: { userAgent: '', params: {}, buildSeed: 0 }, trials: [] }, {}), pointer } };
+  };
+
+  test('finds the trial on screen by its name in the rebuilt timeline', () => {
+    const before = runAt([Answer.trial('a'), Answer.trial('b'), Answer.trial('c')], 1);
+    const after = compileExperimentTimeline([
+      Answer.trial('new'),
+      Answer.trial('a'),
+      Answer.trial('b', { value: 'edited' }),
+      Answer.trial('c'),
+    ]);
+    const state = realign(before.compiled, after, before.state);
+    expect(trialAt(after, state.pointer)?.name).toBe('b');
+    expect(state.props).toEqual({ value: 'edited' });
+  });
+
+  test('without a name, stays at the same position', () => {
+    const before = runAt([Answer.trial(), Answer.trial({ value: 1 })], 1);
+    const after = compileExperimentTimeline([Answer.trial(), Answer.trial({ value: 2 }), Answer.trial()]);
+    const state = realign(before.compiled, after, before.state);
+    expect(state.pointer).toBe(1);
+    expect(state.props).toEqual({ value: 2 });
+  });
+
+  test('runs control flow when the position is no longer a trial', () => {
+    const before = runAt([Answer.trial(), Answer.trial()], 1);
+    const after = compileExperimentTimeline([
+      Answer.trial(),
+      ifBlock(() => false, [Answer.trial('skipped')]),
+      Answer.trial('end'),
+    ]);
+    const state = realign(before.compiled, after, before.state);
+    expect(trialAt(after, state.pointer)?.name).toBe('end');
   });
 });

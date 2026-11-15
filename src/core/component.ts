@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { type Flatten, setFlatteners } from './files';
+import type { CsvTarget, Flatten } from './files';
 import type { ParamSpec } from './params';
-import type { TrialData } from './rows';
+import type { ExperimentData } from './rows';
 import type { Store } from './store';
 import { type TimelineContext, type ContextArg, makeTrial, type Trial } from './timeline';
 
@@ -10,7 +10,8 @@ export type ParticipantState = Record<string, any>;
 /** Props the runner passes to every component. `R` is the type of the response the component records with `next`. */
 export interface BaseComponentProps<R = unknown> {
   next: (data?: R) => void;
-  data: TrialData[];
+  /** Everything recorded so far: the session, and the rows of the trials that have ended. */
+  data: ExperimentData;
   store: Store;
   updateStore: (mergeIn: Store) => void;
   /** The trial's name, for naming what the component produces before its row is recorded. */
@@ -56,6 +57,8 @@ export type SimulateInput<C = any, S extends string = string> = TimelineContext 
   /** The participant as the simulation started it. */
   initialParticipant: ParticipantState;
   simulators: Record<S, Simulator<C>>;
+  /** The components of the timeline, by name, for building the CSV files. */
+  components: ReadonlyMap<string, RuntimeComponent>;
 };
 
 export type SimulateFunction<C = any, S extends string = string> = (
@@ -64,6 +67,8 @@ export type SimulateFunction<C = any, S extends string = string> = (
 
 export interface ComponentInfo {
   name: string;
+  /** The CSV files its rows go to. */
+  csv: CsvTarget[];
   params: Record<string, ParamSpec>;
   defaultSimulators: Record<string, Simulator>;
   simulate?: SimulateFunction;
@@ -107,18 +112,22 @@ export function defineComponent<C extends AnyComponent, S extends string = never
   simulate?: SimulateFunction<C, S>;
 }): DefinedComponent<C, S> {
   const { name, component, csv = name.toLowerCase(), flatten, params = {}, simulate } = definition;
-  setFlatteners(
-    name,
-    csv === null
-      ? []
-      : typeof csv === 'string'
-        ? [{ csv, flatten }]
-        : Object.entries(csv).map(([file, flattenFile]) => ({ csv: file, flatten: flattenFile })),
-  );
-
+  // A hot reload can run a definition again with the same function and name
+  const previous = (component as { reactive?: ComponentInfo }).reactive;
+  if (previous && previous.name !== name) {
+    throw new Error(
+      `The components '${previous.name}' and '${name}' are defined with the same function, so their trials could not be told apart. Give one of them a function of its own that renders the shared one.`,
+    );
+  }
   const defined = component as DefinedComponent<C, S>;
   defined.reactive = {
     name,
+    csv:
+      csv === null
+        ? []
+        : typeof csv === 'string'
+          ? [{ file: csv, flatten }]
+          : Object.entries(csv).map(([file, flattenFile]) => ({ file, flatten: flattenFile })),
     params,
     defaultSimulators: (definition.defaultSimulators ?? {}) as Record<string, Simulator>,
     simulate: simulate as SimulateFunction | undefined,

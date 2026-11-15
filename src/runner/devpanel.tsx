@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { TrialData } from '../core/rows';
+import type { ExperimentData } from '../core/rows';
 import type { Store } from '../core/store';
 import type { TrialContent } from '../core/timeline';
 
@@ -10,7 +10,7 @@ const showJson = (value: unknown) =>
 // Props and metadata given as functions of the timeline context are only known once the trial runs
 const showSetting = (value: unknown) => showJson(typeof value === 'function' ? '(dynamic)' : value);
 
-/** The ?dev=true panel: the trial on screen, the store, and every row recorded so far. */
+/** The ?dev=true panel: the trial on screen, the store, and everything recorded so far. */
 export function DevPanel({
   content,
   store,
@@ -18,7 +18,7 @@ export function DevPanel({
 }: {
   content: TrialContent | null;
   store: Store;
-  data: TrialData[];
+  data: ExperimentData;
 }) {
   const [open, setOpen] = useState(false);
   const [showData, setShowData] = useState(false);
@@ -52,7 +52,7 @@ export function DevPanel({
             <pre className='mt-1 whitespace-pre-wrap break-all'>{showJson(store)}</pre>
           </div>
           <button type='button' className='font-bold cursor-pointer' onClick={() => setShowData(!showData)}>
-            Data ({data.length}) {showData ? '▾' : '▸'}
+            Data ({data.trials.length} trials) {showData ? '▾' : '▸'}
           </button>
           {showData && <pre className='mt-1 whitespace-pre-wrap break-all'>{showJson(data)}</pre>}
         </div>

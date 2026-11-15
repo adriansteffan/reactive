@@ -193,6 +193,6 @@ const MicrophoneCheck = ({
 export default defineComponent({
   name: 'MicrophoneCheck',
   component: MicrophoneCheck,
-  csv: 'session',
+  csv: null,
   simulate: noopSimulate,
 });

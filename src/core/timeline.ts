@@ -14,16 +14,20 @@ import type {
   RuntimeComponent,
   Simulator,
 } from './component';
+import { isReservedTrialName, sessionPrefixes } from './columns';
 import { isProduction } from './development';
-import type { TrialData } from './rows';
+import type { ExperimentData } from './rows';
+import type { SlideData, SlideTimeline } from './slides';
 import type { Store, StoreUpdate } from './store';
 
 // --- Context ---
 
 export interface TimelineContext {
-  /** Every row recorded so far, starting with the session's metadata row. */
-  data: TrialData[];
+  /** Everything recorded so far: the session, and the rows of the trials that have ended. */
+  data: ExperimentData;
   store: Store;
+  /** The rows of the slides recorded so far by the CanvasBlock this runs in; empty outside a CanvasBlock. */
+  slides: SlideData[];
   /** The response of a trial that has run. Throws if it has not run yet. */
   get: {
     <C>(trial: Trial<C, any>): ResponseOf<C>;
@@ -36,8 +40,8 @@ export interface TimelineContext {
   };
 }
 
-// A mistake in the experiment stops it during development and simulation, but only logs for real participants
-function report(message: string): undefined {
+/** A mistake in the experiment stops it during development and simulation, but only logs for real participants. */
+export function report(message: string): undefined {
   if (isProduction()) {
     console.error(message);
     return undefined;
@@ -47,7 +51,12 @@ function report(message: string): undefined {
 
 const trialKey = (type: string, name: string) => `${type}\u0000${name}`;
 
-export function createTimelineContext(data: TrialData[], store: Store, trials: ReadonlySet<string>): TimelineContext {
+export function createTimelineContext(
+  data: ExperimentData,
+  store: Store,
+  trials: ReadonlySet<string>,
+  slides: SlideData[] = [],
+): TimelineContext {
   const read = (target: unknown, name: unknown, optional: boolean) => {
     const [type, trialName] = isTrial(target)
       ? [target[TRIAL].component.reactive.name, target[TRIAL].name]
@@ -59,8 +68,8 @@ export function createTimelineContext(data: TrialData[], store: Store, trials: R
     if (!trials.has(trialKey(type, trialName))) {
       return report(`There is no ${type} trial named '${trialName}' in the timeline.`);
     }
-    for (let i = data.length - 1; i >= 0; i--) {
-      const row = data[i];
+    for (let i = data.trials.length - 1; i >= 0; i--) {
+      const row = data.trials[i];
       if (row.type === type && row.name === trialName) return row.responseData;
     }
     return optional ? undefined : report(`The ${type} trial '${trialName}' has not run yet.`);
@@ -69,6 +78,7 @@ export function createTimelineContext(data: TrialData[], store: Store, trials: R
   return {
     data,
     store,
+    slides,
     get: (target: unknown, name?: string) => read(target, name, false),
     getOptional: (target: unknown, name?: string) => read(target, name, true),
   } as TimelineContext;
@@ -91,7 +101,6 @@ interface TrialSpec {
   // Layers of props, merged in order when the trial runs
   props: ContextArg<Record<string, any>>[];
   metadata?: ContextArg<Record<string, any>>;
-  nestMetadata?: boolean;
   csv?: string | string[] | null;
   collectRefreshRate?: boolean;
   hideSettings?: string[] | boolean;
@@ -107,11 +116,8 @@ export interface Trial<C = any, S extends string = string> {
   name(name: string | undefined): Trial<C, S>;
   /** Merges props into the trial's props. */
   props(props: ContextArg<Partial<OwnProps<C>>> | undefined): Trial<C, S>;
-  /** Extra columns for this trial's rows. With `{ nested: true }` they go into one `metadata` column. */
-  metadata(
-    values: ContextArg<Record<string, any>> | undefined,
-    options?: { nested?: boolean },
-  ): Trial<C, S>;
+  /** Extra values for this trial's rows: under `metadata` in the data, and as `meta_` columns in the CSVs. */
+  metadata(values: ContextArg<Record<string, any>> | undefined): Trial<C, S>;
   /** The CSV file(s) this trial's rows go to instead of its component's. `null` keeps them out of the CSVs. */
   csv(file: string | string[] | null | undefined): Trial<C, S>;
   /** Measures the screen's refresh rate while this trial runs and stores it for later canvas trials. */
@@ -143,10 +149,8 @@ const trialMethods = {
   props(this: Trial, props: ContextArg<Record<string, any>> | undefined) {
     return props === undefined ? this : withSpec(this, { props: [...this[TRIAL].props, props] });
   },
-  metadata(this: Trial, values: ContextArg<Record<string, any>> | undefined, options?: { nested?: boolean }) {
-    return values === undefined
-      ? this
-      : withSpec(this, { metadata: values, nestMetadata: options?.nested ?? false });
+  metadata(this: Trial, values: ContextArg<Record<string, any>> | undefined) {
+    return values === undefined ? this : withSpec(this, { metadata: values });
   },
   csv(this: Trial, csv: string | string[] | null | undefined) {
     return csv === undefined ? this : withSpec(this, { csv });
@@ -170,10 +174,10 @@ const trialMethods = {
 export interface TrialContent {
   component: RuntimeComponent;
   type: string;
+  /** Its own name, or for an unnamed trial in the session CSV, its component's, numbered from the second on. */
   name?: string;
   props: ContextArg<Record<string, any>>;
   metadata?: ContextArg<Record<string, any>>;
-  nestMetadata?: boolean;
   csv?: string | string[] | null;
   collectRefreshRate?: boolean;
   hideSettings?: string[] | boolean;
@@ -196,7 +200,7 @@ export interface Block {
 
 export interface IfBlock extends Block {
   /** Trials to run when the condition is false. */
-  else(items: Timeline | undefined): Block;
+  else(items: Timeline | SlideTimeline | undefined): Block;
 }
 
 /** A list of trials and blocks. Nested lists are flattened, and `false`, `null` and `undefined` are skipped. */
@@ -205,18 +209,18 @@ export type TimelineEntry = Trial<any, any> | Block | Timeline | false | null | 
 
 const block = (spec: BlockSpec<TimelineContext>): Block => Object.freeze({ [BLOCK]: spec });
 
-/** Runs the items if the condition is true when the block is reached. */
-export function ifBlock(cond: (context: TimelineContext) => boolean, items: Timeline): IfBlock {
+/** Runs the items if the condition is true when the block is reached. In a CanvasBlock, the items are slides. */
+export function ifBlock(cond: (context: TimelineContext) => boolean, items: Timeline | SlideTimeline): IfBlock {
   const spec = { kind: 'if', cond, items } as const;
   return Object.freeze({
     [BLOCK]: spec,
-    else: (elseItems: Timeline | undefined) =>
+    else: (elseItems: Timeline | SlideTimeline | undefined) =>
       elseItems === undefined ? block(spec) : block({ ...spec, else: elseItems }),
   });
 }
 
-/** Runs the items again and again while the condition is true. */
-export function whileBlock(cond: (context: TimelineContext) => boolean, items: Timeline): Block {
+/** Runs the items again and again while the condition is true. In a CanvasBlock, the items are slides. */
+export function whileBlock(cond: (context: TimelineContext) => boolean, items: Timeline | SlideTimeline): Block {
   return block({ kind: 'while', cond, body: items });
 }
 
@@ -256,18 +260,25 @@ export interface CompiledTimeline {
   bytecode: Bytecode<TrialContent, TimelineContext>;
   /** Every (component, name) pair of a named trial, for `get`. */
   trials: ReadonlySet<string>;
+  /** The components of the trials, by name. */
+  components: ReadonlyMap<string, RuntimeComponent>;
 }
 
 // Two positions are exclusive when they sit in different branches of the same ifBlock
 function exclusive(a: BranchPath, b: BranchPath): boolean {
-  const index = a.findIndex((step, i) => step !== b[i]);
+  const index = a.findIndex((step, i) => step.block !== b[i]?.block || step.arm !== b[i]?.arm);
   if (index === -1 || index >= b.length) return false;
-  return a[index].split(':')[0] === b[index].split(':')[0];
+  return a[index].block === b[index].block;
 }
 
 export function compileExperimentTimeline(timeline: Timeline): CompiledTimeline {
   const components = new Map<string, RuntimeComponent>();
+  // Trials by name, whatever their component
   const named = new Map<string, { trial: Trial; branch: BranchPath }[]>();
+  // How many unnamed trials of each component go to the session CSV
+  const unnamedInSession = new Map<string, number>();
+  // Every (component, name) pair, for `get`
+  const trials = new Set<string>();
 
   const bytecode = compileTimeline<TrialContent, TimelineContext>(timeline, (item, branch) => {
     if (!isTrial(item)) {
@@ -284,19 +295,41 @@ export function compileExperimentTimeline(timeline: Timeline): CompiledTimeline 
     }
     components.set(type, spec.component);
 
-    if (spec.name !== undefined) {
-      const key = trialKey(type, spec.name);
-      const earlier = named.get(key) ?? [];
-      if (earlier.some((other) => other.trial !== item && !exclusive(other.branch, branch))) {
-        throw new Error(
-          `Two different ${type} trials are named '${spec.name}', so their data could not be told apart.`,
-        );
-      }
-      named.set(key, [...earlier, { trial: item, branch }]);
+    if (spec.name !== undefined && isReservedTrialName(spec.name)) {
+      throw new Error(
+        `A trial cannot be named '${spec.name}': its columns in the session CSV would start with ${sessionPrefixes.join(' or ')}, which the library keeps for itself.`,
+      );
     }
 
-    return trialContent(spec);
+    // The session CSV's columns start with the trial's name, so an unnamed trial there gets one
+    let name = spec.name;
+    const files = spec.csv !== undefined ? [spec.csv].flat() : spec.component.reactive.csv.map((target) => target.file);
+    if (name === undefined && files.includes('session')) {
+      const count = (unnamedInSession.get(type) ?? 0) + 1;
+      unnamedInSession.set(type, count);
+      name = count === 1 ? type : `${type}_${count}`;
+    }
+
+    if (name !== undefined) {
+      const earlier = named.get(name) ?? [];
+      named.set(name, [...earlier, { trial: item, branch }]);
+      const clash = earlier.find((other) => other.trial !== item && !exclusive(other.branch, branch))?.trial;
+      if (clash && (spec.name === undefined || clash[TRIAL].name === undefined)) {
+        const unnamedType = spec.name === undefined ? type : clash[TRIAL].component.reactive.name;
+        throw new Error(
+          `'${name}' is the name an unnamed ${unnamedType} trial gets for its columns in the session CSV, so no other trial can have it. Name one of them differently.`,
+        );
+      }
+      if (clash) {
+        throw new Error(
+          `Two different trials are named '${name}' (${clash[TRIAL].component.reactive.name} and ${type}), so their data could not be told apart.`,
+        );
+      }
+      if (spec.name !== undefined) trials.add(trialKey(type, name));
+    }
+
+    return trialContent({ ...spec, name });
   });
 
-  return { bytecode, trials: new Set(named.keys()) };
+  return { bytecode, trials, components };
 }

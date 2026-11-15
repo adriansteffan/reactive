@@ -1,570 +1,273 @@
-import { useRef, useEffect, useMemo, useCallback } from 'react';
-import {
-  advanceToNextContent,
-  BLOCK,
-  type BlockSpec,
-  compileTimeline,
-  type ExecuteContentInstruction,
-  type Instruction,
-} from '../core/bytecode';
-import { type BaseComponentProps, defineComponent, type ParticipantState } from '../core/component';
+import { useContext, useEffect, useRef } from 'react';
+import { type BaseComponentProps, defineComponent } from '../core/component';
 import { arrayFlattener } from '../core/files';
-import { applyMetadata } from '../core/rows';
-import type { Store } from '../core/store';
+import {
+  acceptsKey,
+  compileSlides,
+  endSlide,
+  type Slide,
+  type SlideData,
+  type SlideSimulatorResult,
+  type SlideTimeline,
+  slideTimeoutMs,
+  startSlides,
+} from '../core/slides';
+import { createTimelineContext } from '../core/timeline';
+import { CompiledTimelineContext } from '../runner/contexts';
 import { uniform } from '../utils/distributions';
 import { isFullscreen } from '../utils/fullscreen';
-import { now } from '../utils/time';
-
-/** One recorded slide: the key pressed, if any, and its timing. */
-export type CanvasResultData = {
-  index: number;
-  trialNumber: number;
-  startMs: number;
-  endMs: number;
-  durationMs: number;
-  key: string | null;
-  reactionTimeMs: number | null;
-  metadata?: Record<string, any>;
-};
-
-export type SlideSimulatorResult = {
-  key: string | null;
-  reactionTimeMs: number | null;
-  /** Without it, the participant stays as it was. */
-  participantState?: ParticipantState;
-};
-
-export type SlideSimulator = (input: {
-  slide: Record<string, any>;
-  participant: ParticipantState;
-}) => SlideSimulatorResult;
-
-interface CanvasSlide {
-  draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-  displayDurationMs?: number;
-  responseTimeLimitMs?: number;
-  endSlideOnResponse?: boolean;
-  hideOnResponse?: boolean;
-  ignoreData?: boolean;
-  allowedResponseKeys?: string[] | boolean;
-  metadata?:
-    | Record<string, any>
-    | ((data?: CanvasResultData[], store?: Store) => Record<string, any>);
-  nestMetadata?: boolean;
-  simulate?: SlideSimulator;
-}
-
-type DynamicCanvasSlideGenerator = (data: CanvasResultData[], store: Store) => CanvasSlide;
-
-type Condition = (data: CanvasResultData[], store: Store) => boolean;
-
-/** CanvasBlock's own timeline: slides, plus control flow written as objects with `(data, store)` callbacks. */
-export type CanvasTimelineItem =
-  | CanvasSlide
-  | DynamicCanvasSlideGenerator
-  | { type: 'IF_BLOCK'; cond: Condition; timeline: CanvasTimelineItem[] }
-  | { type: 'WHILE_BLOCK'; cond: Condition; timeline: CanvasTimelineItem[] }
-  | { type: 'UPDATE_STORE'; fun: (data: CanvasResultData[], store: Store) => Record<string, any> }
-  | { type: 'MARKER'; id: string }
-  | { type: 'IF_GOTO'; cond: Condition; marker: string };
-
-type CanvasCtx = { data: CanvasResultData[]; store: Store };
-
-const block = (spec: BlockSpec<CanvasCtx>) => ({ [BLOCK]: spec });
-
-// Translates the control-flow objects into the blocks the shared compiler understands
-function toBlocks(items: CanvasTimelineItem[]): unknown[] {
-  return items.map((item) => {
-    if (typeof item !== 'object' || !('type' in item)) return item;
-    const when = (cond: Condition) => ({ data, store }: CanvasCtx) => cond(data, store);
-    switch (item.type) {
-      case 'IF_BLOCK':
-        return block({ kind: 'if', cond: when(item.cond), items: toBlocks(item.timeline) });
-      case 'WHILE_BLOCK':
-        return block({ kind: 'while', cond: when(item.cond), body: toBlocks(item.timeline) });
-      case 'UPDATE_STORE':
-        return block({ kind: 'updateStore', update: ({ data, store }: CanvasCtx) => item.fun(data, store) });
-      case 'MARKER':
-        return block({ kind: 'marker', id: item.id });
-      case 'IF_GOTO':
-        return block({ kind: 'ifGoto', cond: when(item.cond), marker: item.marker });
-      default:
-        return item;
-    }
-  });
-}
-
-// What a slide instruction holds: a slide, or a function that makes one from the data so far
-type SlideContent = CanvasSlide | DynamicCanvasSlideGenerator;
-
-const compileCanvasTimeline = (timeline: CanvasTimelineItem[]) =>
-  compileTimeline<SlideContent, CanvasCtx>(toBlocks(timeline), (slide) => slide as SlideContent);
-
-const slideMetadata = (slide: CanvasSlide, data: CanvasResultData[], store: Store) =>
-  typeof slide.metadata === 'function' ? slide.metadata(data, store) : slide.metadata;
-
-function isDynamicCanvasSlideGenerator(content: any): content is DynamicCanvasSlideGenerator {
-  return typeof content === 'function';
-}
-
-function isCanvasSlide(content: any): content is CanvasSlide {
-  return typeof content === 'object' && content !== null && typeof content.draw === 'function';
-}
 
 type CanvasBlockProps = {
-  timeline: CanvasTimelineItem[];
+  /** The slides, with ifBlock, whileBlock and updateStore for control flow. */
+  timeline: SlideTimeline;
   width?: number | string;
   height?: number | string;
+  /** Sets colors and fonts before each slide is drawn. */
   styleCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
+  /** Runs once, after the canvas is set up. */
   initCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-} & BaseComponentProps<CanvasResultData[]>;
+} & BaseComponentProps<SlideData[]>;
 
-function CanvasBlock({
-  next,
-  updateStore,
-  timeline,
-  width,
-  height,
-  store,
-  styleCanvas,
-  initCanvas,
-}: CanvasBlockProps) {
-  const { instructions, markers } = useMemo(() => compileCanvasTimeline(timeline), [timeline]);
-
-  const instructionPointerRef = useRef(0);
-  const slideStartTimeRef = useRef<number>(0);
-  const isDrawingVisibleRef = useRef<boolean>(true);
-  const responseRegisteredRef = useRef<null | Record<string, any>>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataRef = useRef<CanvasResultData[]>([]);
-  const storeRef = useRef<Store>(store ?? {});
-  const animationFrameRef = useRef<number | null>(null);
-  const contentInstructionsCompletedRef = useRef(0);
-
-  const frameIntervalRef = useRef<number | null>(null);
-
-  // Callbacks read the latest props through this ref, so new prop identities never restart the running slide
-  const propsRef = useRef({ next, updateStore, styleCanvas, initCanvas });
-  propsRef.current = { next, updateStore, styleCanvas, initCanvas };
-
-  useEffect(() => {
-    const refreshRate = store?.__screenRefreshRate;
-    const isValidRefreshRate =
-      typeof refreshRate === 'number' && refreshRate >= 20 && refreshRate <= 300;
-
-    frameIntervalRef.current = isValidRefreshRate ? 1000 / refreshRate : null;
-  }, [store]);
-
-  const resolveSlideContent = useCallback(
-    (instruction: Instruction<SlideContent, CanvasCtx>): CanvasSlide | null => {
-      if (instruction.type !== 'ExecuteContent') return null;
-
-      const content = instruction.content;
-      if (isDynamicCanvasSlideGenerator(content)) {
-        try {
-          return content(dataRef.current, storeRef.current);
-        } catch (e) {
-          console.error('Error executing dynamic canvas slide generator:', e);
-          return null;
-        }
-      } else if (isCanvasSlide(content)) {
-        return content;
-      }
-      console.warn(
-        'ExecuteContent instruction content is not a valid CanvasSlide or Generator:',
-        content,
-      );
-      return null;
-    },
-    [],
-  );
-
-  const getCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return {};
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return {};
-    const dpr = window.devicePixelRatio || 1;
-    const canvasWidth = canvas.width / dpr;
-    const canvasHeight = canvas.height / dpr;
-    return { ctx, canvasWidth, canvasHeight };
-  }, []);
-
-  const clearCanvas = useCallback(() => {
-    const { ctx, canvasWidth, canvasHeight } = getCanvas();
-    if (!ctx) return;
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    isDrawingVisibleRef.current = false;
-  }, [getCanvas]);
-
-  const drawSlideInternal = useCallback(
-    (slide: CanvasSlide) => {
-      const { ctx, canvasWidth, canvasHeight } = getCanvas();
-      if (!ctx) return;
-      ctx.fillStyle = 'white';
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      const { styleCanvas } = propsRef.current;
-      if (styleCanvas) {
-        try {
-          styleCanvas(ctx, canvasWidth, canvasHeight);
-        } catch (e) {
-          console.error('Error during styleCanvas function:', e);
-        }
-      } else {
-        ctx.fillStyle = 'black';
-      }
-
-      try {
-        slide.draw(ctx, canvasWidth, canvasHeight);
-      } catch (e) {
-        console.error('Error during slide draw function:', e);
-      }
-      slideStartTimeRef.current = now();
-      isDrawingVisibleRef.current = true;
-      responseRegisteredRef.current = null;
-      contentInstructionsCompletedRef.current += 1;
-    },
-    [getCanvas],
-  );
-
-  // tick and handleSlideEnd depend on each other, so tick reaches handleSlideEnd through a ref
-  const handleSlideEndRef = useRef<() => void>(() => {});
-
-  const tick = useCallback(() => {
-    const timeNow = now();
-    const currentPointer = instructionPointerRef.current;
-    if (currentPointer < 0 || currentPointer >= instructions.length) {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-      return;
+// The canvas's size in CSS pixels: a number is pixels, a percentage is of the viewport, and a ratio
+// such as '16:9' sets one side from the other
+function canvasSize(width: number | string | undefined, height: number | string | undefined) {
+  const vpWidth = isFullscreen() ? window.screen.width : window.innerWidth;
+  const vpHeight = isFullscreen() ? window.screen.height : window.innerHeight;
+  let computedWidth: number;
+  let computedHeight: number;
+  const parseNonRatioDimension = (
+    dim: number | string | undefined,
+    vpDim: number,
+  ): number | null => {
+    if (typeof dim === 'number') {
+      return dim;
     }
-    const currentInstruction = instructions[currentPointer];
-    const currentSlide = resolveSlideContent(currentInstruction);
-    if (!currentSlide) {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-      return;
-    }
-
-    const displayDuration = currentSlide.displayDurationMs ?? Infinity;
-    const responseTimeLimit = currentSlide.responseTimeLimitMs ?? Infinity;
-    const allowedResponseKeys = currentSlide.allowedResponseKeys ?? false;
-    const noKeysAllowed =
-      allowedResponseKeys === false || (Array.isArray(allowedResponseKeys) && allowedResponseKeys.length === 0);
-    let shouldEndSlide = false;
-
-    // if we know the screen refresh rate, add half the frame interval to the elapsed time to get more accurate time checking
-    const elapsedSlideTime =
-      timeNow -
-      slideStartTimeRef.current +
-      (frameIntervalRef.current !== null ? frameIntervalRef.current * 0.5 : 0);
-
-    if (
-      isDrawingVisibleRef.current &&
-      displayDuration !== Infinity &&
-      elapsedSlideTime >= displayDuration
-    ) {
-      clearCanvas();
-      if (noKeysAllowed || responseTimeLimit === Infinity) {
-        shouldEndSlide = true;
+    if (typeof dim === 'string' && dim.includes('%')) {
+      const p = parseFloat(dim);
+      if (!Number.isNaN(p)) {
+        return (vpDim * p) / 100;
       }
     }
-
-    if (
-      !shouldEndSlide &&
-      responseTimeLimit !== Infinity &&
-      elapsedSlideTime >= responseTimeLimit
-    ) {
-      shouldEndSlide = true;
-
-      if (
-        isDrawingVisibleRef.current &&
-        displayDuration !== Infinity &&
-        elapsedSlideTime < displayDuration
-      ) {
-        clearCanvas();
-      }
+    return null;
+  };
+  const initialWidthPx = parseNonRatioDimension(width, vpWidth);
+  const initialHeightPx = parseNonRatioDimension(height, vpHeight);
+  const isWidthRatio = typeof width === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(width);
+  const isHeightRatio =
+    typeof height === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(height);
+  if (initialWidthPx !== null && initialHeightPx !== null) {
+    computedWidth = initialWidthPx;
+    computedHeight = initialHeightPx;
+  } else if (initialWidthPx !== null && initialHeightPx === null && !isHeightRatio) {
+    computedWidth = initialWidthPx;
+    computedHeight = initialWidthPx;
+  } else if (initialHeightPx !== null && initialWidthPx === null && !isWidthRatio) {
+    computedHeight = initialHeightPx;
+    computedWidth = initialHeightPx;
+  } else if (
+    initialWidthPx === null &&
+    initialHeightPx === null &&
+    !isWidthRatio &&
+    !isHeightRatio
+  ) {
+    const s = Math.min(vpWidth, vpHeight);
+    computedWidth = s;
+    computedHeight = s;
+  } else {
+    let baseW = initialWidthPx;
+    let baseH = initialHeightPx;
+    if (isHeightRatio && baseW === null) {
+      baseW = baseH ?? vpHeight;
     }
-
-    if (shouldEndSlide) {
-      handleSlideEndRef.current();
-    } else {
-      if (
-        (isDrawingVisibleRef.current &&
-          displayDuration !== Infinity &&
-          elapsedSlideTime < displayDuration) ||
-        (responseTimeLimit !== Infinity && elapsedSlideTime < responseTimeLimit)
-      ) {
-        animationFrameRef.current = requestAnimationFrame(tick);
-      } else {
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
+    if (isWidthRatio && baseH === null) {
+      baseH = baseW ?? vpWidth;
     }
-  }, [instructions, resolveSlideContent, clearCanvas]);
-
-  const processControlFlow = useCallback(() => {
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    animationFrameRef.current = null;
-
-    const pointer = advanceToNextContent(
-      { instructions, markers },
-      instructionPointerRef.current,
-      () => ({ data: dataRef.current, store: storeRef.current }),
-      (updates) => {
-        storeRef.current = { ...storeRef.current, ...updates };
-      },
-    );
-    instructionPointerRef.current = pointer;
-
-    if (pointer >= instructions.length) {
-      propsRef.current.updateStore(storeRef.current);
-      propsRef.current.next(dataRef.current);
-      return;
-    }
-
-    if (!canvasRef.current) {
-      console.error('Canvas element not found during control flow.');
-      return;
-    }
-
-    const currentSlide = resolveSlideContent(instructions[pointer]);
-    if (currentSlide) {
-      drawSlideInternal(currentSlide);
-      const displayDuration = currentSlide.displayDurationMs ?? Infinity;
-      const responseTimeLimit = currentSlide.responseTimeLimitMs ?? Infinity;
-      if (displayDuration !== Infinity || responseTimeLimit !== Infinity) {
-        animationFrameRef.current = requestAnimationFrame(tick);
-      }
-    } else {
-      console.error('Failed to resolve slide content during control flow:', instructions[pointer]);
-      instructionPointerRef.current++;
-      processControlFlow();
-    }
-  }, [instructions, markers, resolveSlideContent, drawSlideInternal, tick]);
-
-  const handleSlideEnd = useCallback(() => {
-    const responseData = responseRegisteredRef.current;
-    const endTime = now();
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    animationFrameRef.current = null;
-    const currentPointer = instructionPointerRef.current;
-    if (
-      currentPointer >= instructions.length ||
-      instructions[currentPointer].type !== 'ExecuteContent'
-    ) {
-      instructionPointerRef.current++;
-      processControlFlow();
-      return;
-    }
-    const instruction = instructions[currentPointer] as ExecuteContentInstruction<SlideContent>;
-    const slide = resolveSlideContent(instruction);
-
-    if (slide && !slide.ignoreData) {
-      let trialData = {
-        index: instructionPointerRef.current,
-        trialNumber: contentInstructionsCompletedRef.current - 1,
-        startMs: slideStartTimeRef.current,
-        endMs: endTime,
-        durationMs: endTime - slideStartTimeRef.current,
-        key: responseData ? responseData.key : null,
-        reactionTimeMs: responseData ? responseData.reactionTimeMs : null,
-      } as CanvasResultData;
-
-      trialData = applyMetadata(
-        trialData,
-        slideMetadata(slide, dataRef.current, storeRef.current),
-        slide.nestMetadata,
-      );
-
-      dataRef.current.push(trialData);
-    }
-
-    instructionPointerRef.current++;
-    responseRegisteredRef.current = null;
-    processControlFlow();
-  }, [instructions, resolveSlideContent, processControlFlow]);
-  handleSlideEndRef.current = handleSlideEnd;
-
-  const handleKeyPress = useCallback(
-    (event: KeyboardEvent) => {
-      const keypressTime = now();
-      const currentPointer = instructionPointerRef.current;
-      if (currentPointer >= instructions.length || !isDrawingVisibleRef.current) return;
-      const instruction = instructions[currentPointer];
-      if (instruction.type !== 'ExecuteContent') return;
-      const currentSlide = resolveSlideContent(instruction);
-      if (!currentSlide) return;
-
-      const responseTimeLimit = currentSlide.responseTimeLimitMs ?? Infinity;
-      const isWithinTimeLimit = keypressTime - slideStartTimeRef.current < responseTimeLimit;
-      const allowedResponseKeys = currentSlide.allowedResponseKeys ?? false;
-      const isKeyAllowed =
-        allowedResponseKeys === true || (Array.isArray(allowedResponseKeys) && allowedResponseKeys.includes(event.key));
-
-      if (isKeyAllowed && isWithinTimeLimit) {
-        const endSlideOnResponse = currentSlide.endSlideOnResponse ?? true;
-        const hideOnResponse = currentSlide.hideOnResponse ?? false;
-        const ignoreData = currentSlide.ignoreData ?? false;
-        if (!responseRegisteredRef.current || !endSlideOnResponse) {
-          if (!responseRegisteredRef.current && !ignoreData) {
-            responseRegisteredRef.current = {
-              key: event.key,
-              reactionTimeMs: keypressTime - slideStartTimeRef.current,
-            };
-          }
-
-          if (hideOnResponse) clearCanvas();
-          if (endSlideOnResponse) handleSlideEnd();
-        }
-      }
-    },
-    [instructions, resolveSlideContent, handleSlideEnd, clearCanvas],
-  );
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const vpWidth = isFullscreen() ? window.screen.width : window.innerWidth;
-    const vpHeight = isFullscreen() ? window.screen.height : window.innerHeight;
-    let computedWidth: number;
-    let computedHeight: number;
-    const parseNonRatioDimension = (
-      dim: number | string | undefined,
-      vpDim: number,
-    ): number | null => {
-      if (typeof dim === 'number') {
-        return dim;
-      }
-      if (typeof dim === 'string' && dim.includes('%')) {
-        const p = parseFloat(dim);
-        if (!Number.isNaN(p)) {
-          return (vpDim * p) / 100;
-        }
-      }
-      return null;
-    };
-    const initialWidthPx = parseNonRatioDimension(width, vpWidth);
-    const initialHeightPx = parseNonRatioDimension(height, vpHeight);
-    const isWidthRatio = typeof width === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(width);
-    const isHeightRatio =
-      typeof height === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(height);
-    if (initialWidthPx !== null && initialHeightPx !== null) {
-      computedWidth = initialWidthPx;
-      computedHeight = initialHeightPx;
-    } else if (initialWidthPx !== null && initialHeightPx === null && !isHeightRatio) {
-      computedWidth = initialWidthPx;
-      computedHeight = initialWidthPx;
-    } else if (initialHeightPx !== null && initialWidthPx === null && !isWidthRatio) {
-      computedHeight = initialHeightPx;
-      computedWidth = initialHeightPx;
-    } else if (
-      initialWidthPx === null &&
-      initialHeightPx === null &&
-      !isWidthRatio &&
-      !isHeightRatio
-    ) {
+    if (baseW === null && baseH === null) {
       const s = Math.min(vpWidth, vpHeight);
-      computedWidth = s;
-      computedHeight = s;
-    } else {
-      let baseW = initialWidthPx;
-      let baseH = initialHeightPx;
-      if (isHeightRatio && baseW === null) {
-        baseW = baseH ?? vpHeight;
-      }
-      if (isWidthRatio && baseH === null) {
-        baseH = baseW ?? vpWidth;
-      }
-      if (baseW === null && baseH === null) {
-        const s = Math.min(vpWidth, vpHeight);
-        baseW = s;
-        baseH = s;
-      } else if (baseW === null) {
-        baseW = baseH!;
-      } else if (baseH === null) {
-        baseH = baseW!;
-      }
-      computedWidth = baseW;
-      computedHeight = baseH ?? 0;
+      baseW = s;
+      baseH = s;
+    } else if (baseW === null) {
+      baseW = baseH!;
+    } else if (baseH === null) {
+      baseH = baseW!;
     }
-    if (isWidthRatio && !isHeightRatio) {
-      try {
-        const m = (width as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-        if (m) {
-          computedWidth = (computedHeight / parseFloat(m[2])) * parseFloat(m[1]);
-        }
-      } catch {
-        console.error('Invalid width ratio string:', width);
+    computedWidth = baseW;
+    computedHeight = baseH ?? 0;
+  }
+  if (isWidthRatio && !isHeightRatio) {
+    try {
+      const m = (width as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+      if (m) {
+        computedWidth = (computedHeight / parseFloat(m[2])) * parseFloat(m[1]);
       }
-    } else if (isHeightRatio && !isWidthRatio) {
-      try {
-        const m = (height as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-        if (m) {
-          computedHeight = (computedWidth / parseFloat(m[1])) * parseFloat(m[2]);
-        }
-      } catch {
-        console.error('Invalid height ratio string:', height);
+    } catch {
+      console.error('Invalid width ratio string:', width);
+    }
+  } else if (isHeightRatio && !isWidthRatio) {
+    try {
+      const m = (height as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+      if (m) {
+        computedHeight = (computedWidth / parseFloat(m[1])) * parseFloat(m[2]);
       }
-    } else if (isWidthRatio && isHeightRatio) {
-      console.warn(`Both width (${width}) and height (${height}) are ratios. Prioritizing width.`);
-      try {
-        const mW = (width as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-        if (mW) {
-          computedWidth = (vpHeight / parseFloat(mW[2])) * parseFloat(mW[1]);
-          const mH = (height as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-          if (mH) {
-            computedHeight = (computedWidth / parseFloat(mH[1])) * parseFloat(mH[2]);
-          } else {
-            computedHeight = computedWidth;
-          }
+    } catch {
+      console.error('Invalid height ratio string:', height);
+    }
+  } else if (isWidthRatio && isHeightRatio) {
+    console.warn(`Both width (${width}) and height (${height}) are ratios. Prioritizing width.`);
+    try {
+      const mW = (width as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+      if (mW) {
+        computedWidth = (vpHeight / parseFloat(mW[2])) * parseFloat(mW[1]);
+        const mH = (height as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+        if (mH) {
+          computedHeight = (computedWidth / parseFloat(mH[1])) * parseFloat(mH[2]);
         } else {
-          const s = Math.min(vpWidth, vpHeight);
-          computedWidth = s;
-          computedHeight = s;
+          computedHeight = computedWidth;
         }
-      } catch (e) {
-        console.error('Error parsing ratios:', e);
+      } else {
         const s = Math.min(vpWidth, vpHeight);
         computedWidth = s;
         computedHeight = s;
       }
+    } catch (e) {
+      console.error('Error parsing ratios:', e);
+      const s = Math.min(vpWidth, vpHeight);
+      computedWidth = s;
+      computedHeight = s;
     }
+  }
+
+  return { width: Math.round(computedWidth), height: Math.round(computedHeight) };
+}
+
+function CanvasBlock({
+  timeline,
+  width,
+  height,
+  data,
+  store,
+  next,
+  updateStore,
+  styleCanvas,
+  initCanvas,
+}: CanvasBlockProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { trials } = useContext(CompiledTimelineContext);
+  // The loop reads the latest callbacks through this ref, so new identities never restart the block
+  const callbacks = useRef({ next, updateStore, styleCanvas, initCanvas });
+  callbacks.current = { next, updateStore, styleCanvas, initCanvas };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const size = canvasSize(width, height);
     const dpr = window.devicePixelRatio || 1;
-    const finalWidth = Math.round(computedWidth);
-    const finalHeight = Math.round(computedHeight);
-    canvas.width = Math.round(finalWidth * dpr);
-    canvas.height = Math.round(finalHeight * dpr);
-    canvas.style.width = finalWidth + 'px';
-    canvas.style.height = finalHeight + 'px';
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.scale(dpr, dpr);
-    }
+    canvas.width = Math.round(size.width * dpr);
+    canvas.height = Math.round(size.height * dpr);
+    canvas.style.width = `${size.width}px`;
+    canvas.style.height = `${size.height}px`;
+    ctx.scale(dpr, dpr);
 
-    const { initCanvas } = propsRef.current;
-    if (initCanvas && ctx) {
+    // A mistake in drawing code leaves the canvas incomplete instead of stopping the experiment
+    const paint = (drawing: ((ctx: CanvasRenderingContext2D, width: number, height: number) => void) | undefined) => {
       try {
-        initCanvas(ctx, finalWidth, finalHeight);
-      } catch (e) {
-        console.error('Error during canvas initialization:', e);
+        drawing?.(ctx, size.width, size.height);
+      } catch (error) {
+        console.error('Drawing on the canvas failed:', error);
       }
-    }
-
-    window.addEventListener('keydown', handleKeyPress);
-    processControlFlow();
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress);
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [width, height, handleKeyPress, processControlFlow]);
+    const clear = () => {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, size.width, size.height);
+    };
+    paint(callbacks.current.initCanvas);
+
+    const rate = store.__screenRefreshRate;
+    const halfFrame = typeof rate === 'number' && rate >= 20 && rate <= 300 ? 500 / rate : 0;
+    const compiled = compileSlides(timeline);
+    const context = createTimelineContext(data, store, trials);
+    let run = startSlides(compiled, context);
+
+    // The slide on screen: the frame that drew it, the frame it appeared with, and its response
+    let drawnAt = 0;
+    let onset: number | undefined;
+    let response: { key: string; reactionTimeMs: number } | undefined;
+    let hidden = false;
+    // Keys pressed since the last frame, which the next frame judges
+    let pressed: { key: string; timeStamp: number }[] = [];
+    let frameId = 0;
+
+    // Draws the next slide, or ends the block once there is none
+    const show = (timestamp: number) => {
+      const { slide } = run;
+      if (!slide) {
+        callbacks.current.updateStore(run.store);
+        callbacks.current.next(run.slides);
+        return;
+      }
+      clear();
+      ctx.fillStyle = 'black';
+      paint(callbacks.current.styleCanvas);
+      paint(slide.draw);
+      drawnAt = timestamp;
+      onset = undefined;
+      response = undefined;
+      hidden = false;
+      frameId = requestAnimationFrame(frame);
+    };
+
+    const frame = (timestamp: number) => {
+      const slide = run.slide as Slide;
+      const timeoutMs = slideTimeoutMs(slide);
+      // What a frame draws appears with the next frame
+      onset ??= timestamp;
+      for (const press of pressed) {
+        // Key events are timestamped on the frames' clock; a key pressed before the slide appeared does not count
+        const reactionTimeMs = press.timeStamp - onset;
+        if (response || reactionTimeMs < 0 || reactionTimeMs >= timeoutMs || !acceptsKey(slide, press.key)) continue;
+        response = { key: press.key, reactionTimeMs: Math.round(reactionTimeMs) };
+        if (slide.hideOnResponse) {
+          clear();
+          hidden = true;
+        }
+      }
+      pressed = [];
+
+      // Half a frame more ends the slide on the frame nearest its time
+      const elapsed = timestamp - drawnAt + halfFrame;
+      if ((response && slide.endSlideOnResponse !== false) || elapsed >= timeoutMs) {
+        run = endSlide(compiled, context, run, {
+          startMs: Math.round(onset),
+          // It disappears with the next frame, as long after this one as it appeared after the frame that drew it
+          endMs: Math.round(timestamp + onset - drawnAt),
+          key: response?.key ?? null,
+          reactionTimeMs: response?.reactionTimeMs ?? null,
+        });
+        show(timestamp);
+        return;
+      }
+      if (!hidden && elapsed >= (slide.displayDurationMs ?? Number.POSITIVE_INFINITY)) {
+        clear();
+        hidden = true;
+      }
+      frameId = requestAnimationFrame(frame);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A held key repeats, which is not another response
+      if (!event.repeat) pressed.push({ key: event.key, timeStamp: event.timeStamp });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    frameId = requestAnimationFrame(show);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      cancelAnimationFrame(frameId);
+    };
+  }, [timeline, width, height, data, store, trials]);
 
   return (
-    <div
-      style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}
-    >
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
       <canvas ref={canvasRef} />
     </div>
   );
@@ -574,61 +277,47 @@ export default defineComponent({
   name: 'CanvasBlock',
   component: CanvasBlock,
   csv: 'canvas',
-  flatten: arrayFlattener,
-  simulate: ({ props, store, simulators, participant }) => {
-    const timeline = props.timeline;
-    if (!timeline) return { responseData: [] };
+  // Every slide's row has metadata, if only empty, so the block's own always goes to slideblock_meta_ columns
+  flatten: (item) => arrayFlattener(item).map((row) => ({ metadata: {}, ...row })),
+  simulate: ({ props, simulators, participant, data, store, get, getOptional }) => {
+    const compiled = compileSlides(props.timeline);
+    const context = { data, store, get, getOptional, slides: [] };
+    let run = startSlides(compiled, context);
+    let time = 0;
 
-    const bytecode = compileCanvasTimeline(timeline);
-    const innerData: CanvasResultData[] = [];
-    let innerStore: Store = { ...store };
-    let currentTime = 0;
-    let slideNumber = 0;
-
-    const getContext = () => ({ data: innerData, store: innerStore });
-    const applyStoreUpdates = (updates: Record<string, any>) => {
-      innerStore = { ...innerStore, ...updates };
-    };
-
-    let pointer = advanceToNextContent(bytecode, 0, getContext, applyStoreUpdates);
-
-    while (pointer < bytecode.instructions.length) {
-      const content = (bytecode.instructions[pointer] as ExecuteContentInstruction<SlideContent>).content;
-      const slide = typeof content === 'function' ? content(innerData, innerStore) : content;
-
+    while (run.slide) {
+      const slide = run.slide;
       const result = slide.simulate
         ? slide.simulate({ slide, participant })
         : simulators.respondToSlide({ props, participant, slide });
       participant = result.participantState ?? participant;
 
-      if (!slide.ignoreData) {
-        const duration = slide.displayDurationMs || result.reactionTimeMs || 1000;
-
-        let td: CanvasResultData = {
-          index: pointer,
-          trialNumber: slideNumber,
-          startMs: currentTime,
-          endMs: currentTime + duration,
-          durationMs: duration,
-          key: result.key,
-          reactionTimeMs: result.reactionTimeMs,
-        };
-
-        td = applyMetadata(td, slideMetadata(slide, innerData, innerStore), slide.nestMetadata);
-
-        innerData.push(td);
-        currentTime += duration;
+      // The same rules as in the browser: a key counts within the slide's time, and ends it unless the slide says otherwise
+      const timeoutMs = slideTimeoutMs(slide);
+      const { key, reactionTimeMs } = result;
+      const response =
+        key !== null && reactionTimeMs !== null && reactionTimeMs < timeoutMs && acceptsKey(slide, key)
+          ? { key, reactionTimeMs }
+          : undefined;
+      const durationMs = response && slide.endSlideOnResponse !== false ? response.reactionTimeMs : timeoutMs;
+      if (durationMs === Number.POSITIVE_INFINITY) {
+        throw new Error('A simulated participant gave no response to a slide that only a response ends.');
       }
 
-      slideNumber++;
-      pointer = advanceToNextContent(bytecode, pointer + 1, getContext, applyStoreUpdates);
+      run = endSlide(compiled, context, run, {
+        startMs: time,
+        endMs: time + durationMs,
+        key: response?.key ?? null,
+        reactionTimeMs: response?.reactionTimeMs ?? null,
+      });
+      time += durationMs;
     }
 
-    return { responseData: innerData, participantState: participant, storeUpdates: innerStore, durationMs: currentTime };
+    return { responseData: run.slides, participantState: participant, storeUpdates: run.store, durationMs: time };
   },
   defaultSimulators: {
     respondToSlide: ({ slide }): SlideSimulatorResult => {
-      const keys = (slide as CanvasSlide).allowedResponseKeys;
+      const keys = (slide as Slide).allowedResponseKeys;
       if (keys === true) {
         return { key: ' ', reactionTimeMs: uniform(200, 800) };
       }
@@ -641,7 +330,7 @@ export default defineComponent({
 });
 
 /** Slides that count down from `seconds`, one second each, recording nothing. */
-export function canvasCountdown(seconds: number): CanvasSlide[] {
+export function canvasCountdown(seconds: number): Slide[] {
   if (seconds <= 0) {
     return [];
   }

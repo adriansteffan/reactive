@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { uuidv4 } from '../utils/ids';
 import { post } from '../core/backend';
 import { BaseComponentProps } from '../core/component';
 import { FileUpload } from '../core/files';
 import { Platform } from '../core/platform';
-import { TrialData } from '../core/rows';
-import { useParams } from '../runner/contexts';
+import type { ExperimentData } from '../core/rows';
+import { CompiledTimelineContext, useParams } from '../runner/contexts';
 import { strToU8, zipSync, type Zippable } from 'fflate';
 import { FileBackend, getNative } from '../core/platform';
 import { buildUploadFiles, convertArrayOfObjectsToCSV } from '../core/files';
@@ -75,7 +75,7 @@ function Upload({
   retryButtonText = 'Try Again',
 }: BaseComponentProps & {
   sessionId?: string | null;
-  generateFiles?: (input: { sessionId: string; data: TrialData[]; store: Store }) => FileUpload[];
+  generateFiles?: (input: { sessionId: string; data: ExperimentData; store: Store }) => FileUpload[];
   sessionData?: Record<string, any>;
   uploadRaw?: boolean;
   /** Uploads as soon as the screen appears. With `false`, participants submit with a button first. */
@@ -97,6 +97,7 @@ function Upload({
   const uploadInitiatedRef = useRef(false);
 
   const { upload: shouldUpload, download: shouldDownload } = useParams(params);
+  const { components } = useContext(CompiledTimelineContext);
 
   const downloadFiles = useCallback(async (files: FileUpload[]) => {
     const entries: Zippable = {};
@@ -136,6 +137,7 @@ function Upload({
       sessionId: sessionIdUpload,
       data,
       store,
+      components,
       generateFiles,
       sessionData,
       uploadRaw,
@@ -202,6 +204,7 @@ function Upload({
     downloadFiles,
     next,
     store,
+    components,
     sessionData,
     parentFolder,
   ]);
@@ -264,12 +267,13 @@ export default defineComponent({
   component: Upload,
   csv: null,
   params,
-  simulate: async ({ props, data, store, participant, initialParticipant }) => {
+  simulate: async ({ props, data, store, components, participant, initialParticipant }) => {
     const sessionId = props.sessionId || `sim_${Date.now()}_${Math.floor(uniform(0, 36 ** 6)).toString(36)}`;
     const files = buildUploadFiles({
       sessionId,
       data,
       store,
+      components,
       generateFiles: props.generateFiles,
       sessionData: props.sessionData,
       uploadRaw: props.uploadRaw ?? true,

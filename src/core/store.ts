@@ -10,7 +10,6 @@ interface LibraryStore {
   __uploadId?: string;
   __audioInputId?: string;
   __screenRefreshRate?: number | null;
-  __fullscreenGuard?: unknown;
 }
 
 type StoreDeclared = keyof ExperimentStore extends never ? false : true;

@@ -4,15 +4,16 @@ import { isFullscreen } from '../utils/fullscreen';
 import { noopSimulate } from '../core/simulation';
 import { defineComponent } from '../core/component';
 import { getNative } from '../core/platform';
+import { useSetFullscreenGuard } from '../runner/fullscreenguard';
 
 function ExitFullscreen({
   next,
-  updateStore,
   delayMs = 0,
 }: {
   delayMs?: number;
 } & BaseComponentProps) {
-  
+  const setGuard = useSetFullscreenGuard();
+
   // The listener that was actually registered, since the handler is recreated when its dependencies change
   const fallbackListener = useRef<(() => void) | null>(null);
   const timeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,7 +64,7 @@ function ExitFullscreen({
   }, [handleFullscreenChangeForFallback, removeListenersAndTimeout]);
 
   useEffect(() => {
-    updateStore({ __fullscreenGuard: null });
+    setGuard(null);
     const performExitFullscreen = async () => {
       if (!isFullscreen()) {
         next({});
@@ -104,7 +105,7 @@ function ExitFullscreen({
     return () => {
       removeListenersAndTimeout();
     };
-  }, [next, updateStore, proceedWithDelay, addListenersForFallback, removeListenersAndTimeout]);
+  }, [next, setGuard, proceedWithDelay, addListenersForFallback, removeListenersAndTimeout]);
 
   return null;
 }
@@ -112,6 +113,6 @@ function ExitFullscreen({
 export default defineComponent({
   name: 'ExitFullscreen',
   component: ExitFullscreen,
-  csv: 'session',
+  csv: null,
   simulate: noopSimulate,
 });

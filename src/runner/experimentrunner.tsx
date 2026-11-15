@@ -1,14 +1,20 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { advanceToNextContent, type Bytecode } from '../core/bytecode';
-import { freezeInDevelopment } from '../core/development';
-import { type Experiment, type Session, startRun } from '../core/experiment';
+import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  createRunState,
+  type Experiment,
+  realign,
+  respond,
+  type RunState,
+  type Session,
+  startRun,
+  trialAt,
+} from '../core/experiment';
 import { urlParams } from '../core/params';
-import { createInitialRow, createTrialRow, type TrialData } from '../core/rows';
-import type { Store } from '../core/store';
-import { type TimelineContext, createTimelineContext, resolve, type TrialContent } from '../core/timeline';
+import { createExperimentData } from '../core/rows';
+import type { CompiledTimeline } from '../core/timeline';
 import { uuidv4 } from '../utils/ids';
 import { now } from '../utils/time';
-import { AudioDeviceContext, ParamsProvider } from './contexts';
+import { AudioDeviceContext, CompiledTimelineContext, ParamsProvider } from './contexts';
 import { DevPanel } from './devpanel';
 import { FullscreenGuard } from './fullscreenguard';
 import { ProgressBar } from './progressbar';
@@ -62,30 +68,15 @@ function collectRefreshRate(callback: (refreshRate: number | null) => void) {
   return cleanup;
 }
 
-type ExperimentBytecode = Bytecode<TrialContent, TimelineContext>;
-
-// After a hot reload, finds the trial that was on screen in the rebuilt bytecode
-function realign(
-  previous: ExperimentBytecode,
-  next: ExperimentBytecode,
-  pointer: number,
-  advance: (from: number) => number,
-): number {
-  const shown = previous.instructions[pointer];
-  if (shown?.type === 'ExecuteContent' && shown.content.name !== undefined) {
-    let best = -1;
-    next.instructions.forEach((instruction, index) => {
-      const same =
-        instruction.type === 'ExecuteContent' &&
-        instruction.content.type === shown.content.type &&
-        instruction.content.name === shown.content.name;
-      if (same && (best === -1 || Math.abs(index - pointer) < Math.abs(best - pointer))) best = index;
-    });
-    if (best !== -1) return best;
-  }
-  if (next.instructions[pointer]?.type === 'ExecuteContent') return pointer;
-  return advance(Math.min(pointer, next.instructions.length));
-}
+type RunEvent =
+  | {
+      type: 'respond';
+      responseData: unknown;
+      storeUpdates: Record<string, any>;
+      startMs: number;
+      endMs: number;
+    }
+  | { type: 'rebuild'; previous: CompiledTimeline };
 
 // Switches given as environment variables arrive as text
 function parseBooleanProp(value: unknown): boolean {
@@ -142,64 +133,56 @@ function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devD
     sessionRef.current = started.session;
     return started;
   }, [experiment]);
-  const { bytecode, trials } = run.compiled;
 
-  const [initialData] = useState(() =>
-    freezeInDevelopment([
-      createInitialRow({ userAgent: navigator.userAgent, url: urlParams(), run, time: now() }),
-    ]),
+  const [state, dispatch] = useReducer(
+    (state: RunState, event: RunEvent): RunState => {
+      switch (event.type) {
+        case 'respond':
+          return respond(run.compiled, state, event);
+        case 'rebuild':
+          return realign(event.previous, run.compiled, state);
+      }
+    },
+    null,
+    () =>
+      createRunState(
+        run.compiled,
+        createExperimentData({ userAgent: navigator.userAgent, url: urlParams(), run }),
+        { __uploadId: uuidv4() },
+      ),
   );
-  const dataRef = useRef<TrialData[]>(initialData);
-  const storeRef = useRef<Store>(freezeInDevelopment({ __uploadId: uuidv4() }));
+  // The timeline the state belongs to, until a hot reload replaces it
+  const [compiled, setCompiled] = useState(run.compiled);
 
-  const getContext = useCallback(() => createTimelineContext(dataRef.current, storeRef.current, trials), [trials]);
-  const updateStore = useCallback((updates: Record<string, any>) => {
-    storeRef.current = freezeInDevelopment({ ...storeRef.current, ...updates });
-  }, []);
+  const trialNumber = state.data.trials.length + 1;
+  // When the trial on screen started, and which trial that is
+  const trialStartRef = useRef({ trialNumber, ms: now() });
+  // The changes the trial on screen made to the store, which take effect when it ends
+  const storeUpdatesRef = useRef<Record<string, any>>({});
 
-  const [totalTrialsCompleted, setTotalTrialsCompleted] = useState(0);
-  // When the trial on screen started
-  const trialStartRef = useRef(now());
-  const [instructionPointer, setInstructionPointer] = useState(() =>
-    advanceToNextContent(bytecode, 0, getContext, updateStore),
-  );
-  // The bytecode the pointer belongs to, until a hot reload replaces it
-  const [pointerBytecode, setPointerBytecode] = useState(bytecode);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs whenever a new trial appears
   useEffect(() => {
     window.scrollTo(0, 0);
-    trialStartRef.current = now();
-  }, [totalTrialsCompleted]);
+    trialStartRef.current = { trialNumber, ms: now() };
+  }, [trialNumber]);
 
   const next = useCallback(
     (responseData?: unknown): void => {
-      const instruction = bytecode.instructions[instructionPointer];
-      if (instruction?.type === 'ExecuteContent') {
-        const row = createTrialRow(
-          instruction.content,
-          {
-            index: instructionPointer,
-            trialNumber: totalTrialsCompleted + 1,
-            startMs: trialStartRef.current,
-            endMs: now(),
-            responseData,
-          },
-          getContext(),
-        );
-        dataRef.current = freezeInDevelopment([...dataRef.current, row]);
-        setTotalTrialsCompleted((count) => count + 1);
-      }
-
-      setInstructionPointer(advanceToNextContent(bytecode, instructionPointer + 1, getContext, updateStore));
+      const start = trialStartRef.current;
+      // A trial ends once; a later call, such as from a timer its component left running, is ignored
+      if (start.trialNumber !== trialNumber) return;
+      const storeUpdates = storeUpdatesRef.current;
+      storeUpdatesRef.current = {};
+      dispatch({ type: 'respond', responseData, storeUpdates, startMs: start.ms, endMs: now() });
       // The next trial's start, until it appears; a component that finishes while it appears keeps this
-      trialStartRef.current = now();
+      trialStartRef.current = { trialNumber: trialNumber + 1, ms: now() };
     },
-    [bytecode, instructionPointer, totalTrialsCompleted, getContext, updateStore],
+    [trialNumber],
   );
+  const updateStore = useCallback((updates: Record<string, any>) => {
+    storeUpdatesRef.current = { ...storeUpdatesRef.current, ...updates };
+  }, []);
 
-  const instruction = bytecode.instructions[instructionPointer];
-  const content = instruction?.type === 'ExecuteContent' ? instruction.content : null;
+  const content = trialAt(compiled, state.pointer);
 
   const measureRefreshRate = content?.collectRefreshRate;
   useEffect(() => {
@@ -207,13 +190,9 @@ function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devD
     return collectRefreshRate((rate) => updateStore({ __screenRefreshRate: rate }));
   }, [measureRefreshRate, updateStore]);
 
-  if (pointerBytecode !== bytecode) {
-    setPointerBytecode(bytecode);
-    setInstructionPointer(
-      realign(pointerBytecode, bytecode, instructionPointer, (from) =>
-        advanceToNextContent(bytecode, from, getContext, updateStore),
-      ),
-    );
+  if (compiled !== run.compiled) {
+    setCompiled(run.compiled);
+    dispatch({ type: 'rebuild', previous: compiled });
     return null;
   }
 
@@ -222,31 +201,35 @@ function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devD
     const Component = content.component;
     componentToRender = (
       <Component
-        key={totalTrialsCompleted}
+        key={trialNumber}
         next={next}
         updateStore={updateStore}
-        store={storeRef.current}
-        data={dataRef.current}
-        {...resolve(content.props, getContext())}
+        store={state.store}
+        data={state.data}
+        {...state.props}
         name={content.name}
       />
     );
   }
 
+  const length = compiled.bytecode.instructions.length;
   return (
     <ThemeContext.Provider value={experiment.config?.theme ?? 'light'}>
-      <AudioDeviceContext.Provider value={storeRef.current.__audioInputId}>
+      <AudioDeviceContext.Provider value={state.store.__audioInputId}>
         <ParamsProvider value={run.session.params}>
-          <div className='w-full h-full'>
-            {experiment.config?.showProgressBar && (
-              <ProgressBar progress={bytecode.instructions.length > 0 ? instructionPointer / bytecode.instructions.length : 0} />
-            )}
-            {componentToRender}
-            <FullscreenGuard store={storeRef.current} />
-            {!devDisabled && run.session.params.dev === true && (
-              <DevPanel content={content} store={storeRef.current} data={dataRef.current} />
-            )}
-          </div>
+          <CompiledTimelineContext.Provider value={compiled}>
+            <div className='w-full h-full'>
+              <FullscreenGuard>
+                {experiment.config?.showProgressBar && (
+                  <ProgressBar progress={length > 0 ? state.pointer / length : 0} />
+                )}
+                {componentToRender}
+              </FullscreenGuard>
+              {!devDisabled && run.session.params.dev === true && (
+                <DevPanel content={content ?? null} store={state.store} data={state.data} />
+              )}
+            </div>
+          </CompiledTimelineContext.Provider>
         </ParamsProvider>
       </AudioDeviceContext.Provider>
     </ThemeContext.Provider>

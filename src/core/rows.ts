@@ -1,10 +1,10 @@
 import type { Run } from './experiment';
-import { paramType } from './params';
+import { type ParamType, paramType } from './params';
 import { type TimelineContext, resolve, type TrialContent } from './timeline';
 
-/** One recorded row: a trial's response, its timing, and what identifies it. The first row of a session holds its params instead. */
+/** One recorded row: a trial's response, its timing, and what identifies it. */
 export interface TrialData {
-  index: number;
+  /** The order in which the participant saw the trial, from 1. */
   trialNumber: number;
   /** The component's name. */
   type: string;
@@ -12,32 +12,21 @@ export interface TrialData {
   /** Set with `.csv()`: the CSV file(s) for this row instead of its component's. `null` keeps it out of the CSVs. */
   csv?: string | string[] | null;
   responseData?: any;
-  /** Set with `.metadata(values, { nested: true })`; without `nested`, the values are columns of the row itself. */
+  /** Set with `.metadata()`. */
   metadata?: Record<string, any>;
   startMs: number;
   endMs: number;
   durationMs: number;
 }
 
-/** Adds metadata to a row: as columns of the row itself, or nested in one `metadata` column. */
-export function applyMetadata<T extends object>(
-  row: T,
-  metadata: Record<string, any> | undefined,
-  nested?: boolean,
-): T {
-  if (nested) return { ...row, metadata };
-  if (metadata) return { ...metadata, ...row };
-  return row;
-}
-
 /** The row a trial records when it ends, the same whether a participant or a simulation ran it. */
 export function createTrialRow(
   content: TrialContent,
-  trial: { index: number; trialNumber: number; startMs: number; endMs: number; responseData: unknown },
+  trial: { trialNumber: number; startMs: number; endMs: number; responseData: unknown },
   context: TimelineContext,
 ): TrialData {
-  const row: TrialData = {
-    index: trial.index,
+  const metadata = resolve(content.metadata, context);
+  return {
     trialNumber: trial.trialNumber,
     startMs: trial.startMs,
     endMs: trial.endMs,
@@ -46,19 +35,40 @@ export function createTrialRow(
     name: content.name ?? '',
     ...(content.csv !== undefined ? { csv: content.csv } : {}),
     responseData: trial.responseData,
+    ...(metadata !== undefined ? { metadata } : {}),
   };
-  return applyMetadata(row, resolve(content.metadata, context), content.nestMetadata);
 }
 
-/** The first row of a session's data, holding its params and how it was built. */
-export function createInitialRow(info: {
+/** A param as the session recorded it: its value, and how the experiment declared it. */
+export interface RecordedParam {
+  value: unknown;
+  /** `false` for a URL param that nothing declares. */
+  registered: boolean;
+  defaultValue: unknown;
+  type: ParamType | undefined;
+  description: string | undefined;
+}
+
+/** What a session records about itself when it starts. */
+export interface SessionData {
   userAgent: string;
-  url: Record<string, unknown>;
-  run: Run;
-  time: number;
-}): TrialData {
+  /** Every param by name, including URL params that nothing declares. */
+  params: Record<string, RecordedParam>;
+  /** Seeds the random draws made while the timeline was built, so that it can be built again. */
+  buildSeed: number;
+}
+
+/** Everything a session records: the session itself, and a row for each trial. */
+export interface ExperimentData {
+  session: SessionData;
+  /** A row for each trial that has ended, in the order the participant saw them, so `trials[i].trialNumber` is `i + 1`. */
+  trials: TrialData[];
+}
+
+/** The data a session starts with: its params and how it was built, and no trials yet. */
+export function createExperimentData(info: { userAgent: string; url: Record<string, unknown>; run: Run }): ExperimentData {
   const { specs, session } = info.run;
-  const params: Record<string, unknown> = {};
+  const params: Record<string, RecordedParam> = {};
   // URL params that nothing declares are recorded too, and appear in the CSVs with a url_ prefix
   for (const [name, value] of Object.entries(info.url)) {
     if (!(name in specs)) {
@@ -74,15 +84,5 @@ export function createInitialRow(info: {
       description: spec.description,
     };
   }
-
-  return {
-    index: -1,
-    trialNumber: -1,
-    startMs: info.time,
-    endMs: info.time,
-    durationMs: 0,
-    type: '',
-    name: '',
-    responseData: { userAgent: info.userAgent, params, buildSeed: session.buildSeed },
-  };
+  return { session: { userAgent: info.userAgent, params, buildSeed: session.buildSeed }, trials: [] };
 }

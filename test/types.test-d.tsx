@@ -1,6 +1,8 @@
 // Type tests, checked by `bun check`: every @ts-expect-error marks a mistake the types must catch
 import {
   type BaseComponentProps,
+  CanvasBlock,
+  type ExperimentData,
   type TimelineContext,
   defineComponent,
   defineExperiment,
@@ -133,7 +135,8 @@ Text.trial({ name: 'intro' });
 Warmup.trial('warmup');
 
 // Defined components stay usable as JSX
-const asJsx = <Warmup next={() => {}} data={[]} store={{}} updateStore={() => {}} />;
+const noData: ExperimentData = { session: { userAgent: '', params: {}, buildSeed: 0 }, trials: [] };
+const asJsx = <Warmup next={() => {}} data={noData} store={{}} updateStore={() => {}} />;
 
 // --- chained methods ---
 const base = CustomTrial.trial({ maxCount: 5 });
@@ -205,6 +208,24 @@ const experiment = defineExperiment({
   },
 });
 
+// --- CanvasBlock ---
+CanvasBlock.trial({
+  timeline: [
+    { draw: (ctx) => ctx.fillText('+', 0, 0), displayDurationMs: 500 },
+    ({ slides, get }) => ({ draw: () => {}, displayDurationMs: slides.length * get(click).clicks }),
+    ifBlock(({ slides }) => slides.at(-1)?.key === 'f', [{ draw: () => {}, displayDurationMs: 100 }]).else([]),
+    updateStore(({ slides }) => ({ bonus: slides.length })),
+    // @ts-expect-error a slide draws itself
+    { displayDurationMs: 100 },
+  ],
+});
+const slideKey = ({ slides }: TimelineContext) => {
+  const ms: number | null | undefined = slides.at(-1)?.reactionTimeMs;
+  // @ts-expect-error field that does not exist
+  slides.at(-1)?.reactionTime;
+  return ms;
+};
+
 defineExperiment({
   // @ts-expect-error a 0 from count && trial is not a timeline entry
   timeline: [0 && Text.trial()],
@@ -219,4 +240,4 @@ defineExperiment({
 });
 defineExperiment({ timeline: [Text.trial()], simulation: { createParticipants: () => [{ id: 1 }] } });
 
-export { asJsx, bonusRead, experiment, reads };
+export { asJsx, bonusRead, experiment, reads, slideKey };

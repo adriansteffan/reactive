@@ -46,7 +46,7 @@ Premade components available so far:
 * Text: A simple display of Text and a Button
 * PlainInput: A text input with a prompt
 * MicrophoneCheck: used to test the voice recording feature and choose a preferred microphone to use
-* CanvasBlock: A sequence of canvas slides with keyboard responses, for timed tasks
+* CanvasBlock: A sequence of canvas slides with keyboard responses, for timed tasks (see [Timed slides](#timed-slides))
 * StoreUI: A form that writes its fields to the store
 * CheckDevice: Gathers information about the participant's device and can stop participants whose device does not fit
 * EnterFullscreen / ExitFullscreen
@@ -79,6 +79,8 @@ An experiment that does not use them neither installs them nor sends them to its
 
 `Component.trial(name?, props)` puts a component into the timeline. The name is optional, but it identifies the trial in the data and is needed to read its result later. Props are checked against the component; a component with required props needs them here.
 
+Name every trial your analysis needs to find, or give it metadata that identifies it, such as a stimulus id. Rows carry no other lasting identity: their `trialNumber` is the order in which the participant saw the trials, which shifts whenever the timeline changes.
+
 Further settings are chained. Every method returns a new trial and leaves the one it was called on unchanged, so a partly configured trial can serve as a base for several others. Passing `undefined` leaves a setting as it is, which keeps optional settings inline:
 
 ```tsx
@@ -92,7 +94,7 @@ Text.trial('instructions').metadata(isPractice ? { practice: true } : undefined)
 |---|---|
 | `.name(name)` | Renames the trial, for variants of a base trial |
 | `.props(props)` | Merges props into the trial's props |
-| `.metadata(values, { nested? })` | Extra columns for this trial's rows (see [Metadata](#metadata)) |
+| `.metadata(values)` | Extra values for this trial's rows, kept apart from its response (see [Metadata](#metadata)) |
 | `.csv(file)` | The CSV file(s) for this trial's rows instead of its component's; `null` keeps them out |
 | `.simulators(simulators)` | Replaces some of the component's simulators (see [Simulation](#simulation)) |
 | `.collectRefreshRate(enabled?)` | Measures the screen's refresh rate while the trial runs, for later canvas trials |
@@ -111,7 +113,7 @@ Text.trial(({ get }) => ({ content: <p>Hello {get(nickname).value}</p> }));
 Text.trial(({ get }) => ({ content: <p>Hello {get(PlainInput, 'nickname').value}</p> }));
 ```
 
-A trial can be read through the trial itself or through its component and name. `get` throws if the trial has not run yet; `getOptional` returns `undefined` instead, for trials that may have been skipped. Asking for a name that is not in the timeline stops the experiment during development and simulation; for real participants it is logged instead. The timeline context also holds `data`, every row recorded so far, and `store`.
+A trial can be read through the trial itself or through its component and name. `get` throws if the trial has not run yet; `getOptional` returns `undefined` instead, for trials that may have been skipped. Asking for a name that is not in the timeline stops the experiment during development and simulation; for real participants it is logged instead. The timeline context also holds `data`, everything recorded so far, `store`, and inside a CanvasBlock, `slides` (see [Timed slides](#timed-slides)). `data.trials` lists the rows of the trials that have ended, in the order the participant saw them, so `data.trials.at(-1)` is the last one and `data.trials.length` counts them. `data.session` holds what the session recorded when it started: every param with its value and declaration, the build seed and the user agent.
 
 These callbacks must not change the context's `data` or `store`: they are frozen during development and simulation, so trying throws. The store changes only through `updateStore` (below) and through components.
 
@@ -144,7 +146,68 @@ ifGoto(({ get }) => !get(Quiz, 'quiz').passed, 'retry'),
 
 A condition written as a named function, like `clickedSlowly`, can be reused in several blocks and props without storing a flag. `updateStore` is for values that carry forward, such as a bonus.
 
-Within one timeline, two different trials of the same component cannot share a name, unless they sit in different branches of the same `ifBlock`.
+Within one timeline, two different trials cannot share a name, even if their components differ, unless they sit in different branches of the same `ifBlock`. A name cannot be `url` or `session`, or start with `url_` or `session_`, since its columns in the session CSV would then take the library's (see [Output files](#output-files)). An unnamed trial that goes to the session CSV is named after its component for its columns there: the first `PlainInput` (`PlainInput_value`), the next ones `PlainInput_2`, `PlainInput_3` and so on, in the order they appear in the timeline. These names count positions, so they change when the timeline does; give a trial a name of its own when your analysis reads its columns.
+
+### Timed slides
+
+CanvasBlock shows a sequence of slides on a canvas within one trial, for tasks that need precise timing, such as a fixation cross, a briefly shown word and a key press. It draws each slide in an animation frame, with no React rendering between slides. Its timeline holds slides, and the same blocks as the experiment's timeline:
+
+```tsx
+import { CanvasBlock, ifBlock, type Slide } from '@adriansteffan/reactive';
+
+const fixation: Slide = {
+  draw: (ctx, w, h) => ctx.fillText('+', w / 2, h / 2),
+  displayDurationMs: 500,
+  ignoreData: true,
+};
+
+const stimulus = (word: string): Slide => ({
+  draw: (ctx, w, h) => ctx.fillText(word, w / 2, h / 2),
+  displayDurationMs: 200,
+  responseTimeLimitMs: 2000,
+  allowedResponseKeys: ['f', 'j'],
+  metadata: { word },
+});
+
+const wrongKey: Slide = { draw: (ctx, w, h) => ctx.fillText('Wrong key', w / 2, h / 2), displayDurationMs: 500 };
+
+CanvasBlock.trial('main', {
+  timeline: words.map((word) => [
+    fixation,
+    stimulus(word),
+    ifBlock(({ slides }) => slides.at(-1)?.key !== 'f', [wrongKey]),
+  ]),
+}).metadata({ condition: 'hard' }),
+```
+
+| Slide field | Description |
+|---|---|
+| `draw(ctx, width, height)` | Draws the slide on a canvas cleared to white, with black as the fill color |
+| `displayDurationMs` | How long the drawing stays visible |
+| `responseTimeLimitMs` | How long after the slide appears a key counts as a response |
+| `allowedResponseKeys` | The keys that count as a response, or `true` for any key |
+| `endSlideOnResponse` | Whether the first response ends the slide; `true` by default |
+| `hideOnResponse` | Clears the drawing at the first response |
+| `ignoreData` | Records no row for the slide |
+| `metadata` | Extra values for the slide's row |
+| `simulate` | Decides the simulated response to this slide, instead of `respondToSlide` (see [Simulation](#simulation)) |
+
+A slide without keys ends when its display duration or its response time limit runs out, whichever comes first. A slide with keys ends at the first response, or when its response time limit runs out. Without a limit, it waits as long as it is displayed, or for a key if it has no display duration either. A slide that could never end stops the experiment during development and simulation.
+
+A slide can also be a function of the timeline context, which runs once, when the slide starts. Inside a CanvasBlock, the context's `slides` holds the rows of the block's slides so far, while `data`, `get` and `getOptional` read the experiment's trials, as everywhere else. `updateStore` changes the store for the rest of the block, and the block's changes reach the experiment's store when it ends.
+
+Each slide records a row with its `slideNumber`, which counts the slides the participant saw from 1, including those that record nothing; `startMs`, `endMs` and `durationMs`; and the `key` pressed and its `reactionTimeMs`, or `null` without a response. In the canvas CSV, every slide is a row: its metadata is in `meta_` columns (`meta_word`), and the block's own metadata in `slideblock_meta_` columns (`slideblock_meta_condition`).
+
+Times are taken from the frames the browser shows. A slide appears with the first frame after the one that draws it, and `startMs` is that frame's time; `endMs` is when the next frame takes it down. A reaction time runs from `startMs` to the moment the browser timestamped the key press, so the time the page needs to handle the key is not part of it, and a held key's repeats do not count. Durations are counted in frames: a slide is taken down on the frame nearest its duration when the screen's refresh rate is known, from `.collectRefreshRate()` on an earlier trial, and otherwise on the first frame at or after it.
+
+| CanvasBlock prop | Description |
+|---|---|
+| `timeline` | The slides and blocks |
+| `width`, `height` | The canvas's size: pixels as a number, a share of the screen as a percentage (`'80%'`), or a ratio to the other side (`'16:9'`); a square filling the screen by default |
+| `styleCanvas(ctx, width, height)` | Sets colors and fonts before each slide is drawn |
+| `initCanvas(ctx, width, height)` | Runs once, after the canvas is set up |
+
+`canvasCountdown(seconds)` returns slides that count down one second each and record nothing.
 
 ### Params
 
@@ -172,6 +235,7 @@ export default defineExperiment({
 * The resolved values are recorded in the data. Simulated participants can set them (see [Simulation](#simulation)).
 * `timeline` may use any JavaScript, such as `shuffle` or loops. Its random draws are seeded per participant, and the seed (`buildSeed`) is recorded, so the exact timeline a participant saw can be rebuilt later.
 * Params exist only inside `timeline`. Parts of the timeline in other files that need one become functions that take it, and components get it as a prop.
+* Each param is a column of the session CSV, so a param cannot be named `sessionId`, `userAgent` or `buildSeed`, or start with `url_` or `session_`.
 
 ### Typed store
 
@@ -423,7 +487,7 @@ createParticipants: () => {
 | Text | `respond` | Click button, random reaction time |
 | PlainInput | `respond` | Returns `'simulated_input'` |
 | Quest | `answerQuestion`, also given `question` | Random valid answer per question type |
-| CanvasBlock | `respondToSlide`, also given `slide` | Random key from `allowedResponseKeys`, random RT |
+| CanvasBlock | `respondToSlide`, also given `slide` | Random key from `allowedResponseKeys`, random RT; it counts under the same rules as a real key press |
 | Tutorial | `respondToSlide`, also given `slideIndex` | Advances through slides, no interaction data |
 | RandomDotKinematogram | `respond` | Random key from `allowedResponseKeys`, random RT (may timeout) |
 | Upload | *(none)* | Builds CSVs and POSTs to backend |
@@ -457,18 +521,18 @@ Upload.trial('upload')
 
 | Component | Default CSV | Notes |
 |---|---|---|
-| PlainInput, Quest, CheckDevice, EnterFullscreen, ExitFullscreen, MicrophoneCheck, VoiceRecording | `session` | Merged into single session row, namespaced by trial name |
+| PlainInput, Quest, CheckDevice, VoiceRecording | `session` | Merged into single session row, namespaced by trial name |
 | Text | `text` | One row per Text component |
 | CanvasBlock | `canvas` | One row per slide, with built-in flattener |
 | StoreUI | `storeui` | One row per StoreUI occurrence |
 | RandomDotKinematogram | `rdk` | One row per RDK trial |
-| ProlificEnding, Upload, RequestFilePermission, Tutorial | *(none)* | No CSV output |
+| EnterFullscreen, ExitFullscreen, MicrophoneCheck, ProlificEnding, Upload, RequestFilePermission, Tutorial | *(none)* | No CSV output |
 
 ### Output files
 
 For a session `abc123`, the Upload component produces:
-- `abc123.raw.json` — full raw data
-- `session.abc123.{timestamp}.csv` — one row with params, userAgent, `buildSeed`, and all session-level trial data namespaced by trial name (e.g. `nickname_value`, `devicecheck_browser`)
+- `abc123.raw.json` — all the data, as `{ "session": …, "trials": [ … ] }`, with recordings replaced by the names of their files
+- `session.abc123.{timestamp}.csv` — one row with `sessionId`, `userAgent`, `buildSeed`, the params, URL params that nothing declares (`url_…`), the Upload's `sessionData` (`session_…`), and all session-level trial data namespaced by trial name (e.g. `nickname_value`, `devicecheck_browser`)
 - `canvas.abc123.{timestamp}.csv` — multi-row CSV from CanvasBlock trials
 - One CSV per additional group (text, storeui, or any custom group)
 
@@ -481,6 +545,8 @@ CanvasBlock.trial('practice', { timeline: practiceSlides }).csv('practice'), // 
 CanvasBlock.trial('main', { timeline: mainSlides }),                         // uses default 'canvas'
 ```
 
+The trial's rows are flattened as its component's would be, so the practice CSV also has one row per slide.
+
 Route a trial to multiple CSVs with an array:
 
 ```tsx
@@ -489,7 +555,7 @@ Quest.trial('survey', { surveyJson }).csv(['session', 'survey']), // both sessio
 
 ### Adding session-level data
 
-Use `sessionData` on Upload to inject extra fields into the session CSV:
+Use `sessionData` on Upload to inject extra fields into the session CSV. Their columns are prefixed with `session_` (`session_experimentVersion`), so they never take the place of a param:
 
 ```tsx
 // Static
@@ -518,7 +584,9 @@ defineComponent({
 });
 ```
 
-Each row automatically gets standard trial fields prefixed with `trial_` (`trial_index`, `trial_name`, `trial_startMs`, etc.) plus any metadata from the trial. The flattener output overwrites these if keys collide.
+Each row automatically gets standard trial fields prefixed with `trial_` (`trial_name`, `trial_trialNumber`, `trial_startMs`, etc.) plus the trial's metadata prefixed with `meta_`.
+
+Column names starting with `trial_`, `meta_`, `response_`, `url_`, `session_` or `slideblock_meta_` belong to the library. A field of a response or of a flattener's output whose name starts with one of them gets `response_` in front (`meta_score` becomes `response_meta_score`), so it can never take the place of a column the library writes.
 
 ### Array flattener
 
@@ -551,9 +619,9 @@ defineComponent({
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `sessionId` | `string` | random UUID | Custom session identifier used in filenames and folder names |
-| `sessionData` | `Record<string, any>` | — | Extra key-value pairs added to the session CSV row |
+| `sessionData` | `Record<string, any>` | — | Extra key-value pairs added to the session CSV row, as `session_` columns |
 | `generateFiles` | `({ sessionId, data, store }) => FileUpload[]` | — | Produce custom files alongside auto-generated CSVs |
-| `uploadRaw` | `boolean` | `true` | Include raw JSON dump of all trial data |
+| `uploadRaw` | `boolean` | `true` | Include the raw JSON of all the data |
 | `autoUpload` | `boolean` | `true` | Upload as soon as the screen appears; `false` shows a submit button first |
 | `buttonText` | `string` | `'Submit Data'` | The submit button, with `autoUpload: false` |
 | `retryButtonText` | `string` | `'Try Again'` | The button shown after a failed upload |
@@ -564,10 +632,10 @@ defineComponent({
 Add metadata to a trial to include extra columns in every CSV row it produces:
 
 ```tsx
-CanvasBlock.trial('block1', { timeline: slides }).metadata({ difficulty: 'hard', block: 2 }),
+RandomDotKinematogram.trial('rdk1', { coherence: 0.5 }).metadata({ difficulty: 'hard', block: 2 }),
 ```
 
-For session-level trials, metadata is namespaced by trial name (e.g. `block1_difficulty`). For non-session trials, metadata columns appear unprefixed. With `.metadata(values, { nested: true })`, the values go into a single `metadata` column instead. Metadata can also be a function of the timeline context.
+In the data, metadata sits under the row's `metadata`, apart from the trial's own fields and its response, so their names can never collide. In the CSVs, its columns are prefixed with `meta_` (`meta_difficulty`), and for session-level trials also with the trial name (`rdk1_meta_difficulty`). A CanvasBlock's metadata is in `slideblock_meta_` columns instead, next to its slides' `meta_` columns (see [Timed slides](#timed-slides)). An object value becomes a single column holding its JSON. Metadata can also be a function of the timeline context.
 
 
 ## Utilities
@@ -749,7 +817,7 @@ When `minDurationMs` is set, only pause and discard buttons are shown. When not 
 | `eagerUpload` | `true` | Upload audio immediately after recording |
 | `animate` | `false` | Fade-in animation |
 
-Audio recordings are automatically extracted as separate `.webm` files during upload and eagerly uploaded to reduce final upload size. The trial `name` is used in the filename.
+Audio recordings are automatically extracted as separate `.webm` files during upload and eagerly uploaded to reduce final upload size. Each file is named after its trial's name and number (`audio_story_4.webm`), and the trial's row records the name as `audioFile`.
 
 To transcribe the recordings with Whisper in Docker, add the transcription setup to the project with `bunx @adriansteffan/reactive add transcription`; the project's README explains how to run it.
 
@@ -923,7 +991,7 @@ After the first participant is run, a folder with the name of your app will appe
 
 ## Development
 
-`ARCHITECTURE.md` explains how the library is put together. The package is published as TypeScript source, so there is no build step. `sideEffects` in `package.json` lists the files that do something when they are imported: the CSS, the array methods and the native integration. A project's production build leaves out every other file it does not use, so a new file that has to run on import belongs on that list.
+The package is published as TypeScript source, so there is no build step. `sideEffects` in `package.json` lists the files that do something when they are imported: the CSS, the array methods and the native integration. A project's production build leaves out every other file it does not use, so a new file that has to run on import belongs on that list.
 
 Check it with
 

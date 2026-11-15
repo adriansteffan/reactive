@@ -1,3 +1,5 @@
+import { freezeInDevelopment } from './development';
+
 export const BLOCK: unique symbol = Symbol('reactive.block');
 
 type Condition<C> = (context: C) => boolean;
@@ -18,8 +20,19 @@ export interface ExecuteContentInstruction<Content> {
   type: 'ExecuteContent';
   content: Content;
 }
+export interface GotoInstruction {
+  type: 'Goto';
+  marker: string;
+}
+/** Jumps when the condition holds. */
 export interface IfGotoInstruction<C> {
   type: 'IfGoto';
+  cond: Condition<C>;
+  marker: string;
+}
+/** Jumps when the condition does not hold. */
+export interface UnlessGotoInstruction<C> {
+  type: 'UnlessGoto';
   cond: Condition<C>;
   marker: string;
 }
@@ -29,7 +42,9 @@ export interface UpdateStoreInstruction<C> {
 }
 export type Instruction<Content, C> =
   | ExecuteContentInstruction<Content>
+  | GotoInstruction
   | IfGotoInstruction<C>
+  | UnlessGotoInstruction<C>
   | UpdateStoreInstruction<C>;
 
 /** A compiled timeline: instructions over content of type `Content`, whose conditions read a context of type `C`. */
@@ -38,8 +53,8 @@ export interface Bytecode<Content, C> {
   markers: Record<string, number>;
 }
 
-// The if-branches an item sits in, from the outside in, e.g. ['if0:then', 'if2:else']
-export type BranchPath = readonly string[];
+// The if-branches an item sits in, from the outside in
+export type BranchPath = readonly { block: number; arm: 'then' | 'else' }[];
 
 /**
  * Lowers a timeline to bytecode. Nested lists are flattened and `false`, `null` and `undefined`
@@ -82,16 +97,12 @@ export function compileTimeline<Content, C>(
         case 'if': {
           const end = `if_end_${id}`;
           const elseStart = `if_else_${id}`;
-          instructions.push({
-            type: 'IfGoto',
-            cond: (context) => !block.cond(context),
-            marker: block.else ? elseStart : end,
-          });
-          emit(block.items, [...branch, `if${id}:then`]);
+          instructions.push({ type: 'UnlessGoto', cond: block.cond, marker: block.else ? elseStart : end });
+          emit(block.items, [...branch, { block: id, arm: 'then' }]);
           if (block.else) {
-            instructions.push({ type: 'IfGoto', cond: () => true, marker: end });
+            instructions.push({ type: 'Goto', marker: end });
             markers[elseStart] = instructions.length;
-            emit(block.else, [...branch, `if${id}:else`]);
+            emit(block.else, [...branch, { block: id, arm: 'else' }]);
           }
           markers[end] = instructions.length;
           break;
@@ -100,9 +111,9 @@ export function compileTimeline<Content, C>(
           const start = `while_start_${id}`;
           const end = `while_end_${id}`;
           markers[start] = instructions.length;
-          instructions.push({ type: 'IfGoto', cond: (context) => !block.cond(context), marker: end });
+          instructions.push({ type: 'UnlessGoto', cond: block.cond, marker: end });
           emit(block.body, branch);
-          instructions.push({ type: 'IfGoto', cond: () => true, marker: start });
+          instructions.push({ type: 'Goto', marker: start });
           markers[end] = instructions.length;
           break;
         }
@@ -122,31 +133,37 @@ export function compileTimeline<Content, C>(
 }
 
 /**
- * Runs control flow from `fromPointer` on and returns the pointer of the next content
- * instruction, or the length of the bytecode once the timeline is finished.
+ * Runs control flow from `fromPointer` on. Returns the pointer of the next content instruction,
+ * or the length of the bytecode once the timeline is finished, and the store as the store
+ * updates on the way left it.
  */
-export function advanceToNextContent<Content, C>(
+export function advanceToNextContent<Content, C, S extends Record<string, any>>(
   bytecode: Bytecode<Content, C>,
   fromPointer: number,
-  getContext: () => C,
-  applyStoreUpdates: (updates: Record<string, any>) => void,
-): number {
+  fromStore: S,
+  contextFor: (store: S) => C,
+): { pointer: number; store: S } {
   let pointer = fromPointer;
+  let store = fromStore;
   while (pointer < bytecode.instructions.length) {
     const instruction = bytecode.instructions[pointer];
-    if (instruction.type === 'ExecuteContent') return pointer;
+    if (instruction.type === 'ExecuteContent') break;
 
-    if (instruction.type === 'IfGoto') {
-      pointer = instruction.cond(getContext()) ? bytecode.markers[instruction.marker] : pointer + 1;
+    if (instruction.type === 'Goto') {
+      pointer = bytecode.markers[instruction.marker];
+    } else if (instruction.type === 'IfGoto') {
+      pointer = instruction.cond(contextFor(store)) ? bytecode.markers[instruction.marker] : pointer + 1;
+    } else if (instruction.type === 'UnlessGoto') {
+      pointer = instruction.cond(contextFor(store)) ? pointer + 1 : bytecode.markers[instruction.marker];
     } else {
-      const updates = instruction.update(getContext());
+      const updates = instruction.update(contextFor(store));
       if (typeof updates === 'object' && updates !== null) {
-        applyStoreUpdates(updates);
+        store = freezeInDevelopment({ ...store, ...updates });
       } else {
         console.warn('A store update did not return an object, so the store is unchanged.');
       }
       pointer++;
     }
   }
-  return pointer;
+  return { pointer, store };
 }

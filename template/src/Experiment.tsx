@@ -109,10 +109,10 @@ export default defineExperiment({
 
     Upload.trial('upload'),
 
-    Text.trial('finaltext', ({ get }) => ({
+    Text.trial('finaltext', ({ data }) => ({
       content: (
         <>
-          Thank you for participating in our study, {get(PlainInput, 'nickname').value}. You can now
+          Thank you for participating in our study, {PlainInput.getLatest(data, 'nickname').responseData.value}. You can now
           close the browser window.
         </>
       ),

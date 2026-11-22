@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { BaseComponentProps } from '../src/core/component';
 import type { ExperimentData, TrialData } from '../src/core/rows';
-import { defineExperiment } from '../src/core/experiment';
+import { createRunState, defineExperiment, realign } from '../src/core/experiment';
 import { seedDistributions } from '../src/utils/distributions';
 import { simulateParticipant } from '../src/core/simulation';
-import { type TimelineContext, type Trial, compileExperimentTimeline, createTimelineContext, ifBlock, ifGoto, marker, type Timeline, updateStore, whileBlock } from '../src/core/timeline';
+import { type Trial, compileExperimentTimeline, createTimelineContext, ifBlock, ifGoto, marker, type Timeline, updateStore, whileBlock } from '../src/core/timeline';
 import { defineComponent } from '../src/core/component';
 import { buildUploadFiles, type FileUpload, markRecordingUploaded } from '../src/core/files';
 import CanvasBlock from '../src/components/canvasblock';
@@ -44,7 +44,10 @@ async function run(timeline: Timeline, participant = {}) {
 }
 
 // Data with the given trials and a session without params
-const dataOf = (trials: TrialData[]): ExperimentData => ({ session: { userAgent: '', params: {}, buildSeed: 0 }, trials });
+const dataOf = (trials: TrialData[]): ExperimentData => ({
+  session: { userAgent: '', params: {}, buildSeed: 0, namedTrials: [] },
+  trials,
+});
 
 const names = (rows: TrialData[]) => rows.map((row) => row.name);
 
@@ -213,7 +216,7 @@ describe('trial builder', () => {
   const base = Answer.trial('base', { value: 1 });
   const contentOf = (trial: Trial) =>
     compileExperimentTimeline([trial]).bytecode.instructions[0] as { content: any };
-  const context = createTimelineContext(dataOf([]), {}, new Set()) as TimelineContext;
+  const context = createTimelineContext(dataOf([]), {});
   const props = (trial: Trial) => {
     const value = contentOf(trial).content.props;
     return typeof value === 'function' ? value(context) : value;
@@ -261,50 +264,75 @@ describe('trial builder', () => {
 describe('reading results', () => {
   const nickname = Answer.trial('nickname', { value: 7 });
 
-  test('get and getOptional read a trial that has run', async () => {
+  test('getLatest reads the latest row of a trial that has run, and getAll every row', async () => {
     const rows = await run([
       nickname,
-      Answer.trial('copy', ({ get, getOptional }) => ({
-        value: get(nickname).value + get(Answer, 'nickname').value + (getOptional(nickname)?.value ?? 0),
+      Answer.trial({ value: 3 }),
+      Answer.trial('copy', ({ data }) => ({
+        value: Answer.getLatest(data, 'nickname').responseData.value + Answer.getAll(data).length,
       })),
     ]);
-    expect(rows[1].responseData.value).toBe(21);
+    expect(rows[2].responseData.value).toBe(9);
   });
 
-  test('a skipped trial: get throws, getOptional gives undefined', async () => {
+  test('a skipped trial: getLatest stops, getAll is empty', async () => {
     const skipped = Answer.trial('skipped', { value: 1 });
     const optional = await run([
       ifBlock(() => false, [skipped]),
-      Answer.trial('after', ({ getOptional }) => ({ value: getOptional(skipped)?.value ?? -1 })),
+      Answer.trial('after', ({ data }) => ({ value: Answer.getAll(data, 'skipped').at(-1)?.responseData.value ?? -1 })),
     ]);
     expect(optional[0].responseData.value).toBe(-1);
 
     await expect(
-      run([ifBlock(() => false, [skipped]), Answer.trial('after', ({ get }) => ({ value: get(skipped).value }))]),
+      run([
+        ifBlock(() => false, [skipped]),
+        Answer.trial('after', ({ data }) => ({ value: Answer.getLatest(data, 'skipped').responseData.value })),
+      ]),
     ).rejects.toThrow("'skipped' has not run yet");
   });
 
-  test('a trial that runs repeatedly gives its most recent run', async () => {
+  test('a trial that runs repeatedly has a row for each run, and getLatest gives the most recent', async () => {
     const rows = await run([
       updateStore(() => ({ count: 0 })),
       whileBlock(({ store }) => (store.count ?? 0) < 3, [
         Answer.trial('looped', ({ store }) => ({ value: (store.count ?? 0) * 10 })),
         updateStore(({ store }) => ({ count: (store.count ?? 0) + 1 })),
       ]),
-      Answer.trial('last', ({ get }) => ({ value: get(Answer, 'looped').value })),
+      Answer.trial('last', ({ data }) => ({
+        value: Answer.getLatest(data, 'looped').responseData.value + Answer.getAll(data, 'looped').length,
+      })),
     ]);
-    expect(rows.at(-1)?.responseData.value).toBe(20);
+    expect(rows.at(-1)?.responseData.value).toBe(23);
   });
 
-  test('unnamed trials and unknown names throw', async () => {
-    const unnamed = Answer.trial({ value: 1 });
-    // @ts-expect-error the types reject reading an unnamed trial, and so does the run
-    await expect(run([unnamed, Answer.trial('x', ({ get }) => ({ value: get(unnamed).value }))])).rejects.toThrow(
-      'Only named trials',
+  test('getLatest without a name reads the most recent trial of the component, also unnamed ones', async () => {
+    const rows = await run([
+      Answer.trial('first', { value: 1 }),
+      Answer.trial({ value: 2 }),
+      Answer.trial('after', ({ data }) => ({ value: Answer.getLatest(data).responseData.value })),
+    ]);
+    expect(rows.at(-1)?.responseData.value).toBe(2);
+    await expect(run([Text.trial(({ data }) => ({ content: String(Answer.getLatest(data).responseData.value) }))])).rejects.toThrow(
+      'No Answer trial has run yet',
     );
+  });
+
+  test('a name the timeline does not have stops the run, also after a hot reload', async () => {
     await expect(
-      run([Answer.trial('x', ({ get }) => ({ value: get(Answer, 'typo').value }))]),
+      run([Answer.trial('x', ({ data }) => ({ value: Answer.getAll(data, 'typo').length }))]),
     ).rejects.toThrow("no Answer trial named 'typo'");
+    // A name of another component's trial is not this one's
+    await expect(
+      run([Text.trial('typo'), Answer.trial('x', ({ data }) => ({ value: Answer.getAll(data, 'typo').length }))]),
+    ).rejects.toThrow("no Answer trial named 'typo'");
+
+    const first = compileExperimentTimeline([Answer.trial('a', { value: 1 })]);
+    const edited = compileExperimentTimeline([Answer.trial('a', { value: 1 }), Answer.trial('b', { value: 2 })]);
+    const state = createRunState(first, { ...dataOf([]), session: { ...dataOf([]).session, namedTrials: first.namedTrials } }, {});
+    expect(realign(first, edited, state).data.session.namedTrials).toEqual([
+      { type: 'Answer', name: 'a' },
+      { type: 'Answer', name: 'b' },
+    ]);
   });
 
   test('two different trials with the same name are rejected, unless they are in exclusive branches', () => {
@@ -654,7 +682,7 @@ describe('components', () => {
             updateStore(({ store }) => ({ shown: (store.shown ?? 0) + 1 })),
           ]),
           ifBlock(({ slides }) => slides.length === 2, [slide('j')]).else([slide('x')]),
-          ({ get, slides }) => ({ ...slide('k'), metadata: { before: get(Answer, 'before').value, seen: slides.length } }),
+          ({ data, slides }) => ({ ...slide('k'), metadata: { before: Answer.getLatest(data, 'before').responseData.value, seen: slides.length } }),
         ],
       }),
       Answer.trial('after', ({ store }) => ({ value: store.shown })),

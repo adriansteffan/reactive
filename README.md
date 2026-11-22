@@ -31,8 +31,8 @@ export default defineExperiment({
   timeline: [
     Text.trial('welcome', { content: <p>Welcome!</p>, buttonText: 'Start' }),
     PlainInput.trial('nickname', { content: <p>What is your nickname?</p> }),
-    Text.trial('thanks', ({ get }) => ({
-      content: <p>Thank you, {get(PlainInput, 'nickname').value}!</p>,
+    Text.trial('thanks', ({ data }) => ({
+      content: <p>Thank you, {PlainInput.getLatest(data, 'nickname').responseData.value}!</p>,
     })),
     Upload.trial('upload'),
   ],
@@ -104,16 +104,19 @@ Times are in milliseconds everywhere, in props as in the recorded data, and thei
 
 ### Reading results
 
-Props, metadata, conditions and store updates can be functions of the timeline context (`TimelineContext`), which they receive when the trial runs. Its `get` returns the response of an earlier trial, typed by its component:
+Props, metadata, conditions and store updates can be functions of the timeline context (`TimelineContext`), which they receive when the trial runs. Its `data` holds everything recorded so far, which every component reads with `getAll` and `getLatest`, typed by the component:
 
 ```tsx
-const nickname = PlainInput.trial('nickname', { content: <p>What is your nickname?</p> });
+Text.trial(({ data }) => ({ content: <p>Hello {PlainInput.getLatest(data, 'nickname').responseData.value}</p> }));
 
-Text.trial(({ get }) => ({ content: <p>Hello {get(nickname).value}</p> }));
-Text.trial(({ get }) => ({ content: <p>Hello {get(PlainInput, 'nickname').value}</p> }));
+// Repeat the practice until 8 of the last 10 answers are correct
+whileBlock(({ data }) => Screen.getAll(data, 'practice').slice(-10)
+  .filter((row) => row.responseData.response === row.metadata?.correct).length < 8, [practice]),
 ```
 
-A trial can be read through the trial itself or through its component and name, and only a named trial can be read: the types reject `get` of a trial without a name. `get` throws if the trial has not run yet; `getOptional` returns `undefined` instead, for trials that may have been skipped. Asking for a name that is not in the timeline stops the experiment during development and simulation; for real participants it is logged instead. The timeline context also holds `data`, everything recorded so far, `store`, and inside a CanvasBlock, `slides` (see [Timed slides](#timed-slides)). `data.trials` lists the rows of the trials that have ended, in the order the participant saw them, so `data.trials.at(-1)` is the last one and `data.trials.length` counts them. `data.session` holds what the session recorded when it started: every param with its value and declaration, the build seed and the user agent.
+`getAll(data)` returns the rows of the component's trials, in the order they ran, and `getAll(data, 'practice')` those of its trial named `practice`, as often as it ran; unnamed trials, such as those made in a loop, are found by their `metadata`. `getLatest(data, 'nickname')` returns the latest row of a named trial, and `getLatest(data)` that of the component's most recent trial, such as feedback after each trial of a loop needs. Both stop if no such trial has run yet; for a trial that may have been skipped, `getAll(data, 'nickname').at(-1)` is `undefined` until it has run. A row holds the trial's `responseData`, its `metadata`, and its `trialNumber`, `startMs`, `endMs` and `durationMs`. A name that is not the component's in the timeline stops the experiment during development and simulation; for real participants it is logged instead. Both work wherever `data` is: in these callbacks, in your components' `data` prop, in simulate functions, and in the raw data a study uploads.
+
+`data.trials` lists all rows, in the order the participant saw them, so `data.trials.at(-1)` is the last one and `data.trials.length` counts them. `data.session` holds what the session recorded when it started: every param with its value and declaration, the build seed, the user agent, and the timeline's named trials. The timeline context also holds the `store`, and inside a CanvasBlock, `slides` (see [Timed slides](#timed-slides)).
 
 These callbacks must not change the context's `data` or `store`: they are frozen during development and simulation, so trying throws. The store changes only through `updateStore` (below) and through components.
 
@@ -133,7 +136,7 @@ timeline: [
 This covers choices that are fixed before the participant starts. Choices that depend on their answers use blocks, which are decided when the participant reaches them:
 
 ```tsx
-const clickedSlowly = ({ get }: TimelineContext) => get(CustomTrial, 'customtrial').totalTimeMs > 3000;
+const clickedSlowly = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customtrial').responseData.totalTimeMs > 3000;
 
 ifBlock(clickedSlowly, [Text.trial({ content: <p>Take your time.</p> })]).else([
   Text.trial({ content: <p>That was quick!</p> }),
@@ -141,7 +144,7 @@ ifBlock(clickedSlowly, [Text.trial({ content: <p>Take your time.</p> })]).else([
 whileBlock(({ store }) => (store.attempts ?? 0) < 3, [practiceRound]),
 updateStore(({ store }) => ({ attempts: (store.attempts ?? 0) + 1 })),
 marker('retry'),
-ifGoto(({ get }) => !get(Quiz, 'quiz').passed, 'retry'),
+ifGoto(({ data }) => !Quiz.getLatest(data, 'quiz').responseData.passed, 'retry'),
 ```
 
 A condition written as a named function, like `clickedSlowly`, can be reused in several blocks and props without storing a flag. `updateStore` is for values that carry forward, such as a bonus.
@@ -286,7 +289,7 @@ A slide with a `response` ends at the first response, unless `endsSlide` is `fal
 
 Keys are named as the browser names them in `KeyboardEvent.key`: a letter, a digit or symbol, `' '` for the space bar, or a named key such as `'Enter'` or `'ArrowLeft'`, which editors suggest. Any other name the browser gives works as well, such as `'ö'` on a German keyboard. Keys count in any case, so caps lock does not matter and `'enter'` is `'Enter'`, and the slide's row records the key as the list names it. Text's and the RandomDotKinematogram's `allowedResponseKeys` work the same way.
 
-A slide can also be a function of the timeline context, which runs once, when the slide starts. Inside a CanvasBlock, the context's `slides` holds the rows of the block's slides so far, while `data`, `get` and `getOptional` read the experiment's trials, as everywhere else. `updateStore` changes the store for the rest of the block, and the block's changes reach the experiment's store when it ends.
+A slide can also be a function of the timeline context, which runs once, when the slide starts. Inside a CanvasBlock, the context's `slides` holds the rows of the block's slides so far, while `data` holds the experiment's trials, as everywhere else. `updateStore` changes the store for the rest of the block, and the block's changes reach the experiment's store when it ends.
 
 Each slide records a row with its `slideNumber`, which counts the slides the participant saw from 1, including those that record nothing; `startMs`, `endMs` and `durationMs`; and the `key` pressed and its `reactionTimeMs`, or `null` without a response. In the canvas CSV, every slide is a row: its metadata is in `meta_` columns (`meta_word`), and the block's own metadata in `slideblock_meta_` columns (`slideblock_meta_condition`).
 
@@ -545,7 +548,7 @@ export default defineComponent({
 });
 ```
 
-A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data`, `store`, `get`, `getOptional`), so a simulation can depend on earlier answers. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participant ?? participant`), and returns the last one as its `participant`.
+A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data` and `store`), so a simulation can depend on earlier answers, read with `getAll` and `getLatest`. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participant ?? participant`), and returns the last one as its `participant`.
 
 A component that records nothing, such as a screen of instructions, can use `simulate: noopSimulate`, which moves on at once.
 
@@ -717,8 +720,8 @@ Use `sessionData` on Upload to inject extra fields into the session CSV. Their c
 Upload.trial('upload', { sessionData: { experimentVersion: 2 } }),
 
 // Dynamic (computed from the store or earlier results)
-Upload.trial('upload', ({ store, get }) => ({
-  sessionData: { bonus: store.bonus, choice: get(Story, 'story').choice },
+Upload.trial('upload', ({ store, data }) => ({
+  sessionData: { bonus: store.bonus, choice: Story.getLatest(data, 'story').responseData.choice },
 })),
 ```
 

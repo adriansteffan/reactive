@@ -49,7 +49,7 @@ export async function simulateParticipant(
     let result: SimulateResult;
     try {
       result = await simulate({
-        ...createTimelineContext(state.data, state.store, compiled.trials),
+        ...createTimelineContext(state.data, state.store),
         props: state.props,
         participant: current,
         initialParticipant,

@@ -324,7 +324,7 @@ describe('hot reload', () => {
   // A run of `timeline` with the trial at `pointer` on screen
   const runAt = (timeline: Timeline, pointer: number) => {
     const compiled = compileExperimentTimeline(timeline);
-    return { compiled, state: { ...createRunState(compiled, { session: { userAgent: '', params: {}, buildSeed: 0 }, trials: [] }, {}), pointer } };
+    return { compiled, state: { ...createRunState(compiled, { session: { userAgent: '', params: {}, buildSeed: 0, namedTrials: [] }, trials: [] }, {}), pointer } };
   };
 
   test('finds the trial on screen by its name in the rebuilt timeline', () => {

@@ -202,7 +202,7 @@ export function trialAt(compiled: CompiledTimeline, pointer: number): TrialConte
 
 // Runs control flow from `from` up to the next trial and resolves that trial's props
 function advance(compiled: CompiledTimeline, data: ExperimentData, fromStore: Store, from: number): RunState {
-  const contextFor = (store: Store) => createTimelineContext(data, store, compiled.trials);
+  const contextFor = (store: Store) => createTimelineContext(data, store);
   const { pointer, store } = advanceToNextContent(compiled.bytecode, from, fromStore, contextFor);
   const trial = trialAt(compiled, pointer);
   return { pointer, data, store, props: trial ? resolve(trial.props, contextFor(store)) : {} };
@@ -233,7 +233,7 @@ export function respond(
       endMs: trial.endMs,
       responseData: trial.responseData,
     },
-    createTimelineContext(state.data, store, compiled.trials),
+    createTimelineContext(state.data, store),
   );
   const data = { ...state.data, trials: [...state.data.trials, row] };
   return advance(compiled, freezeInDevelopment(data), store, state.pointer + 1);
@@ -257,5 +257,7 @@ export function realign(previous: CompiledTimeline, compiled: CompiledTimeline, 
     });
   }
   const from = best !== -1 ? best : Math.min(state.pointer, instructions.length);
-  return advance(compiled, state.data, state.store, from);
+  // The edited timeline can name other trials, which getAll and getLatest check against
+  const data = { ...state.data, session: { ...state.data.session, namedTrials: compiled.namedTrials } };
+  return advance(compiled, freezeInDevelopment(data), state.store, from);
 }

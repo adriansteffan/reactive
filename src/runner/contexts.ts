@@ -27,9 +27,9 @@ export function useParams<const P extends Record<string, ParamSpec>>(params: Che
 export const AudioDeviceContext = createContext<string | undefined>(undefined);
 export const useAudioDeviceId = () => useContext(AudioDeviceContext);
 
-/** The compiled timeline of the run: Upload builds the CSV files from its components, and CanvasBlock reads its trials by name. */
+/** The compiled timeline of the run, whose components Upload builds the CSV files from. */
 export const CompiledTimelineContext = createContext<CompiledTimeline>({
   bytecode: { instructions: [], markers: {}, fullscreen: [] },
-  trials: new Set(),
+  namedTrials: [],
   components: new Map(),
 });

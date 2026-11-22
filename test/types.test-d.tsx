@@ -40,7 +40,7 @@ const CustomTrial = defineComponent({
       return { value: 300 * n, participant: { ...participant, clicked: true } };
     },
   },
-  simulate: ({ props, simulators, participant, store, get }) => {
+  simulate: ({ props, simulators, participant, store, data }) => {
     const n: number = props.maxCount;
     const r = simulators.click({ props, participant });
     // @ts-expect-error simulator that does not exist
@@ -48,7 +48,7 @@ const CustomTrial = defineComponent({
     // @ts-expect-error a simulator needs the props and the participant
     simulators.click({ participant });
     const bonus: number | undefined = store.bonus;
-    const name: string = get(PlainInput, 'nickname').value;
+    const name: string = PlainInput.getLatest(data, 'nickname').responseData.value;
     return { responseData: { totalTime: r.value * n + (bonus ?? 0) + name.length, clicks: n } };
   },
 });
@@ -172,13 +172,13 @@ Text.trial({ name: 'intro' });
 Warmup.trial('warmup');
 
 // Defined components stay usable as JSX
-const noData: ExperimentData = { session: { userAgent: '', params: {}, buildSeed: 0 }, trials: [] };
+const noData: ExperimentData = { session: { userAgent: '', params: {}, buildSeed: 0, namedTrials: [] }, trials: [] };
 const asJsx = <Warmup next={() => {}} data={noData} store={{}} updateStore={() => {}} />;
 
 // --- chained methods ---
 const base = CustomTrial.trial({ maxCount: 5 });
 base.metadata({ block: 1 }).collectRefreshRate().csv(null);
-CustomTrial.trial((context) => ({ maxCount: context.get(PlainInput, 'nickname').value.length }));
+CustomTrial.trial(({ data }) => ({ maxCount: PlainInput.getLatest(data, 'nickname').responseData.value.length }));
 base.simulators({ click: ({ participant }) => ({ value: participant.speed }) });
 // @ts-expect-error simulator the component does not have
 base.simulators({ tap: () => ({ value: 1 }) });
@@ -212,19 +212,9 @@ PlainInput.trial('typed').simulators({ respond: (_input, defaultSimulator) => de
 // @ts-expect-error PlainInput's simulated answer is text
 PlainInput.trial('typed').simulators({ respond: () => ({ value: 5 }) });
 
-// --- get ---
+// --- reading results ---
 const nickname = PlainInput.trial('nickname', { placeholder: 'Name' });
 const click = CustomTrial.trial('customtrial', { maxCount: 5 });
-const unnamed = PlainInput.trial();
-const renamed = PlainInput.trial('renamed');
-
-const readsNames = ({ get, getOptional }: TimelineContext) => {
-  // @ts-expect-error only named trials can be read
-  get(unnamed);
-  // @ts-expect-error only named trials can be read
-  getOptional(unnamed);
-  return get(renamed).value;
-};
 
 // --- names and settings ---
 // @ts-expect-error the session CSV keeps columns starting with session_
@@ -238,21 +228,22 @@ ParamReader.trial().hideParams(['mode']).hideParams(true);
 // @ts-expect-error a setting the component does not have
 ParamReader.trial().hideParams(['moed']);
 
-const reads = ({ get, getOptional }: TimelineContext) => {
-  const a: string = get(nickname).value;
-  const b: number = get(click).totalTime;
-  const c: number = get(CustomTrial, 'customtrial').clicks;
-  const d: number | undefined = getOptional(click)?.totalTime;
-  // @ts-expect-error getOptional may be undefined
-  const e: number = getOptional(click).totalTime;
+const reads = ({ data }: TimelineContext) => {
+  const a: string = PlainInput.getLatest(data, 'nickname').responseData.value;
+  const b: number = CustomTrial.getLatest(data, 'customtrial').responseData.totalTime;
+  const c: number[] = CustomTrial.getAll(data).map((row) => row.responseData.clicks);
+  const d: number | undefined = CustomTrial.getAll(data, 'customtrial').at(-1)?.responseData.totalTime;
+  // @ts-expect-error a trial that may not have run may be undefined
+  const e: number = CustomTrial.getAll(data, 'customtrial').at(-1).responseData.totalTime;
   // @ts-expect-error field that does not exist
-  get(click).duration;
-  const ready: boolean = get(Warmup, 'warmup').ready;
-  return [a, b, c, d, e, ready];
+  CustomTrial.getLatest(data, 'customtrial').responseData.duration;
+  const ready: boolean = Warmup.getLatest(data, 'warmup').responseData.ready;
+  const metadata: Record<string, any> | undefined = Warmup.getLatest(data, 'warmup').metadata;
+  return [a, b, c, d, e, ready, metadata];
 };
 
 // --- store ---
-updateStore(({ get }) => ({ bonus: get(click).totalTime > 3000 ? 0.25 : 0.5 }));
+updateStore(({ data }) => ({ bonus: CustomTrial.getLatest(data, 'customtrial').responseData.totalTime > 3000 ? 0.25 : 0.5 }));
 // @ts-expect-error misspelled store key
 updateStore(() => ({ bonsu: 1 }));
 // @ts-expect-error wrong store value type
@@ -265,7 +256,7 @@ const bonusRead = ({ store }: TimelineContext) => {
 };
 
 // --- timeline and params ---
-const slow = ({ get }: TimelineContext) => get(click).totalTime > 3000;
+const slow = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customtrial').responseData.totalTime > 3000;
 
 const experiment = defineExperiment({
   params: {
@@ -298,7 +289,7 @@ const experiment = defineExperiment({
 CanvasBlock.trial({
   timeline: [
     { draw: (ctx) => ctx.fillText('+', 0, 0), displayDurationMs: 500 },
-    ({ slides, get }) => ({ draw: () => {}, displayDurationMs: slides.length * get(click).clicks }),
+    ({ slides, data }) => ({ draw: () => {}, displayDurationMs: slides.length * CustomTrial.getLatest(data, 'customtrial').responseData.clicks }),
     ifBlock(({ slides }) => slides.at(-1)?.key === 'f', [{ draw: () => {}, displayDurationMs: 100 }]).else([]),
     updateStore(({ slides }) => ({ bonus: slides.length })),
     // @ts-expect-error a slide draws itself
@@ -484,6 +475,6 @@ Screen.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
 Screen.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
   respond: () => ({ value: { response: 'typed', reactionTimeMs: 2000 } }),
 });
-const screenAnswer = ({ get }: TimelineContext) => get(Screen, 'face').response === 'happy';
+const screenAnswer = ({ data }: TimelineContext) => Screen.getLatest(data, 'face').responseData.response === 'happy';
 
-export { asJsx, bonusRead, experiment, reads, readsNames, sampledTraits, screenAnswer, slideKey };
+export { asJsx, bonusRead, experiment, reads, sampledTraits, screenAnswer, slideKey };

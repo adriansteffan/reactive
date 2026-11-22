@@ -1,5 +1,6 @@
 import type { Run } from './experiment';
 import type { TrialCsv } from './files';
+import { report } from './development';
 import { type ParamType, paramType } from './params';
 import { type TimelineContext, resolve, type TrialContent } from './timeline';
 
@@ -60,6 +61,8 @@ export interface SessionData {
   params: Record<string, RecordedParam>;
   /** Seeds the random draws made while the timeline was built, so that it can be built again. */
   buildSeed: number;
+  /** The timeline's named trials, which a component's `getAll` and `getLatest` check a name against. */
+  namedTrials: { type: string; name: string }[];
 }
 
 /** Everything a session records: the session itself, and a row for each trial. */
@@ -88,5 +91,16 @@ export function createExperimentData(info: { userAgent: string; url: Record<stri
       description: spec.description,
     };
   }
-  return { session: { userAgent: info.userAgent, params, buildSeed }, trials: [] };
+  return {
+    session: { userAgent: info.userAgent, params, buildSeed, namedTrials: info.run.compiled.namedTrials },
+    trials: [],
+  };
+}
+
+/** The rows of a component's trials, or of its trial with this name, in the order they ran. */
+export function rowsOf(type: string, data: ExperimentData, name?: string): TrialData[] {
+  if (name !== undefined && !data.session.namedTrials.some((trial) => trial.type === type && trial.name === name)) {
+    report(`There is no ${type} trial named '${name}' in the timeline.`);
+  }
+  return data.trials.filter((row) => row.type === type && (name === undefined || row.name === name));
 }

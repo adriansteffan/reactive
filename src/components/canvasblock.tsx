@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { type BaseComponentProps, defineComponent } from '../core/component';
 import {
   compileSlides,
@@ -11,7 +11,6 @@ import {
   startSlides,
 } from '../core/slides';
 import { createTimelineContext } from '../core/timeline';
-import { CompiledTimelineContext } from '../runner/contexts';
 import { uniform } from '../utils/distributions';
 import { type CanvasSize, type Draw, prepareCanvas } from '../utils/canvas';
 import { responseKey } from '../utils/keys';
@@ -40,7 +39,6 @@ function CanvasBlock({
   initCanvas,
 }: CanvasBlockProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { trials } = useContext(CompiledTimelineContext);
   // The loop reads the latest callbacks through this ref, so new identities never restart the block
   const callbacks = useRef({ next, updateStore, styleCanvas, initCanvas });
   callbacks.current = { next, updateStore, styleCanvas, initCanvas };
@@ -66,7 +64,7 @@ function CanvasBlock({
 
     const halfFrame = halfFrameMs(store.__screenRefreshRate);
     const compiled = compileSlides(timeline);
-    const context = createTimelineContext(data, store, trials);
+    const context = createTimelineContext(data, store);
     let run = startSlides(compiled, context);
 
     // The slide on screen: the frame that drew it, the frame it appeared with, and its response
@@ -145,7 +143,7 @@ function CanvasBlock({
       window.removeEventListener('keydown', onKeyDown);
       cancelAnimationFrame(frameId);
     };
-  }, [timeline, width, height, data, store, trials]);
+  }, [timeline, width, height, data, store]);
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -159,9 +157,9 @@ export default defineComponent({
   component: CanvasBlock,
   // Every slide's row has metadata, if only empty, so the block's own always goes to slideblock_meta_ columns
   csv: { canvas: (item) => item.responseData.map((row) => ({ metadata: {}, ...row })) },
-  simulate: ({ props, simulators, participant, data, store, get, getOptional }) => {
+  simulate: ({ props, simulators, participant, data, store }) => {
     const compiled = compileSlides(props.timeline);
-    const context = { data, store, get, getOptional, slides: [] };
+    const context = { data, store, slides: [] };
     let run = startSlides(compiled, context);
     let time = 0;
 

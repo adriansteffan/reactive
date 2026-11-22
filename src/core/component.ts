@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import type { ComponentCsv, CsvTarget, SessionColumns } from './files';
+import type { ComponentCsv, CsvTarget, SessionColumns, TrialRow } from './files';
 import type { CheckedParams, ParamSpec, ParamValues } from './params';
-import type { ExperimentData } from './rows';
+import { type ExperimentData, rowsOf } from './rows';
+import { report } from './development';
 import type { Store } from './store';
 import type { ReservedTrialName } from './columns';
 import { type TimelineContext, type ContextArg, makeTrial, type Trial, type TrialName } from './timeline';
@@ -137,18 +138,22 @@ type PropsOrName<C, P> = [P] extends [string]
 type TrialFunction<C, D, H extends string> =
   HasRequired<OwnProps<C>> extends true
     ? {
-        <const N extends string>(name: TrialName<N>, props: TrialProps<PropsOf<C>>): Trial<C, D, true, H>;
-        <const P = TrialProps<PropsOf<C>>>(props: PropsOrName<C, P>): Trial<C, D, false, H>;
+        <const N extends string>(name: TrialName<N>, props: TrialProps<PropsOf<C>>): Trial<C, D, H>;
+        <const P = TrialProps<PropsOf<C>>>(props: PropsOrName<C, P>): Trial<C, D, H>;
       }
     : {
-        <const N extends string>(name: TrialName<N>, props?: TrialProps<PropsOf<C>>): Trial<C, D, true, H>;
-        <const P = TrialProps<PropsOf<C>>>(props?: PropsOrName<C, P>): Trial<C, D, false, H>;
+        <const N extends string>(name: TrialName<N>, props?: TrialProps<PropsOf<C>>): Trial<C, D, H>;
+        <const P = TrialProps<PropsOf<C>>>(props?: PropsOrName<C, P>): Trial<C, D, H>;
       };
 
 /** A component defined with `defineComponent`, with default simulators `D` and params `H`. */
 export type DefinedComponent<C extends AnyComponent = AnyComponent, D = any, H extends string = string> = C & {
   reactive: ComponentInfo;
   trial: TrialFunction<C, D, H>;
+  /** The recorded rows of this component's trials, or of its trial named `name`, in the order they ran. */
+  getAll: (data: ExperimentData, name?: string) => TrialRow<ResponseOf<C>>[];
+  /** The latest recorded row of this component's trials, or of its trial named `name`. Stops if none has run yet. */
+  getLatest: (data: ExperimentData, name?: string) => TrialRow<ResponseOf<C>>;
 };
 
 export function defineComponent<
@@ -211,6 +216,15 @@ export function defineComponent<
     simulate: simulate as SimulateFunction | undefined,
     check: definition.check as ComponentInfo['check'],
   };
+  defined.getAll = (data, trialName) => rowsOf(name, data, trialName);
+  // For real participants, report only logs, and a trial that has not run reads as undefined
+  defined.getLatest = (data, trialName) =>
+    (rowsOf(name, data, trialName).at(-1) ??
+      report(
+        trialName === undefined
+          ? `No ${name} trial has run yet. For trials that may not have run, ${name}.getAll(data).at(-1) is undefined until one has.`
+          : `The ${name} trial '${trialName}' has not run yet. For a trial that may not have run, ${name}.getAll(data, '${trialName}').at(-1) is undefined until it has.`,
+      )) as TrialRow<ResponseOf<C>>;
   defined.trial = ((first?: unknown, second?: unknown) => {
     const named = typeof first === 'string';
     const props = (named ? second : first) as ContextArg<Record<string, any>> | undefined;

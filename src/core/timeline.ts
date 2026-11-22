@@ -7,15 +7,12 @@ import {
   isBlock,
 } from './bytecode';
 import type {
-  AnyComponent,
-  DefinedComponent,
   ResponseOf,
   RuntimeComponent,
   SimulatorOverrides,
   SimulatorReplacement,
 } from './component';
 import { isReservedTrialName, type ReservedTrialName, sessionPrefixes } from './columns';
-import { report } from './development';
 import { type TrialCsv, trialCsv } from './files';
 import type { ExperimentData } from './rows';
 import type { SlideData, SlideTimeline } from './slides';
@@ -24,55 +21,15 @@ import type { Store, StoreUpdate } from './store';
 // --- Context ---
 
 export interface TimelineContext {
-  /** Everything recorded so far: the session, and the rows of the trials that have ended. */
+  /** Everything recorded so far: the session, and the rows of the trials that have ended. Components read them with `getAll` and `getLatest`. */
   data: ExperimentData;
   store: Store;
   /** The rows of the slides recorded so far by the CanvasBlock this runs in; empty outside a CanvasBlock. */
   slides: SlideData[];
-  /** The response of a trial that has run. Throws if it has not run yet. */
-  get: {
-    <C>(trial: Trial<C, any, true, any>): ResponseOf<C>;
-    <C extends AnyComponent>(component: DefinedComponent<C, any, any>, name: string): ResponseOf<C>;
-  };
-  /** The response of a trial, or `undefined` if it has not run (skipped branch, or not reached yet). */
-  getOptional: {
-    <C>(trial: Trial<C, any, true, any>): ResponseOf<C> | undefined;
-    <C extends AnyComponent>(component: DefinedComponent<C, any, any>, name: string): ResponseOf<C> | undefined;
-  };
 }
 
-const trialKey = (type: string, name: string) => `${type}\u0000${name}`;
-
-export function createTimelineContext(
-  data: ExperimentData,
-  store: Store,
-  trials: ReadonlySet<string>,
-): TimelineContext {
-  const read = (target: unknown, name: unknown, optional: boolean) => {
-    const [type, trialName] = isTrial(target)
-      ? [target[TRIAL].component.reactive.name, target[TRIAL].name]
-      : [(target as DefinedComponent).reactive.name, name as string | undefined];
-
-    if (trialName === undefined) {
-      return report(`Only named trials can be read, but this ${type} trial has no name.`);
-    }
-    if (!trials.has(trialKey(type, trialName))) {
-      return report(`There is no ${type} trial named '${trialName}' in the timeline.`);
-    }
-    for (let i = data.trials.length - 1; i >= 0; i--) {
-      const row = data.trials[i];
-      if (row.type === type && row.name === trialName) return row.responseData;
-    }
-    return optional ? undefined : report(`The ${type} trial '${trialName}' has not run yet.`);
-  };
-
-  return {
-    data,
-    store,
-    slides: [],
-    get: (target: unknown, name?: string) => read(target, name, false),
-    getOptional: (target: unknown, name?: string) => read(target, name, true),
-  } as TimelineContext;
+export function createTimelineContext(data: ExperimentData, store: Store): TimelineContext {
+  return { data, store, slides: [] };
 }
 
 /** A value, or a function that computes it from the context when the trial runs. */
@@ -105,36 +62,35 @@ export type TrialName<N extends string> = N extends ReservedTrialName
   : N;
 
 /**
- * A trial in the timeline, of component `C`, with default simulators `D` and params `H`; `Named` says whether
- * it has a name, which `get` needs. Every method returns a new trial and leaves this one unchanged;
- * passing `undefined` leaves a setting as it is.
+ * A trial in the timeline, of component `C`, with default simulators `D` and params `H`. Every method
+ * returns a new trial and leaves this one unchanged; passing `undefined` leaves a setting as it is.
  */
-export interface Trial<C = any, D = any, Named extends boolean = boolean, H extends string = string> {
+export interface Trial<C = any, D = any, H extends string = string> {
   readonly [TRIAL]: TrialSpec;
   // Carries the types for inference; never set
-  readonly __types?: { component: C; simulators: D; named: Named; settings: H };
+  readonly __types?: { component: C; simulators: D; settings: H };
   /**
    * Extra values for this trial's rows, merged into those set before: under `metadata` in the data,
    * and as `meta_` columns in the CSVs.
    */
-  metadata(values: ContextArg<Record<string, any>> | undefined): Trial<C, D, Named, H>;
+  metadata(values: ContextArg<Record<string, any>> | undefined): Trial<C, D, H>;
   /**
    * Renames the CSV files of this trial's rows, which keep their component's flatteners: a name for
    * a component with one file, and for one with several, a map from its files to new names or to
    * `null`. `null` keeps the rows out of the CSVs.
    */
-  csv(files: TrialCsv | undefined): Trial<C, D, Named, H>;
+  csv(files: TrialCsv | undefined): Trial<C, D, H>;
   /**
    * Puts this trial's columns in the session CSV, or with `false` keeps them out, whatever its
    * component does. A response that is a list has no columns there.
    */
-  session(enabled: (ResponseOf<C> extends readonly unknown[] ? false : boolean) | undefined): Trial<C, D, Named, H>;
+  session(enabled: (ResponseOf<C> extends readonly unknown[] ? false : boolean) | undefined): Trial<C, D, H>;
   /** Measures the screen's refresh rate while this trial runs and stores it for later canvas trials. */
-  collectRefreshRate(enabled?: boolean): Trial<C, D, Named, H>;
+  collectRefreshRate(enabled?: boolean): Trial<C, D, H>;
   /** Hides the component's params from the settings screen: all of them, or the ones named. */
-  hideParams(params: readonly H[] | boolean | undefined): Trial<C, D, Named, H>;
+  hideParams(params: readonly H[] | boolean | undefined): Trial<C, D, H>;
   /** Replaces some of the component's simulators for this trial, each with one that returns what it returns. */
-  simulators(simulators: SimulatorOverrides<C, D> | undefined): Trial<C, D, Named, H>;
+  simulators(simulators: SimulatorOverrides<C, D> | undefined): Trial<C, D, H>;
 }
 
 export function isTrial(item: unknown): item is Trial {
@@ -226,7 +182,7 @@ export interface IfBlock<Holds extends 'trials' | 'slides' = never> extends Bloc
 
 /** A list of trials and blocks. Nested lists are flattened, and `false`, `null` and `undefined` are skipped. */
 export type Timeline = readonly TimelineEntry[];
-export type TimelineEntry = Trial<any, any, any, any> | Block<'trials'> | Timeline | false | null | undefined;
+export type TimelineEntry = Trial<any, any, any> | Block<'trials'> | Timeline | false | null | undefined;
 
 const block = (spec: BlockSpec): Block => Object.freeze({ [BLOCK]: spec });
 
@@ -364,8 +320,8 @@ export function excludeEntries(timeline: Timeline, excluded: ReadonlySet<string>
 
 export interface CompiledTimeline {
   bytecode: Bytecode<TrialContent>;
-  /** Every (component, name) pair of a named trial, for `get`. */
-  trials: ReadonlySet<string>;
+  /** The named trials, which the session records for components' `getAll` and `getLatest`. */
+  namedTrials: { type: string; name: string }[];
   /** The components of the trials, by name. */
   components: ReadonlyMap<string, RuntimeComponent>;
 }
@@ -383,8 +339,7 @@ export function compileExperimentTimeline(timeline: Timeline): CompiledTimeline 
   const named = new Map<string, { trial: Trial; branch: BranchPath }[]>();
   // How many unnamed trials of each component go to the session CSV
   const unnamedInSession = new Map<string, number>();
-  // Every (component, name) pair, for `get`
-  const trials = new Set<string>();
+  const namedTrials: { type: string; name: string }[] = [];
 
   const bytecode = compileTimeline<TrialContent>(timeline, (item, branch) => {
     if (!isTrial(item)) {
@@ -432,11 +387,13 @@ export function compileExperimentTimeline(timeline: Timeline): CompiledTimeline 
           `Two different trials are named '${name}' (${clash[TRIAL].component.reactive.name} and ${type}), so their data could not be told apart.`,
         );
       }
-      if (spec.name !== undefined) trials.add(trialKey(type, name));
+      if (spec.name !== undefined && !namedTrials.some((trial) => trial.type === type && trial.name === name)) {
+        namedTrials.push({ type, name });
+      }
     }
 
     return trialContent({ ...spec, name });
   });
 
-  return { bytecode, trials, components };
+  return { bytecode, namedTrials, components };
 }

@@ -114,6 +114,8 @@ function recordAnswer(
 
 function Screen({ content, response, displayDurationMs, className = '', containerClass, next, store }: ScreenProps) {
   const th = t(useTheme());
+  // The content and its buttons, hidden until the images in the content can show
+  const stageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   // Set while the screen runs; key presses, buttons and the content answer through it
   const answerRef = useRef<(response: unknown, key: string | null, timeStamp: number) => void>(() => {});
@@ -142,6 +144,8 @@ function Screen({ content, response, displayDurationMs, className = '', containe
 
     const frame = (timestamp: number) => {
       if (paintedAt === undefined) {
+        // Shown in a frame callback, so this frame is the one that paints it
+        if (stageRef.current) stageRef.current.style.visibility = 'visible';
         paintedAt = timestamp;
       } else {
         onset ??= timestamp;
@@ -168,7 +172,12 @@ function Screen({ content, response, displayDurationMs, className = '', containe
     };
 
     window.addEventListener('keydown', onKeyDown);
-    frameId = requestAnimationFrame(frame);
+    // The clock starts once every image has loaded and decoded, so their loading time is not part
+    // of a reaction time; an image that fails to load shows as broken instead of holding the screen
+    const images = Array.from(stageRef.current?.querySelectorAll('img') ?? []);
+    Promise.all(images.map((image) => image.decode().catch(() => undefined))).then(() => {
+      if (!done) frameId = requestAnimationFrame(frame);
+    });
     return () => {
       done = true;
       window.removeEventListener('keydown', onKeyDown);
@@ -179,32 +188,32 @@ function Screen({ content, response, displayDurationMs, className = '', containe
   const buttons = answersOf(response).filter((answer) => answer.button !== undefined);
 
   return (
-    <div
-      className={`min-h-screen flex flex-col items-center justify-center gap-12 px-4 py-20 ${th.text} ${containerClass ?? th.containerBg}`}
-    >
-      <div ref={contentRef} className={className}>
-        {/* A function is rendered as a component, so that it can use hooks */}
-        {typeof content === 'function' ? createElement(content, { respond }) : content}
-      </div>
-      {buttons.length > 0 && (
-        <div className='flex flex-wrap justify-center gap-4'>
-          {buttons.map((answer) => (
-            <button
-              key={answer.response}
-              type='button'
-              tabIndex={-1}
-              // Keys answer through their own handler, never by pressing a focused button
-              onKeyDown={(event) => {
-                if (event.key === ' ' || event.key === 'Enter') event.preventDefault();
-              }}
-              onClick={(event) => answerRef.current(answer.response, null, event.timeStamp)}
-              className={th.button}
-            >
-              {answer.button}
-            </button>
-          ))}
+    <div className={`min-h-screen flex items-center justify-center px-4 py-20 ${th.text} ${containerClass ?? th.containerBg}`}>
+      <div ref={stageRef} className='flex flex-col items-center gap-12' style={{ visibility: 'hidden' }}>
+        <div ref={contentRef} className={className}>
+          {/* A function is rendered as a component, so that it can use hooks */}
+          {typeof content === 'function' ? createElement(content, { respond }) : content}
         </div>
-      )}
+        {buttons.length > 0 && (
+          <div className='flex flex-wrap justify-center gap-4'>
+            {buttons.map((answer) => (
+              <button
+                key={answer.response}
+                type='button'
+                tabIndex={-1}
+                // Keys answer through their own handler, never by pressing a focused button
+                onKeyDown={(event) => {
+                  if (event.key === ' ' || event.key === 'Enter') event.preventDefault();
+                }}
+                onClick={(event) => answerRef.current(answer.response, null, event.timeStamp)}
+                className={th.button}
+              >
+                {answer.button}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

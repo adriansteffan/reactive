@@ -238,7 +238,7 @@ The simulation cannot guess such answers, so a screen whose content answers need
 
 A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ response: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the screen does not take, or a key that gives another answer, stops the simulation with an error.
 
-Times work as for slides (below): a reaction time runs from the frame with which the screen appeared to the moment the browser timestamped the key press or click, and a key pressed before the screen appeared does not count. Rendering a page can take varying time, though, so fast sequences, such as a fixation cross, a 50 ms stimulus and a mask, belong in a CanvasBlock.
+Times work as for slides (below): a reaction time runs from the frame with which the screen appeared to the moment the browser timestamped the key press or click, and a key pressed before the screen appeared does not count. The screen appears once the images in its content have loaded, so their loading time is not part of a reaction time or a display duration; an image that fails to load shows as broken. Background images in CSS and videos are not waited for. Rendering a page can take varying time, though, so fast sequences, such as a fixation cross, a 50 ms stimulus and a mask, belong in a CanvasBlock.
 
 ### Timed slides
 

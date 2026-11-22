@@ -700,10 +700,37 @@ describe('components', () => {
     ]);
   });
 
+  test('a simulated answer to a Screen is recorded as the browser would record it', async () => {
+    const response = { keys: true, choices: { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' }, skip: { button: 'Skip' } } } as const;
+    const answering = (value: { response: string; key?: string | null }) =>
+      Screen.trial({ response }).simulators({ respond: () => ({ value: { ...value, reactionTimeMs: 500 } }) });
+    const rows = await run([
+      answering({ response: 'happy' }),
+      answering({ response: 'happy', key: null }),
+      answering({ response: 'skip' }),
+      answering({ response: 'X' }),
+    ]);
+    expect(rows.map((row) => row.responseData)).toEqual([
+      { response: 'happy', key: 'f', reactionTimeMs: 500 },
+      { response: 'happy', key: null, reactionTimeMs: 500 },
+      { response: 'skip', key: null, reactionTimeMs: 500 },
+      { response: 'x', key: 'x', reactionTimeMs: 500 },
+    ]);
+
+    await expect(run([answering({ response: 'happy', key: 'j' })])).rejects.toThrow("with the key 'j', which gives 'sad'");
+    await expect(run([answering({ response: 'sad', key: null })])).rejects.toThrow('without its key, but it has no button');
+    const choicesOnly = Screen.trial({ response: { choices: response.choices } });
+    await expect(
+      run([choicesOnly.simulators({ respond: () => ({ value: { response: 'maybe', reactionTimeMs: 500 } }) })]),
+    ).rejects.toThrow(`answered "maybe", which the Screen does not take. Its answers are 'happy', 'sad', 'skip'`);
+  });
+
   test("a Screen whose content answers needs a simulator, which gives the content's answer", async () => {
     // Content that would answer through respond, which the simulation does not render
     const content = () => null;
-    await expect(run([Screen.trial({ content })])).rejects.toThrow('needs a simulator of its own');
+    await expect(run([Screen.trial({ content: '+', displayDurationMs: 500 }), Screen.trial('location', { content })])).rejects.toThrow(
+      "In the Screen trial 'location' (trial 2): A Screen whose content answers through respond needs a simulator of its own",
+    );
     const rows = await run([
       Screen.trial({ content }).simulators({ respond: () => ({ value: { response: 0.62, reactionTimeMs: 3100 } }) }),
     ]);

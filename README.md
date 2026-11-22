@@ -236,6 +236,8 @@ The simulation cannot guess such answers, so a screen whose content answers need
 .simulators({ respond: () => ({ value: { response: { x: 300, y: 200 }, reactionTimeMs: 900 } }) })
 ```
 
+A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ response: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the screen does not take, or a key that gives another answer, stops the simulation with an error.
+
 Times work as for slides (below): a reaction time runs from the frame with which the screen appeared to the moment the browser timestamped the key press or click, and a key pressed before the screen appeared does not count. Rendering a page can take varying time, though, so fast sequences, such as a fixation cross, a 50 ms stimulus and a mask, belong in a CanvasBlock.
 
 ### Timed slides
@@ -613,7 +615,7 @@ createParticipants: () => {
 | Component | Decision functions | Its `value` | Default behavior |
 |---|---|---|---|
 | Text | `respond` | `{ key, reactionTimeMs }` | Click button, random reaction time |
-| Screen | `respond` | `{ response, key, reactionTimeMs }` | Random answer from `choices`, `keys` and `buttons`, random RT; a screen whose content answers needs its own |
+| Screen | `respond` | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | Random answer from `choices`, `keys` and `buttons`, random RT; a screen whose content answers needs its own |
 | PlainInput | `respond` | the text entered | Returns `'simulated_input'` |
 | Quest | `answerQuestion`, also given `question` | `{ answer, durationMs }` | Random valid answer per question type |
 | CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }` | Random key from the slide's `response.keys`, random RT; it counts under the same rules as a real key press |

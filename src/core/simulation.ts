@@ -1,6 +1,6 @@
 import { countDraws, seedDistributions, withStream } from '../utils/distributions';
 import { setBackendUrl } from './backend';
-import type { ParticipantState, SimulatorInput } from './component';
+import type { ParticipantState, SimulateResult, SimulatorInput } from './component';
 import { createRunState, type Experiment, respond, startRun, trialAt } from './experiment';
 import { createExperimentData, type ExperimentData } from './rows';
 import { createTimelineContext } from './timeline';
@@ -32,9 +32,11 @@ export async function simulateParticipant(
   let content = trialAt(compiled, state.pointer);
   while (content) {
     const { name, simulate, defaultSimulators } = content.component.reactive;
+    // The trial as errors name it, numbered as in the data
+    const trial = `${name} trial ${content.name ? `'${content.name}' ` : ''}(trial ${state.data.trials.length + 1})`;
     if (!simulate) {
       throw new Error(
-        `The ${name} trial '${content.name ?? 'unnamed'}' cannot be simulated, since ${name} has no simulation. Add a simulate function to its defineComponent call.`,
+        `The ${trial} cannot be simulated, since ${name} has no simulation. Add a simulate function to its defineComponent call.`,
       );
     }
     // A replacement receives the default it replaces; one set to undefined removes the simulator
@@ -44,14 +46,19 @@ export async function simulateParticipant(
         replacement && ((input: SimulatorInput) => replacement(input, defaultSimulators?.[key])),
       ]),
     );
-    const result = await simulate({
-      ...createTimelineContext(state.data, state.store, compiled.trials),
-      props: state.props,
-      participant: current,
-      initialParticipant,
-      simulators: { ...defaultSimulators, ...replacements },
-      components: compiled.components,
-    });
+    let result: SimulateResult;
+    try {
+      result = await simulate({
+        ...createTimelineContext(state.data, state.store, compiled.trials),
+        props: state.props,
+        participant: current,
+        initialParticipant,
+        simulators: { ...defaultSimulators, ...replacements },
+        components: compiled.components,
+      });
+    } catch (error) {
+      throw new Error(`In the ${trial}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
     current = result.participant ?? current;
 
     const startMs = currentTime;

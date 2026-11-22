@@ -75,6 +75,43 @@ function answersOf(response: ScreenResponse | undefined): Answer[] {
   ];
 }
 
+// The answer a key press gives: that of the answer whose key it is, or with `keys: true`, the key
+// itself. Undefined for a key that does not answer.
+function keyAnswer(response: ScreenResponse | undefined, pressed: string): { response: string; key: string } | undefined {
+  for (const answer of answersOf(response)) {
+    const key = answer.key === undefined ? undefined : responseKey([answer.key], pressed);
+    if (key !== undefined) return { response: answer.response, key };
+  }
+  const key = responseKey(response?.keys === true, pressed);
+  return key === undefined ? undefined : { response: key, key };
+}
+
+// A simulated answer as the browser would record it. The simulator's key says how the answer was
+// given: by a key, judged as a press is, or with null, by a button or the content's respond. Left
+// out, it is the declared answer's key, or with `keys: true`, the answer itself.
+function recordAnswer(
+  props: Pick<ScreenFields, 'content' | 'response'>,
+  response: unknown,
+  given: string | null | undefined,
+): { response: unknown; key: string | null } {
+  const declared = answersOf(props.response).find((answer) => answer.response === response);
+  const anyKey = props.response?.keys === true && typeof response === 'string';
+  const key = given !== undefined ? given : declared ? (declared.key ?? null) : anyKey ? response : null;
+  if (key !== null) {
+    const answer = keyAnswer(props.response, key);
+    if (answer && typeof response === 'string' && responseKey([answer.response], response) !== undefined) return answer;
+    throw new Error(
+      `A simulated participant answered ${JSON.stringify(response)} with the key '${key}', which ${answer ? `gives '${answer.response}'` : 'does not answer the Screen'}.`,
+    );
+  }
+  if (declared?.button !== undefined || typeof props.content === 'function') return { response, key: null };
+  throw new Error(
+    declared
+      ? `A simulated participant gave the Screen's answer '${declared.response}' without its key, but it has no button.`
+      : `A simulated participant answered ${JSON.stringify(response)}, which the Screen does not take. Its answers are ${answersOf(props.response).map((answer) => `'${answer.response}'`).join(', ') || 'none'}.`,
+  );
+}
+
 function Screen({ content, response, displayDurationMs, className = '', containerClass, next, store }: ScreenProps) {
   const th = t(useTheme());
   const contentRef = useRef<HTMLDivElement>(null);
@@ -85,8 +122,6 @@ function Screen({ content, response, displayDurationMs, className = '', containe
   const refreshRate = store.__screenRefreshRate;
   // A layout effect starts the clock before the browser paints the screen, like a CanvasBlock's draw
   useLayoutEffect(() => {
-    const answers = answersOf(response);
-    const listedKeys = answers.flatMap((answer) => (answer.key === undefined ? [] : [answer.key]));
     const timeoutMs = response?.timeLimitMs ?? displayDurationMs ?? Number.POSITIVE_INFINITY;
     const halfFrame = halfFrameMs(refreshRate);
     // The frame that paints the screen, and the next one, with which it appears
@@ -126,13 +161,10 @@ function Screen({ content, response, displayDurationMs, className = '', containe
     const onKeyDown = (event: KeyboardEvent) => {
       // A held key repeats, and a key pressed before the screen appeared does not count
       if (event.repeat || onset === undefined || event.timeStamp < onset) return;
-      // A listed key gives its answer; with `keys: true`, any other key answers as itself
-      const listed = responseKey(listedKeys, event.key);
-      const key = listed ?? responseKey(response?.keys === true, event.key);
-      if (key === undefined) return;
+      const answer = keyAnswer(response, event.key);
+      if (!answer) return;
       event.preventDefault();
-      const value = listed === undefined ? key : answers.find((answer) => answer.key === listed)?.response;
-      answerRef.current(value, key, event.timeStamp);
+      answerRef.current(answer.response, answer.key, event.timeStamp);
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -224,7 +256,10 @@ export function Canvas({
   );
 }
 
-/** What a Screen's `respond` simulator decides: the answer and its reaction time, or nulls for none. */
+/**
+ * What a Screen's `respond` simulator decides: the answer and its reaction time, or nulls for none.
+ * The key says how the answer was given, null for a button; left out, it is the answer's own.
+ */
 type ScreenDecision = { value: { response: unknown; key?: string | null; reactionTimeMs: number | null } };
 
 export default defineComponent({
@@ -259,10 +294,14 @@ export default defineComponent({
   simulate: ({ props, simulators, participant }) => {
     const timeoutMs = props.response?.timeLimitMs ?? props.displayDurationMs ?? Number.POSITIVE_INFINITY;
     const result = simulators.respond({ props, participant });
-    const { response, key = null, reactionTimeMs } = result.value;
-    // The same rule as in the browser: an answer counts within the screen's time
+    const { response, key, reactionTimeMs } = result.value;
+    // The same rules as in the browser: an answer counts within the screen's time
     if (response !== null && reactionTimeMs !== null && reactionTimeMs < timeoutMs) {
-      return { responseData: { response, key, reactionTimeMs }, participant: result.participant, durationMs: reactionTimeMs };
+      return {
+        responseData: { ...recordAnswer(props, response, key), reactionTimeMs },
+        participant: result.participant,
+        durationMs: reactionTimeMs,
+      };
     }
     if (timeoutMs === Number.POSITIVE_INFINITY) {
       throw new Error('A simulated participant gave no answer to a Screen that only an answer ends.');
@@ -278,10 +317,10 @@ export default defineComponent({
       const answers = answersOf(props.response);
       if (answers.length > 0) {
         const answer = answers[Math.floor(uniform(0, answers.length))];
-        return { value: { response: answer.response, key: answer.key ?? null, reactionTimeMs: Math.round(uniform(300, 1500)) } };
+        return { value: { response: answer.response, reactionTimeMs: Math.round(uniform(300, 1500)) } };
       }
       if (props.response?.keys === true) {
-        return { value: { response: ' ', key: ' ', reactionTimeMs: Math.round(uniform(300, 1500)) } };
+        return { value: { response: ' ', reactionTimeMs: Math.round(uniform(300, 1500)) } };
       }
       if (typeof props.content === 'function') {
         throw new Error(

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { BaseComponentProps } from '../core/component';
+import { type ResponseKey, responseKey } from '../utils/keys';
 import { now } from '../utils/time';
 import { defineComponent } from '../core/component';
 import { uniform } from '../utils/distributions';
@@ -10,7 +11,7 @@ export type TextResponse = { key?: string; reactionTimeMs?: number };
 
 function Text({
   content,
-  buttonText = 'Continue',
+  buttonText,
   className = '',
   containerClass,
   centered = false,
@@ -20,22 +21,21 @@ function Text({
   durationMs,
 }: {
   content?: React.ReactNode;
+  /** The button that ends the screen: 'Continue' unless the screen has a duration; an empty text shows none. */
   buttonText?: string;
   className?: string;
   containerClass?: string;
   centered?: boolean;
   animate?: boolean;
-  allowedResponseKeys?: string[] | boolean;
-  /** Auto-advance after this many milliseconds. When set, no button is shown and key presses are ignored. */
+  /** The keys that end the screen, letters in either case, or `true` for any key. */
+  allowedResponseKeys?: readonly ResponseKey[] | boolean;
+  /** Ends the screen after this many milliseconds, unless its button or keys end it first. */
   durationMs?: number;
-} & BaseComponentProps<TextResponse>) {
+} & Pick<BaseComponentProps<TextResponse>, 'next'>) {
   const th = t(useTheme());
   const startTimeRef = useRef<number>(0);
   const timed = durationMs != null;
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  const button = buttonText ?? (timed ? '' : 'Continue');
 
   useEffect(() => {
     if (!timed) return;
@@ -44,20 +44,17 @@ function Text({
   }, [timed, durationMs, next]);
 
   useEffect(() => {
-    if (timed) return;
     startTimeRef.current = now();
 
     const handleKeyPress = (event: KeyboardEvent) => {
       const keypressTime = now();
 
-      const isKeyAllowed =
-        allowedResponseKeys === true || (Array.isArray(allowedResponseKeys) && allowedResponseKeys.includes(event.key));
-
-      if (isKeyAllowed) {
+      const key = responseKey(allowedResponseKeys, event.key);
+      if (key !== undefined) {
         event.preventDefault();
         const reactionTimeMs = keypressTime - startTimeRef.current;
 
-        next({ key: event.key, reactionTimeMs });
+        next({ key, reactionTimeMs });
       }
     };
 
@@ -70,7 +67,7 @@ function Text({
         window.removeEventListener('keydown', handleKeyPress);
       }
     };
-  }, [next, allowedResponseKeys, timed]);
+  }, [next, allowedResponseKeys]);
 
   const handleClick = () => {
     const clickTime = now();
@@ -84,13 +81,13 @@ function Text({
     <div className={`min-h-screen ${centered ? 'flex items-center justify-center' : ''} ${containerClass ?? th.containerBg}`}>
       <div className={`max-w-prose mx-auto ${className} pt-20 pb-20 px-4 `}>
       <article
-        className={`prose prose-2xl ${th.prose} text-xl ${th.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${th.text} leading-relaxed
+        className={`${th.article}
             ${animate ? 'animate-slide-down opacity-0' : ''}`}
       >
         {content}
       </article>
 
-      {!timed && buttonText && (
+      {button && (
         <div
           className={`mt-16 flex justify-center ${animate ? 'animate-fade-in opacity-0' : ''}`}
           style={animate ? { animationDelay: '1s' } : {}}
@@ -99,9 +96,9 @@ function Text({
             onClick={handleClick}
             tabIndex={-1}
             onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
-            className={`${th.buttonBg} cursor-pointer px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`}
+            className={th.button}
           >
-            {buttonText}
+            {button}
           </button>
         </div>
       )}
@@ -115,14 +112,20 @@ export default defineComponent({
   component: Text,
   csv: 'text',
   simulate: ({ props, simulators, participant }) => {
-    if (props.durationMs != null) {
-      return { responseData: {}, durationMs: props.durationMs };
+    const { durationMs } = props;
+    if (durationMs !== undefined && !props.buttonText && !props.allowedResponseKeys) {
+      return { responseData: {}, durationMs };
     }
     const result = simulators.respond({ props, participant });
+    const reactionTimeMs = result.value.reactionTimeMs ?? 0;
+    // A timed screen that the participant does not end in time ends after its duration
+    if (durationMs !== undefined && reactionTimeMs >= durationMs) {
+      return { responseData: {}, participant: result.participant, durationMs };
+    }
     return {
       responseData: result.value,
-      participantState: result.participantState,
-      durationMs: result.value.reactionTimeMs,
+      participant: result.participant,
+      durationMs: reactionTimeMs,
     };
   },
   defaultSimulators: {

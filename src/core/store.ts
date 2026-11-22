@@ -9,7 +9,7 @@ export interface ExperimentStore {}
 interface LibraryStore {
   __uploadId?: string;
   __audioInputId?: string;
-  __screenRefreshRate?: number | null;
+  __screenRefreshRate?: number;
 }
 
 type StoreDeclared = keyof ExperimentStore extends never ? false : true;

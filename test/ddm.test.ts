@@ -20,7 +20,7 @@ describe('simulateDDMTrial', () => {
   it('returns a valid result shape', () => {
     const result = simulateDDMTrial(baseParams);
     expect([0, 1, null]).toContain(result.choice);
-    expect(result.rtMs).toBeGreaterThan(0);
+    expect(result.reactionTimeMs).toBeGreaterThan(0);
     expect(typeof result.finalEvidence).toBe('number');
     expect(result.isContaminated).toBe(false);
   });
@@ -40,7 +40,7 @@ describe('simulateDDMTrial', () => {
       sensoryDelayMs: 100,
       motorDelayMs: 50,
     });
-    expect(result.rtMs).toBeGreaterThanOrEqual(150);
+    expect(result.reactionTimeMs).toBeGreaterThanOrEqual(150);
   });
 
   it('clamps sensory and motor delays to >= 0', () => {
@@ -50,7 +50,7 @@ describe('simulateDDMTrial', () => {
       sensoryDelayMs: { distribution: 'normal', mean: -1000, sd: 1 },
       motorDelayMs: { distribution: 'normal', mean: -1000, sd: 1 },
     });
-    expect(result.rtMs).toBeGreaterThanOrEqual(0);
+    expect(result.reactionTimeMs).toBeGreaterThanOrEqual(0);
   });
 
   it('clamps noise level to >= 0', () => {
@@ -70,7 +70,7 @@ describe('simulateDDMTrial', () => {
       timeLimitMs: 100,
     });
     expect(result.choice).toBeNull();
-    expect(result.rtMs).toBe(100);
+    expect(result.reactionTimeMs).toBe(100);
   });
 
   it('supports asymmetric boundaries', () => {
@@ -86,8 +86,8 @@ describe('simulateDDMTrial', () => {
   it('contamination returns isContaminated with valid rt', () => {
     const result = simulateDDMTrial({ ...baseParams, contaminationRate: 1.0 });
     expect(result.isContaminated).toBe(true);
-    expect(result.rtMs).toBeGreaterThanOrEqual(0);
-    expect(result.rtMs).toBeLessThanOrEqual(baseParams.timeLimitMs);
+    expect(result.reactionTimeMs).toBeGreaterThanOrEqual(0);
+    expect(result.reactionTimeMs).toBeLessThanOrEqual(baseParams.timeLimitMs);
   });
 
   it('contamination sets finalEvidence to startingPoint', () => {
@@ -125,8 +125,8 @@ describe('snapshot strategy', () => {
       postStimStrategy: { type: 'snapshot' },
     });
     // rt should be around stimOffsetMs + motorDelayMs, not timeLimitMs
-    expect(result.rtMs).toBeLessThan(5000);
-    expect(result.rtMs).toBeGreaterThanOrEqual(200);
+    expect(result.reactionTimeMs).toBeLessThan(5000);
+    expect(result.reactionTimeMs).toBeGreaterThanOrEqual(200);
   });
 });
 
@@ -187,7 +187,7 @@ describe('collapse strategy', () => {
       },
     });
     // Delayed collapse should take longer (or at least not be faster)
-    expect(delayed.rtMs).toBeGreaterThanOrEqual(fast.rtMs);
+    expect(delayed.reactionTimeMs).toBeGreaterThanOrEqual(fast.reactionTimeMs);
   });
 });
 

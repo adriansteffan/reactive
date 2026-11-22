@@ -7,6 +7,15 @@ export function isProduction(): boolean {
   }
 }
 
+/** A mistake in the experiment stops it during development and simulation, but only logs for real participants. */
+export function report(message: string): undefined {
+  if (isProduction()) {
+    console.error(message);
+    return undefined;
+  }
+  throw new Error(message);
+}
+
 function deepFreeze(value: unknown): void {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return;
   const prototype = Object.getPrototypeOf(value);

@@ -1,56 +1,38 @@
 import { freezeInDevelopment } from './development';
+import type { Store } from './store';
+import type { TimelineContext } from './timeline';
 
 export const BLOCK: unique symbol = Symbol('reactive.block');
 
-type Condition<C> = (context: C) => boolean;
+type Condition = (context: TimelineContext) => boolean;
 
-/** A block of control flow, with conditions that read a context of type `C`. */
-export type BlockSpec<C> =
-  | { kind: 'if'; cond: Condition<C>; items: readonly unknown[]; else?: readonly unknown[] }
-  | { kind: 'while'; cond: Condition<C>; body: readonly unknown[] }
-  | { kind: 'updateStore'; update: (context: C) => Record<string, any> }
+/** A block of control flow. */
+export type BlockSpec =
+  | { kind: 'if'; cond: Condition; items: readonly unknown[]; else?: readonly unknown[] }
+  | { kind: 'while'; cond: Condition; body: readonly unknown[] }
+  | { kind: 'updateStore'; update: (context: TimelineContext) => Record<string, any> }
   | { kind: 'marker'; id: string }
-  | { kind: 'ifGoto'; cond: Condition<C>; marker: string };
+  | { kind: 'ifGoto'; cond: Condition; marker: string }
+  | { kind: 'fullscreen'; items: readonly unknown[] };
 
-export function isBlock(item: unknown): item is { [BLOCK]: BlockSpec<any> } {
+export function isBlock(item: unknown): item is { [BLOCK]: BlockSpec } {
   return typeof item === 'object' && item !== null && BLOCK in item;
 }
 
-export interface ExecuteContentInstruction<Content> {
-  type: 'ExecuteContent';
-  content: Content;
-}
-export interface GotoInstruction {
-  type: 'Goto';
-  marker: string;
-}
-/** Jumps when the condition holds. */
-export interface IfGotoInstruction<C> {
-  type: 'IfGoto';
-  cond: Condition<C>;
-  marker: string;
-}
-/** Jumps when the condition does not hold. */
-export interface UnlessGotoInstruction<C> {
-  type: 'UnlessGoto';
-  cond: Condition<C>;
-  marker: string;
-}
-export interface UpdateStoreInstruction<C> {
-  type: 'UpdateStore';
-  update: (context: C) => Record<string, any>;
-}
-export type Instruction<Content, C> =
-  | ExecuteContentInstruction<Content>
-  | GotoInstruction
-  | IfGotoInstruction<C>
-  | UnlessGotoInstruction<C>
-  | UpdateStoreInstruction<C>;
+// IfGoto jumps when its condition holds, UnlessGoto when it does not
+type Instruction<Content> =
+  | { type: 'ExecuteContent'; content: Content }
+  | { type: 'Goto'; marker: string }
+  | { type: 'IfGoto'; cond: Condition; marker: string }
+  | { type: 'UnlessGoto'; cond: Condition; marker: string }
+  | { type: 'UpdateStore'; update: (context: TimelineContext) => Record<string, any> };
 
-/** A compiled timeline: instructions over content of type `Content`, whose conditions read a context of type `C`. */
-export interface Bytecode<Content, C> {
-  instructions: Instruction<Content, C>[];
+/** A compiled timeline: instructions over content of type `Content`. */
+export interface Bytecode<Content> {
+  instructions: Instruction<Content>[];
   markers: Record<string, number>;
+  /** The spans of instructions that run in fullscreen, each from its first to just after its last. */
+  fullscreen: [number, number][];
 }
 
 // The if-branches an item sits in, from the outside in
@@ -60,12 +42,13 @@ export type BranchPath = readonly { block: number; arm: 'then' | 'else' }[];
  * Lowers a timeline to bytecode. Nested lists are flattened and `false`, `null` and `undefined`
  * are skipped; everything that is not a block becomes content through `toContent`.
  */
-export function compileTimeline<Content, C>(
+export function compileTimeline<Content>(
   timeline: readonly unknown[],
   toContent: (item: unknown, branch: BranchPath) => Content,
-): Bytecode<Content, C> {
-  const instructions: Instruction<Content, C>[] = [];
+): Bytecode<Content> {
+  const instructions: Instruction<Content>[] = [];
   const markers: Record<string, number> = {};
+  const fullscreen: [number, number][] = [];
   const gotoTargets: string[] = [];
   let blockCount = 0;
 
@@ -81,10 +64,13 @@ export function compileTimeline<Content, C>(
         continue;
       }
 
-      const block: BlockSpec<C> = item[BLOCK];
+      const block = item[BLOCK];
       const id = blockCount++;
       switch (block.kind) {
         case 'marker':
+          if (`user_${block.id}` in markers) {
+            throw new Error(`The marker '${block.id}' is in the timeline twice, so ifGoto could not tell which one to jump to.`);
+          }
           markers[`user_${block.id}`] = instructions.length;
           break;
         case 'ifGoto':
@@ -105,6 +91,12 @@ export function compileTimeline<Content, C>(
             emit(block.else, [...branch, { block: id, arm: 'else' }]);
           }
           markers[end] = instructions.length;
+          break;
+        }
+        case 'fullscreen': {
+          const start = instructions.length;
+          emit(block.items, branch);
+          fullscreen.push([start, instructions.length]);
           break;
         }
         case 'while': {
@@ -129,25 +121,41 @@ export function compileTimeline<Content, C>(
     }
   }
 
-  return { instructions, markers };
+  return { instructions, markers, fullscreen };
 }
+
+// No timeline runs this many steps of control flow between two trials or slides unless it loops forever
+const MAX_CONTROL_STEPS = 100_000;
+
+// What a jump back to the marker repeats, as the timeline was written
+const repeated = (marker: string) =>
+  marker.startsWith('user_') ? `the ifGoto back to the marker '${marker.slice('user_'.length)}'` : 'a whileBlock';
 
 /**
  * Runs control flow from `fromPointer` on. Returns the pointer of the next content instruction,
  * or the length of the bytecode once the timeline is finished, and the store as the store
  * updates on the way left it.
  */
-export function advanceToNextContent<Content, C, S extends Record<string, any>>(
-  bytecode: Bytecode<Content, C>,
+export function advanceToNextContent<Content>(
+  bytecode: Bytecode<Content>,
   fromPointer: number,
-  fromStore: S,
-  contextFor: (store: S) => C,
-): { pointer: number; store: S } {
+  fromStore: Store,
+  contextFor: (store: Store) => TimelineContext,
+): { pointer: number; store: Store } {
   let pointer = fromPointer;
   let store = fromStore;
+  let steps = 0;
+  let loop = '';
   while (pointer < bytecode.instructions.length) {
     const instruction = bytecode.instructions[pointer];
     if (instruction.type === 'ExecuteContent') break;
+    // It always throws, since a timeline that never reaches its next trial cannot go on
+    if (++steps > MAX_CONTROL_STEPS) {
+      throw new Error(
+        `The timeline repeats ${loop} without reaching anything to show, so it would never end. Its condition has to change, or a trial or slide has to run inside it.`,
+      );
+    }
+    const from = pointer;
 
     if (instruction.type === 'Goto') {
       pointer = bytecode.markers[instruction.marker];
@@ -164,6 +172,7 @@ export function advanceToNextContent<Content, C, S extends Record<string, any>>(
       }
       pointer++;
     }
+    if (pointer <= from && 'marker' in instruction) loop = repeated(instruction.marker);
   }
   return { pointer, store };
 }

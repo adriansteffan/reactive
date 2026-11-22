@@ -56,7 +56,7 @@ const CACHE_DIR = '.reactive-cache';
 const CACHE_FILE = 'llm.json';
 let diskCache: Record<string, string> | null = null;
 
-async function loadCache(): Promise<Record<string, string>> {
+function loadCache(): Record<string, string> {
   if (diskCache) return diskCache;
   try {
     const fs = process.getBuiltinModule('fs');
@@ -73,14 +73,13 @@ async function loadCache(): Promise<Record<string, string>> {
   return diskCache;
 }
 
-async function saveCache(): Promise<void> {
-  if (!diskCache) return;
+function saveCache(cache: Record<string, string>) {
   try {
     const fs = process.getBuiltinModule('fs');
     const path = process.getBuiltinModule('path');
     const dirPath = path.join(process.cwd(), CACHE_DIR);
     fs.mkdirSync(dirPath, { recursive: true });
-    fs.writeFileSync(path.join(dirPath, CACHE_FILE), JSON.stringify(diskCache, null, 2));
+    fs.writeFileSync(path.join(dirPath, CACHE_FILE), JSON.stringify(cache, null, 2));
   } catch {
     // The cache only saves repeated API calls, so failing to write it is harmless
   }
@@ -89,13 +88,13 @@ async function saveCache(): Promise<void> {
 export async function invokeLLM(config: LLMConfig, prompt: string, schema?: LLMSchema): Promise<string> {
   const formatKey = schema ? JSON.stringify(schema) : '';
   const cacheKey = `${config.provider}:${config.model}:${prompt}:${formatKey}`;
-  const cache = await loadCache();
+  const cache = loadCache();
 
   let text = cache[cacheKey];
   if (!text) {
     text = await callLLM(config, prompt, schema);
     cache[cacheKey] = text;
-    await saveCache();
+    saveCache(cache);
   }
 
   return text;

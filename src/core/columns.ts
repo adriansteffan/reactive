@@ -40,3 +40,11 @@ export function isReservedParamName(name: string): boolean {
 export function isReservedTrialName(name: string): boolean {
   return sessionPrefixes.some((prefix) => `${name}_`.startsWith(prefix));
 }
+
+type SessionPrefix = (typeof sessionPrefixes)[number];
+
+/** The param names `isReservedParamName` rejects, for the types. */
+export type ReservedParamName = (typeof sessionColumns)[number] | `${SessionPrefix}${string}`;
+
+/** The trial names `isReservedTrialName` rejects, for the types: a prefix with or without its `_`, and names that start with one. */
+export type ReservedTrialName = `${SessionPrefix}${string}` | (SessionPrefix extends `${infer Base}_` ? Base : never);

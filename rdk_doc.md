@@ -7,9 +7,9 @@ Will have to have a manual go at all of this to create an actually decent refere
 
 ```typescript
 RandomDotKinematogram.trial('rdk_trial', {
-  allowedResponseKeys: ['arrowleft', 'arrowright'],
-  correctResponse: 'arrowright',
-  durationMs: 2000,
+  allowedResponseKeys: ['ArrowLeft', 'ArrowRight'],
+  correctResponse: 'ArrowRight',
+  timeLimitMs: 2000,
   direction: 90,
   coherence: 0.5,
 })
@@ -21,11 +21,11 @@ RandomDotKinematogram.trial('rdk_trial', {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `allowedResponseKeys` | `string[] \| boolean` | `true` | Keys that count as a response; `true` for any key |
-| `correctResponse` | `string \| string[]` | `undefined` | The correct response(s) for this trial |
-| `durationMs` | `number` | `1000` | Duration in ms that dots are shown (response window). Total trial time = `fixationTimeMs + durationMs`. Use `-1` for infinite duration |
-| `stimulusDurationMs` | `number` | `undefined` | How long to show stimulus in ms. Defaults to `durationMs`. Set lower than `durationMs` to hide stimulus while still accepting responses |
-| `responseEndsTrial` | `boolean` | `true` | Whether response ends the trial immediately |
+| `allowedResponseKeys` | `ResponseKey[] \| boolean` | `true` | Keys that count as a response, as the browser names them (`'f'`, `' '`, `'ArrowLeft'`), letters in either case; `true` for any key |
+| `correctResponse` | `ResponseKey \| ResponseKey[]` | `undefined` | The correct response(s) for this trial |
+| `timeLimitMs` | `number` | `1000` | How long after the dots appear a key counts as a response; the trial ends then unless a response ended it. Total trial time = `fixationTimeMs + timeLimitMs`. Use `-1` for no limit |
+| `displayDurationMs` | `number` | `undefined` | How long the dots are shown. Defaults to `timeLimitMs`. Set lower than `timeLimitMs` to hide the dots while still accepting responses |
+| `responseEndsTrial` | `boolean` | `true` | Whether the first response ends the trial |
 
 ### Dot Motion
 
@@ -92,7 +92,7 @@ When a dot exits the aperture boundary, `reinsertMode` controls where it reappea
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `showFixation` | `boolean` | `true` | Show a fixation cross, during the fixation time and while the dots move |
-| `fixationTimeMs` | `number` | `500` | Duration in ms to show fixation before dots appear. Added to `durationMs` for total trial time |
+| `fixationTimeMs` | `number` | `500` | Duration in ms to show fixation before dots appear. Added to `timeLimitMs` for total trial time |
 | `fixationWidth` | `number` | `15` | Width in pixels |
 | `fixationHeight` | `number` | `15` | Height in pixels |
 | `fixationColor` | `string` | `"white"` | Color |
@@ -140,10 +140,10 @@ The component returns the following data object when the trial ends:
 
 ```typescript
 {
-  rtMs: number | null,            // Reaction time (null if no response)
-  response: string | null,        // Key pressed (null if no response)
+  key: string | null,             // Key pressed, as allowedResponseKeys names it (null if no response)
+  reactionTimeMs: number | null,  // From when the dots appeared (null if no response)
   correct: boolean | null,        // Whether response was correct (null if no correctResponse specified)
-  durationMs: number,             // How long the trial was set to run
+  timeLimitMs: number,            // How long the trial waited for a response
   direction: number,              // Direction of coherent motion
   coherence: number,              // Coherence level
   framesDisplayed: number         // Number of frames actually displayed
@@ -156,9 +156,9 @@ The component returns the following data object when the trial ends:
 
 ```typescript
 RandomDotKinematogram.trial('motion_discrimination', {
-  allowedResponseKeys: ['arrowleft', 'arrowright'],
-  correctResponse: 'arrowright',
-  durationMs: 2000,
+  allowedResponseKeys: ['ArrowLeft', 'ArrowRight'],
+  correctResponse: 'ArrowRight',
+  timeLimitMs: 2000,
 
   direction: 90,              // Rightward
   coherence: 0.7,             // 70% coherence
@@ -180,7 +180,7 @@ RandomDotKinematogram.trial('motion_discrimination', {
 RandomDotKinematogram.trial('difficult_trial', {
   coherence: 0.1,             // Only 10% coherent
   direction: 180,             // Downward
-  durationMs: 3000,
+  timeLimitMs: 3000,
 
   dotCount: 300,
   speed: 60,                  // Slower movement (pixels per second)
@@ -194,12 +194,12 @@ RandomDotKinematogram.trial('difficult_trial', {
 
 ```typescript
 RandomDotKinematogram.trial('four_direction', {
-  allowedResponseKeys: ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
-  correctResponse: 'arrowup',
+  allowedResponseKeys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+  correctResponse: 'ArrowUp',
 
   direction: 0,               // Upward
   coherence: 0.5,
-  durationMs: 2500,
+  timeLimitMs: 2500,
 })
 ```
 
@@ -212,8 +212,8 @@ RandomDotKinematogram.trial('opposite_motion', {
   opposite: 0.4,     // 40% leftward
   // 20% random
 
-  allowedResponseKeys: ['arrowleft', 'arrowright'],
-  correctResponse: 'arrowright',
+  allowedResponseKeys: ['ArrowLeft', 'ArrowRight'],
+  correctResponse: 'ArrowRight',
 })
 ```
 
@@ -227,8 +227,8 @@ const rdkTrials = coherenceLevels.map((coh, index) =>
   RandomDotKinematogram.trial(`rdk_${index}`, {
     coherence: coh,
     direction: Math.random() < 0.5 ? 90 : 270,  // Random left/right
-    durationMs: 2000,
-    allowedResponseKeys: ['arrowleft', 'arrowright'],
+    timeLimitMs: 2000,
+    allowedResponseKeys: ['ArrowLeft', 'ArrowRight'],
   }),
 );
 ```
@@ -247,9 +247,9 @@ RandomDotKinematogram.trial('colored_coherent', {
   dotCount: 200,
   speed: 120,                 // Pixels per second
 
-  allowedResponseKeys: ['arrowleft', 'arrowright'],
-  correctResponse: 'arrowright',
-  durationMs: 3000,
+  allowedResponseKeys: ['ArrowLeft', 'ArrowRight'],
+  correctResponse: 'ArrowRight',
+  timeLimitMs: 3000,
 })
 ```
 
@@ -257,14 +257,14 @@ RandomDotKinematogram.trial('colored_coherent', {
 
 ```typescript
 RandomDotKinematogram.trial('late_response_trial', {
-  durationMs: 3000,               // Total response window: 3 seconds
-  stimulusDurationMs: 1000,       // Dots visible for 1 second, then blank
+  timeLimitMs: 3000,              // Total response window: 3 seconds
+  displayDurationMs: 1000,        // Dots visible for 1 second, then blank
 
   direction: 90,
   coherence: 0.7,
 
-  allowedResponseKeys: ['arrowleft', 'arrowright'],
-  correctResponse: 'arrowright',
+  allowedResponseKeys: ['ArrowLeft', 'ArrowRight'],
+  correctResponse: 'ArrowRight',
 
   showFixation: true,           // Fixation remains visible
 })
@@ -282,8 +282,8 @@ RandomDotKinematogram.trial('emoji_rdk', {
 
   backgroundColor: '#1a1a1a',
 
-  allowedResponseKeys: ['arrowleft', 'arrowright'],
-  durationMs: 2000,
+  allowedResponseKeys: ['ArrowLeft', 'ArrowRight'],
+  timeLimitMs: 2000,
 })
 ```
 

@@ -3,10 +3,29 @@ import { MicrophoneIcon, PauseIcon, StopIcon, TrashIcon } from './icons';
 import { useTheme, t } from '../runner/theme';
 import { useAudioDeviceId } from '../runner/contexts';
 
-interface RecordingData {
-  blob: Blob;
-  url: string;
-  timestamp: string;
+// An analyser of the stream's sound, with room for its samples, and a function that stops it
+function analyse(stream: MediaStream) {
+  const AudioContextClass = window.AudioContext ?? (window as any).webkitAudioContext;
+  const audioContext = new AudioContextClass();
+  const analyser = audioContext.createAnalyser();
+  analyser.fftSize = 2048;
+  const source = audioContext.createMediaStreamSource(stream);
+  source.connect(analyser);
+  const close = () => {
+    source.disconnect();
+    audioContext.close();
+  };
+  return { analyser, samples: new Uint8Array(analyser.fftSize), close };
+}
+
+// The loudness of the samples, which are centered at 128
+function rms(samples: Uint8Array): number {
+  let sumOfSquares = 0;
+  for (const sample of samples) {
+    const normalized = (sample - 128) / 128;
+    sumOfSquares += normalized * normalized;
+  }
+  return Math.sqrt(sumOfSquares / samples.length);
 }
 
 const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ stream, isDark }) => {
@@ -15,17 +34,10 @@ const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ s
 
   useEffect(() => {
     if (!stream || !canvasRef.current) return;
-    const AudioContextClass = window.AudioContext ?? (window as any).webkitAudioContext;
-    const audioContext = new AudioContextClass();
-    const analyser = audioContext.createAnalyser();
-    const source = audioContext.createMediaStreamSource(stream);
-
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
+    const { analyser, samples, close } = analyse(stream);
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -35,7 +47,6 @@ const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ s
     canvas.style.width = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
 
-    const timeData = new Uint8Array(analyser.fftSize);
     const bgColor = isDark ? '#374151' : '#ffffff';
     const activeColor = isDark ? '#ffffff' : '#000000';
     const dimColor = isDark ? '#4B5563' : '#E5E7EB';
@@ -48,15 +59,8 @@ const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ s
 
     const draw = () => {
       animationRef.current = requestAnimationFrame(draw);
-      analyser.getByteTimeDomainData(timeData);
-
-      // Compute RMS volume from time-domain samples (centered at 128)
-      let sumOfSquares = 0;
-      for (let i = 0; i < timeData.length; i++) {
-        const normalized = (timeData[i] - 128) / 128;
-        sumOfSquares += normalized * normalized;
-      }
-      const volumeLevel = Math.min(1, Math.sqrt(sumOfSquares / timeData.length) * 5);
+      analyser.getByteTimeDomainData(samples);
+      const volumeLevel = Math.min(1, rms(samples) * 5);
       smoothedLevel += (volumeLevel - smoothedLevel) * 0.3;
 
       ctx.fillStyle = bgColor;
@@ -73,8 +77,7 @@ const AudioVisualizer: React.FC<{ stream: MediaStream; isDark: boolean }> = ({ s
 
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      source.disconnect();
-      audioContext.close();
+      close();
     };
   }, [stream, isDark]);
 
@@ -92,8 +95,7 @@ export interface RecorderHandle {
   stop: () => void;
 }
 
-export interface RecorderProps {
-  question?: { value: RecordingData | null };
+interface RecorderProps {
   handleSaveVoiceData: (data: object) => void;
   handleDiscardVoiceData: () => void;
   deviceId?: string;
@@ -103,18 +105,17 @@ export interface RecorderProps {
   /** Show a discard button while recording to delete and start over. */
   showDiscard?: boolean;
   /** Label for the post-recording discard button. */
-  discardLabel?: string;
+  discardButtonText?: string;
   /** If set, show a "speak up" banner after this many milliseconds of continuous silence. Disabled when undefined. */
   silenceWarningMs?: number;
   /** Text shown in the silence banner. */
-  silenceWarningText?: string;
+  silenceWarningContent?: React.ReactNode;
   onRecordingStart?: () => void;
   onPause?: (duration: number) => void;
   onResume?: () => void;
 }
 
 export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
-  question: _question,
   handleSaveVoiceData,
   handleDiscardVoiceData,
   deviceId,
@@ -122,9 +123,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
   showStop = true,
   showVisualizer = true,
   showDiscard = true,
-  discardLabel = 'New Recording',
+  discardButtonText = 'New Recording',
   silenceWarningMs,
-  silenceWarningText = 'We can\'t hear you — please speak up',
+  silenceWarningContent = "We can't hear you — please speak up",
   onRecordingStart,
   onPause,
   onResume,
@@ -172,24 +173,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
       setShowSilenceBanner(false);
       return;
     }
-    const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
-    const audioCtx = new AudioCtx();
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    const source = audioCtx.createMediaStreamSource(audioStream);
-    source.connect(analyser);
-    const timeData = new Uint8Array(analyser.fftSize);
+    const { analyser, samples, close } = analyse(audioStream);
 
     let silenceMs = 0;
     const tick = setInterval(() => {
-      analyser.getByteTimeDomainData(timeData);
-      let sum = 0;
-      for (let i = 0; i < timeData.length; i++) {
-        const n = (timeData[i] - 128) / 128;
-        sum += n * n;
-      }
-      const rms = Math.sqrt(sum / timeData.length);
-      if (rms < 0.02) {
+      analyser.getByteTimeDomainData(samples);
+      if (rms(samples) < 0.02) {
         silenceMs += 100;
         if (silenceMs >= silenceWarningMs) setShowSilenceBanner(true);
       } else {
@@ -200,8 +189,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
 
     return () => {
       clearInterval(tick);
-      source.disconnect();
-      audioCtx.close();
+      close();
       setShowSilenceBanner(false);
     };
   }, [audioStream, silenceWarningMs, isPaused]);
@@ -266,26 +254,24 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
   };
 
   const saveRecording = async (blob: Blob, url: string) => {
-    if (blob && url) {
-      const base64Data = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = reader.result?.toString().split(',')[1] || '';
-          resolve(base64);
-        };
-        reader.readAsDataURL(blob);
-      });
+    const base64Data = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result?.toString().split(',')[1] || '';
+        resolve(base64);
+      };
+      reader.readAsDataURL(blob);
+    });
 
-      handleSaveVoiceData({
-        blob: blob,
-        // dont change this type, since the upload function depends on it while looking for audio
-        type: 'audiorecording',
-        url: url,
-        data64: base64Data,
-        timestamp: new Date().toISOString(),
-        recordingDurationMs: durationRef.current,
-      });
-    }
+    handleSaveVoiceData({
+      blob: blob,
+      // dont change this type, since the upload function depends on it while looking for audio
+      type: 'audiorecording',
+      url: url,
+      data64: base64Data,
+      timestamp: new Date().toISOString(),
+      recordingDurationMs: durationRef.current,
+    });
   };
 
   const discardWhileRecording = () => {
@@ -321,7 +307,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
     <div className='flex flex-col items-center space-y-4 p-4 px-8'>
       {showSilenceBanner && (
         <div className='fixed top-0 left-0 right-0 z-40 bg-yellow-300 text-black text-center py-3 px-4 border-b-2 border-black font-semibold shadow-[0px_2px_0px_rgba(0,0,0,1)]'>
-          {silenceWarningText}
+          {silenceWarningContent}
         </div>
       )}
       {/* Start button */}
@@ -402,7 +388,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
               className={`border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer flex items-center space-x-2 px-4 py-2 ${th.text} rounded-xl transition-colors duration-200`}
             >
               <TrashIcon className='w-4 h-4' />
-              <span>{discardLabel}</span>
+              <span>{discardButtonText}</span>
             </button>
           </div>
         </div>

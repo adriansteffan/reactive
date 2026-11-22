@@ -18,14 +18,47 @@ export interface DeviceInfo {
   hasMicrophone: boolean;
 }
 
+// Edge's user agent names Chrome too, and Android's and iOS's name Linux and Mac OS X, so they come first
+const browsers: [string, RegExp][] = [
+  ['Edge', /Edg(?:e|A|iOS)?\/(\d+\.\d+)/],
+  ['Chrome', /(?:Chrome|CriOS)\/(\d+\.\d+)/],
+  ['Firefox', /(?:Firefox|FxiOS)\/(\d+\.\d+)/],
+  ['Safari', /Version\/(\d+\.\d+).*Safari/],
+];
+const systems: [string, RegExp][] = [
+  ['Android', /Android/],
+  ['iOS', /iPhone|iPad|iPod/],
+  ['Windows', /Windows/],
+  ['MacOS', /Macintosh|Mac OS X/],
+  ['Linux', /Linux/],
+];
+
+/** The browser, its version and the operating system that a user agent names. */
+export function describeUserAgent(userAgent: string) {
+  let browser = 'Unknown';
+  let browserVersion = 'Unknown';
+  for (const [name, pattern] of browsers) {
+    const match = userAgent.match(pattern);
+    if (match) {
+      browser = name;
+      browserVersion = match[1];
+      break;
+    }
+  }
+  const operatingSystem = systems.find(([, pattern]) => pattern.test(userAgent))?.[0] ?? 'Unknown';
+  return { browser, browserVersion, operatingSystem };
+}
+
 function CheckDevice({
-  check,
-  content = <div>Your device doesn't meet the requirements for this experiment.</div>,
+  acceptDevice,
+  errorContent = <div>Your device doesn't meet the requirements for this experiment.</div>,
   next,
 }: {
   /** Whether the device fits the study. Without it, every device does. */
-  check?: (deviceInfo: DeviceInfo) => boolean;
-  content?: React.ReactNode;
+  /** Whether the participant's device fits the experiment; one that does not ends it on this screen. */
+  acceptDevice?: (deviceInfo: DeviceInfo) => boolean;
+  /** Shown when the device does not fit. */
+  errorContent?: React.ReactNode;
 } & BaseComponentProps<DeviceInfo>) {
   const [showContent, setShowContent] = useState<boolean>(false);
 
@@ -44,47 +77,11 @@ function CheckDevice({
       const screenHeight = window.screen.height;
 
       const userAgent = navigator.userAgent;
-      let browser = 'Unknown';
-      let browserVersion = 'Unknown';
-
-      if (userAgent.indexOf('Chrome') > -1) {
-        browser = 'Chrome';
-        const match = userAgent.match(/Chrome\/(\d+\.\d+)/);
-        browserVersion = match ? match[1] : 'Unknown';
-      } else if (userAgent.indexOf('Firefox') > -1) {
-        browser = 'Firefox';
-        const match = userAgent.match(/Firefox\/(\d+\.\d+)/);
-        browserVersion = match ? match[1] : 'Unknown';
-      } else if (userAgent.indexOf('Safari') > -1) {
-        browser = 'Safari';
-        const match = userAgent.match(/Version\/(\d+\.\d+)/);
-        browserVersion = match ? match[1] : 'Unknown';
-      } else if (userAgent.indexOf('Edge') > -1) {
-        browser = 'Edge';
-        const match = userAgent.match(/Edge\/(\d+\.\d+)/);
-        browserVersion = match ? match[1] : 'Unknown';
-      } else if (userAgent.indexOf('MSIE') > -1 || userAgent.indexOf('Trident/') > -1) {
-        browser = 'Internet Explorer';
-        const match = userAgent.match(/(?:MSIE |rv:)(\d+\.\d+)/);
-        browserVersion = match ? match[1] : 'Unknown';
-      }
+      const { browser, browserVersion, operatingSystem } = describeUserAgent(userAgent);
 
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         userAgent,
       );
-
-      let operatingSystem = 'Unknown';
-      if (/Windows/.test(userAgent)) {
-        operatingSystem = 'Windows';
-      } else if (/Macintosh|Mac OS X/.test(userAgent)) {
-        operatingSystem = 'MacOS';
-      } else if (/Linux/.test(userAgent)) {
-        operatingSystem = 'Linux';
-      } else if (/Android/.test(userAgent)) {
-        operatingSystem = 'Android';
-      } else if (/iOS|iPhone|iPad|iPod/.test(userAgent)) {
-        operatingSystem = 'iOS';
-      }
 
       const hasWebAudio = !!(
         window.AudioContext ||
@@ -94,16 +91,7 @@ function CheckDevice({
         (window as any).msAudioContext
       );
 
-      const hasFullscreen = !!(
-        document.exitFullscreen ||
-        (document as any).webkitExitFullscreen ||
-        (document as any).mozCancelFullScreen ||
-        (document as any).msExitFullscreen ||
-        document.fullscreenEnabled ||
-        (document as any).webkitFullscreenEnabled ||
-        (document as any).mozFullScreenEnabled ||
-        (document as any).msFullscreenEnabled
-      );
+      const hasFullscreen = !!(document.exitFullscreen || (document as any).webkitExitFullscreen);
 
       let hasWebcam = false;
       let hasMicrophone = false;
@@ -131,7 +119,7 @@ function CheckDevice({
         hasMicrophone,
       };
 
-      const checkResult = check ? check(deviceInfo) : true;
+      const checkResult = acceptDevice ? acceptDevice(deviceInfo) : true;
 
       if (checkResult && !hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
@@ -142,15 +130,15 @@ function CheckDevice({
     };
 
     gatherDeviceInfo();
-  }, [check, next]);
+  }, [acceptDevice, next]);
 
   const th = t(useTheme());
 
   return showContent ? (
     <div className={`min-h-screen ${th.containerBg}`}>
     <div className='max-w-prose mx-auto mt-20 mb-20 px-4'>
-      <article className={`prose prose-2xl ${th.prose} text-xl ${th.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${th.text} leading-relaxed`}>
-        {content}
+      <article className={th.article}>
+        {errorContent}
       </article>
     </div>
     </div>
@@ -160,7 +148,7 @@ function CheckDevice({
 export default defineComponent({
   name: 'CheckDevice',
   component: CheckDevice,
-  csv: 'session',
+  session: true,
   simulate: () => {
     const deviceInfo = {
       windowWidth: 1920, windowHeight: 1080, screenWidth: 1920, screenHeight: 1080,

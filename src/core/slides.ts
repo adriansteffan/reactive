@@ -1,46 +1,57 @@
 import { advanceToNextContent, type Bytecode, compileTimeline } from './bytecode';
 import type { ParticipantState } from './component';
-import { freezeInDevelopment } from './development';
+import { freezeInDevelopment, report } from './development';
 import type { Store } from './store';
-import { type Block, report, type TimelineContext } from './timeline';
+import type { ResponseKey } from '../utils/keys';
+import type { Block, TimelineContext } from './timeline';
 
 export type SlideSimulatorResult = {
-  key: string | null;
-  reactionTimeMs: number | null;
+  value: { key: string | null; reactionTimeMs: number | null };
   /** Without it, the participant stays as it was. */
-  participantState?: ParticipantState;
+  participant?: ParticipantState;
 };
 
-export type SlideSimulator = (input: { slide: Slide; participant: ParticipantState }) => SlideSimulatorResult;
+/** The keys a slide takes as a response, and what the first response does. */
+export interface SlideResponse {
+  /** The keys that count as a response, letters in either case, or `true` for any key. */
+  keys: readonly ResponseKey[] | true;
+  /** How long after the slide appears a key counts as a response. The slide ends then, if no response has ended it. */
+  timeLimitMs?: number;
+  /** Whether the first response ends the slide. Defaults to `true`. */
+  endsSlide?: boolean;
+  /** Clears the drawing at the first response. */
+  hidesDrawing?: boolean;
+}
 
-/** One screen of a CanvasBlock. */
-export interface Slide {
+interface SlideFields {
   /** Draws the slide on a canvas cleared to white, with black as the fill color unless the block's `styleCanvas` sets another. */
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-  /** How long the drawing stays visible. */
+  /** How long the drawing stays visible. Unless the response has a time limit, the slide ends then. */
   displayDurationMs?: number;
-  /** How long after the slide appears a key counts as a response. */
-  responseTimeLimitMs?: number;
-  /** The keys that count as a response, or `true` for any key. */
-  allowedResponseKeys?: string[] | boolean;
-  /** Whether the first response ends the slide. Defaults to `true`. */
-  endSlideOnResponse?: boolean;
-  /** Clears the drawing at the first response. */
-  hideOnResponse?: boolean;
+  response?: SlideResponse;
   /** Records no row for the slide. */
   ignoreData?: boolean;
   /** Extra values for the slide's row, as `meta_` columns in the CSV. */
   metadata?: Record<string, any>;
-  /** Decides the simulated response to this slide, instead of the block's `respondToSlide` simulator. */
-  simulate?: SlideSimulator;
 }
+
+/**
+ * One screen of a CanvasBlock. It ends at the first response, unless `endsSlide` is `false`. If no
+ * response ends it, it ends when the response's time limit runs out, or, without one, when the display
+ * duration does. The types require one of these ways to end.
+ */
+export type Slide = SlideFields &
+  (
+    | { displayDurationMs: number }
+    | { response: SlideResponse & ({ timeLimitMs: number } | { endsSlide?: true }) }
+  );
 
 /** Makes a slide when it starts, from the context: the experiment's trials and the block's slides so far. */
 export type SlideFunction = (context: TimelineContext) => Slide;
 
 /** A list of slides and blocks, nested and with `false`, `null` and `undefined` skipped like a timeline. */
 export type SlideTimeline = readonly SlideEntry[];
-export type SlideEntry = Slide | SlideFunction | Block | SlideTimeline | false | null | undefined;
+export type SlideEntry = Slide | SlideFunction | Block<'slides'> | SlideTimeline | false | null | undefined;
 
 /** The row a slide records. */
 export interface SlideData {
@@ -55,7 +66,7 @@ export interface SlideData {
   metadata?: Record<string, any>;
 }
 
-export type CompiledSlides = Bytecode<Slide | SlideFunction, TimelineContext>;
+export type CompiledSlides = Bytecode<Slide | SlideFunction>;
 
 export function compileSlides(timeline: SlideTimeline): CompiledSlides {
   return compileTimeline(timeline, (item) => {
@@ -68,25 +79,14 @@ export function compileSlides(timeline: SlideTimeline): CompiledSlides {
   });
 }
 
-const takesKeys = (slide: Slide) =>
-  slide.allowedResponseKeys === true || (Array.isArray(slide.allowedResponseKeys) && slide.allowedResponseKeys.length > 0);
+const takesKeys = (slide: Slide) => {
+  const keys = slide.response?.keys;
+  return keys === true || (keys !== undefined && keys.length > 0);
+};
 
-/** Whether a key counts as a response to the slide. */
-export function acceptsKey(slide: Slide, key: string): boolean {
-  const keys = slide.allowedResponseKeys;
-  return keys === true || (Array.isArray(keys) && keys.includes(key));
-}
-
-/**
- * How long after it appears the slide ends, unless a response ends it first. A slide that takes keys
- * waits for its response time limit, or else for its display duration; any other slide ends when
- * either runs out.
- */
+/** How long after it appears the slide ends, unless a response ends it first. */
 export function slideTimeoutMs(slide: Slide): number {
-  const display = slide.displayDurationMs ?? Number.POSITIVE_INFINITY;
-  const limit = slide.responseTimeLimitMs ?? Number.POSITIVE_INFINITY;
-  if (!takesKeys(slide)) return Math.min(display, limit);
-  return limit !== Number.POSITIVE_INFINITY ? limit : display;
+  return slide.response?.timeLimitMs ?? slide.displayDurationMs ?? Number.POSITIVE_INFINITY;
 }
 
 /** Where a CanvasBlock is: the slide on screen, made once when it started, and what the block has recorded. */
@@ -118,9 +118,9 @@ function advance(
 
   const content = instruction.content;
   const slide = typeof content === 'function' ? content(contextFor(store)) : content;
-  if (slideTimeoutMs(slide) === Number.POSITIVE_INFINITY && (!takesKeys(slide) || slide.endSlideOnResponse === false)) {
+  if (slideTimeoutMs(slide) === Number.POSITIVE_INFINITY && (!takesKeys(slide) || slide.response?.endsSlide === false)) {
     report(
-      'A slide in a CanvasBlock would never end. Give it a displayDurationMs, a responseTimeLimitMs, or allowedResponseKeys that end it.',
+      'A slide in a CanvasBlock would never end. Give it a displayDurationMs, or a response with a timeLimitMs or with keys that end the slide.',
     );
   }
   return { pointer, slide, shown: shown + 1, slides, store };

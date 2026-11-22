@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { BaseComponentProps } from '../core/component';
 import { useParams } from '../runner/contexts';
 import Text from './text';
 import { noopSimulate } from '../core/simulation';
@@ -31,9 +30,6 @@ function ProlificEnding({
   containerClass,
   centered,
   animate,
-  data,
-  store,
-  updateStore,
 }: {
   prolificCode?: string;
   /** The message, given the completion code. Prolific's completion link is https://app.prolific.com/submissions/complete?cc=<code>. */
@@ -42,7 +38,7 @@ function ProlificEnding({
   containerClass?: string;
   centered?: boolean;
   animate?: boolean;
-} & BaseComponentProps) {
+}) {
   const { cc } = useParams(params);
 
   const message = (
@@ -54,7 +50,17 @@ function ProlificEnding({
     </div>
   );
 
-  return <Text data={data} store={store} updateStore={updateStore} className={className} containerClass={containerClass} centered={centered} animate={animate} content={message} buttonText='' next={() => {}} />;
+  return (
+    <Text
+      className={className}
+      containerClass={containerClass}
+      centered={centered}
+      animate={animate}
+      content={message}
+      buttonText=''
+      next={() => {}}
+    />
+  );
 }
 
 export default defineComponent({
@@ -63,4 +69,13 @@ export default defineComponent({
   csv: null,
   params,
   simulate: noopSimulate,
+  check: ({ props, params, trials, index, production }) => {
+    if (!trials.slice(0, index).some((trial) => trial.type === 'Upload')) {
+      return 'ProlificEnding ends the experiment, so an Upload has to come before it, or the data is never saved.';
+    }
+    // Development and simulation run without the real link, which may be what sets the code
+    if (production && props !== undefined && !props.prolificCode && !params.cc) {
+      return 'ProlificEnding has no completion code to show: set its prolificCode, or the cc param in the link.';
+    }
+  },
 });

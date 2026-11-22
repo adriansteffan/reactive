@@ -39,7 +39,7 @@ export default defineExperiment({
 });
 ```
 
-The other fields of `defineExperiment` are `params` (below) and `simulation` (see [Simulation](#simulation)).
+`config` sets `showProgressBar` and the `theme`: `'light'` (the default), `'dark'`, or `'dark-plain'`, a dark theme without the background pattern. The other fields of `defineExperiment` are `params` (below) and `simulation` (see [Simulation](#simulation)).
 
 Premade components available so far:
 
@@ -49,7 +49,7 @@ Premade components available so far:
 * CanvasBlock: A sequence of canvas slides with keyboard responses, for timed tasks (see [Timed slides](#timed-slides))
 * StoreUI: A form that writes its fields to the store
 * CheckDevice: Gathers information about the participant's device and can stop participants whose device does not fit
-* EnterFullscreen / ExitFullscreen
+* fullscreenBlock: Runs its trials in fullscreen, after a screen that asks the participant into it (see [Fullscreen](#fullscreen))
 * ProlificEnding: Shows the Prolific completion code
 * Quest (extra): SurveyJS questionnaires
     * ... all questiontypes supported by SurveyJS can be used
@@ -81,24 +81,23 @@ An experiment that does not use them neither installs them nor sends them to its
 
 Name every trial your analysis needs to find, or give it metadata that identifies it, such as a stimulus id. Rows carry no other lasting identity: their `trialNumber` is the order in which the participant saw the trials, which shifts whenever the timeline changes.
 
-Further settings are chained. Every method returns a new trial and leaves the one it was called on unchanged, so a partly configured trial can serve as a base for several others. Passing `undefined` leaves a setting as it is, which keeps optional settings inline:
+Further settings are chained. Every method returns a new trial and leaves the one it was called on unchanged. Passing `undefined` leaves a setting as it is, which keeps optional settings inline. Variants of a trial are made by a function:
 
 ```tsx
-const feedback = Text.trial({ buttonText: 'Continue' });
+const feedback = (name: string, content: ReactNode) => Text.trial(name, { content, buttonText: 'Continue' });
 
-feedback.name('slow').props({ content: <p>Take your time.</p> }),
+feedback('slow', <p>Take your time.</p>),
 Text.trial('instructions').metadata(isPractice ? { practice: true } : undefined),
 ```
 
 | Method | Description |
 |---|---|
-| `.name(name)` | Renames the trial, for variants of a base trial |
-| `.props(props)` | Merges props into the trial's props |
-| `.metadata(values)` | Extra values for this trial's rows, kept apart from its response (see [Metadata](#metadata)) |
-| `.csv(file)` | The CSV file(s) for this trial's rows instead of its component's; `null` keeps them out |
+| `.metadata(values)` | Extra values for this trial's rows, kept apart from its response and merged into those set before (see [Metadata](#metadata)) |
+| `.csv(files)` | Renames the CSV files of this trial's rows, or keeps them out with `null` (see [Per-trial CSV files](#per-trial-csv-files)) |
+| `.session(enabled)` | Puts this trial's columns in the session CSV, or keeps them out with `false`, whatever its component does (see [Session columns](#session-columns)) |
 | `.simulators(simulators)` | Replaces some of the component's simulators (see [Simulation](#simulation)) |
 | `.collectRefreshRate(enabled?)` | Measures the screen's refresh rate while the trial runs, for later canvas trials |
-| `.hideSettings(names \| true)` | Hides the component's settings from the settings page |
+| `.hideParams(names \| true)` | Hides the component's params from the settings page; the names must be the component's params |
 
 Times are in milliseconds everywhere, in props as in the recorded data, and their names end in `Ms`: `durationMs`, `reactionTimeMs`, and each row's `startMs` and `endMs`.
 
@@ -113,7 +112,7 @@ Text.trial(({ get }) => ({ content: <p>Hello {get(nickname).value}</p> }));
 Text.trial(({ get }) => ({ content: <p>Hello {get(PlainInput, 'nickname').value}</p> }));
 ```
 
-A trial can be read through the trial itself or through its component and name. `get` throws if the trial has not run yet; `getOptional` returns `undefined` instead, for trials that may have been skipped. Asking for a name that is not in the timeline stops the experiment during development and simulation; for real participants it is logged instead. The timeline context also holds `data`, everything recorded so far, `store`, and inside a CanvasBlock, `slides` (see [Timed slides](#timed-slides)). `data.trials` lists the rows of the trials that have ended, in the order the participant saw them, so `data.trials.at(-1)` is the last one and `data.trials.length` counts them. `data.session` holds what the session recorded when it started: every param with its value and declaration, the build seed and the user agent.
+A trial can be read through the trial itself or through its component and name, and only a named trial can be read: the types reject `get` of a trial without a name. `get` throws if the trial has not run yet; `getOptional` returns `undefined` instead, for trials that may have been skipped. Asking for a name that is not in the timeline stops the experiment during development and simulation; for real participants it is logged instead. The timeline context also holds `data`, everything recorded so far, `store`, and inside a CanvasBlock, `slides` (see [Timed slides](#timed-slides)). `data.trials` lists the rows of the trials that have ended, in the order the participant saw them, so `data.trials.at(-1)` is the last one and `data.trials.length` counts them. `data.session` holds what the session recorded when it started: every param with its value and declaration, the build seed and the user agent.
 
 These callbacks must not change the context's `data` or `store`: they are frozen during development and simulation, so trying throws. The store changes only through `updateStore` (below) and through components.
 
@@ -146,11 +145,36 @@ ifGoto(({ get }) => !get(Quiz, 'quiz').passed, 'retry'),
 
 A condition written as a named function, like `clickedSlowly`, can be reused in several blocks and props without storing a flag. `updateStore` is for values that carry forward, such as a bonus.
 
-Within one timeline, two different trials cannot share a name, even if their components differ, unless they sit in different branches of the same `ifBlock`. A name cannot be `url` or `session`, or start with `url_` or `session_`, since its columns in the session CSV would then take the library's (see [Output files](#output-files)). An unnamed trial that goes to the session CSV is named after its component for its columns there: the first `PlainInput` (`PlainInput_value`), the next ones `PlainInput_2`, `PlainInput_3` and so on, in the order they appear in the timeline. These names count positions, so they change when the timeline does; give a trial a name of its own when your analysis reads its columns.
+`ifGoto` jumps to the `marker` with its id, forward or back, and also into the middle of a block: the rest of the block then runs, and a `whileBlock` checks its condition again when its items are done. Within a timeline, each marker id can be used once and every `ifGoto` needs its marker, which is checked when the experiment loads; a CanvasBlock's timeline has markers of its own. On the settings screen, markers cannot be deselected, and a deselected block leaves its markers in its place, so no jump loses its target.
+
+A `whileBlock` or a jump back that repeats without ever reaching a trial would freeze the page, so the experiment stops with an error that names the loop instead.
+
+#### Fullscreen
+
+`fullscreenBlock` runs its trials in fullscreen:
+
+```tsx
+fullscreenBlock({ keepFullscreen: true }, [instructions, task]),
+```
+
+It starts with a screen that asks the participant into fullscreen, which browsers only allow after a click. The experiment leaves fullscreen once the run is outside the block, at its end or through a jump, so there is nothing to close.
+
+| Option | Description |
+|---|---|
+| `content`, `buttonText` | The screen's text and button |
+| `keepFullscreen` | Asks the participant back into fullscreen on every trial of the block: `true` for a small button, `{ buttonText }` to change its text, or `{ mode: 'overlay', content, buttonText }` for a screen over the trial |
+| `stopOnFailure` | Ends the experiment on the screen when the browser cannot enter fullscreen, instead of asking again; nothing is uploaded |
+| `errorContent` | Shown when the browser could not enter fullscreen |
+| `delayMs` | How long after entering fullscreen the block's first trial starts |
+| `className`, `containerClass`, `centered`, `animate` | The screen's look, as for Text |
+
+On the settings screen, the block's screen is listed as an item of its own, so the trials can run without fullscreen while you test them.
+
+Within one timeline, two different trials cannot share a name, even if their components differ, unless they sit in different branches of the same `ifBlock`. A name cannot be `url` or `session`, or start with `url_` or `session_`, since its columns in the session CSV would then take the library's (see [Output files](#output-files)); the types reject these names too. An unnamed trial that goes to the session CSV is named after its component for its columns there: the first `PlainInput` (`PlainInput_value`), the next ones `PlainInput_2`, `PlainInput_3` and so on, in the order they appear in the timeline. These names count positions, so they change when the timeline does; give a trial a name of its own when your analysis reads its columns.
 
 ### Timed slides
 
-CanvasBlock shows a sequence of slides on a canvas within one trial, for tasks that need precise timing, such as a fixation cross, a briefly shown word and a key press. It draws each slide in an animation frame, with no React rendering between slides. Its timeline holds slides, and the same blocks as the experiment's timeline:
+CanvasBlock shows a sequence of slides on a canvas within one trial, for tasks that need precise timing, such as a fixation cross, a briefly shown word and a key press. It draws each slide in an animation frame, with no React rendering between slides. Its timeline holds slides, and the same blocks as the experiment's timeline. A block holds either slides or trials, and the types keep each to the timelines of its kind:
 
 ```tsx
 import { CanvasBlock, ifBlock, type Slide } from '@adriansteffan/reactive';
@@ -164,8 +188,7 @@ const fixation: Slide = {
 const stimulus = (word: string): Slide => ({
   draw: (ctx, w, h) => ctx.fillText(word, w / 2, h / 2),
   displayDurationMs: 200,
-  responseTimeLimitMs: 2000,
-  allowedResponseKeys: ['f', 'j'],
+  response: { keys: ['f', 'j'], timeLimitMs: 2000 },
   metadata: { word },
 });
 
@@ -184,15 +207,16 @@ CanvasBlock.trial('main', {
 |---|---|
 | `draw(ctx, width, height)` | Draws the slide on a canvas cleared to white, with black as the fill color |
 | `displayDurationMs` | How long the drawing stays visible |
-| `responseTimeLimitMs` | How long after the slide appears a key counts as a response |
-| `allowedResponseKeys` | The keys that count as a response, or `true` for any key |
-| `endSlideOnResponse` | Whether the first response ends the slide; `true` by default |
-| `hideOnResponse` | Clears the drawing at the first response |
+| `response.keys` | The keys that count as a response, or `true` for any key (see below) |
+| `response.timeLimitMs` | How long after the slide appears a key counts as a response |
+| `response.endsSlide` | Whether the first response ends the slide; `true` by default |
+| `response.hidesDrawing` | Clears the drawing at the first response |
 | `ignoreData` | Records no row for the slide |
 | `metadata` | Extra values for the slide's row |
-| `simulate` | Decides the simulated response to this slide, instead of `respondToSlide` (see [Simulation](#simulation)) |
 
-A slide without keys ends when its display duration or its response time limit runs out, whichever comes first. A slide with keys ends at the first response, or when its response time limit runs out. Without a limit, it waits as long as it is displayed, or for a key if it has no display duration either. A slide that could never end stops the experiment during development and simulation.
+A slide with a `response` ends at the first response, unless `endsSlide` is `false`. Otherwise it ends when the response's time limit runs out, or, without one, when its display duration does; the drawing can disappear earlier while keys still count. A slide needs one of these ways to end, which the types check; an empty list of keys, which they cannot see, stops the experiment during development and simulation. TypeScript explains a slide's mistakes best where it is declared as a `Slide`, like `fixation` above, rather than written inside the timeline.
+
+Keys are named as the browser names them in `KeyboardEvent.key`: a letter, a digit or symbol, `' '` for the space bar, or a named key such as `'Enter'` or `'ArrowLeft'`, which editors suggest. Any other name the browser gives works as well, such as `'ö'` on a German keyboard. Keys count in any case, so caps lock does not matter and `'enter'` is `'Enter'`, and the slide's row records the key as the list names it. Text's and the RandomDotKinematogram's `allowedResponseKeys` work the same way.
 
 A slide can also be a function of the timeline context, which runs once, when the slide starts. Inside a CanvasBlock, the context's `slides` holds the rows of the block's slides so far, while `data`, `get` and `getOptional` read the experiment's trials, as everywhere else. `updateStore` changes the store for the rest of the block, and the block's changes reach the experiment's store when it ends.
 
@@ -203,7 +227,7 @@ Times are taken from the frames the browser shows. A slide appears with the firs
 | CanvasBlock prop | Description |
 |---|---|
 | `timeline` | The slides and blocks |
-| `width`, `height` | The canvas's size: pixels as a number, a share of the screen as a percentage (`'80%'`), or a ratio to the other side (`'16:9'`); a square filling the screen by default |
+| `width`, `height` | The canvas's size: pixels as a number, a share of the screen as a percentage (`'80%'`), or a ratio of width to height (`'16:9'`), which sets this side from the other, or alone makes the largest canvas of that shape that fits the screen; the largest square that fits by default |
 | `styleCanvas(ctx, width, height)` | Sets colors and fonts before each slide is drawn |
 | `initCanvas(ctx, width, height)` | Runs once, after the canvas is set up |
 
@@ -231,11 +255,12 @@ export default defineExperiment({
 ```
 
 * A param is read from the URL by its key (`?group=scenario&rounds=5`), otherwise its default is used. A default that is a function is called once per participant.
-* With `values`, the param is typed as one of them (`'vn' | 'scenario'`), and a URL value outside them stops the experiment with an error. Without `values`, the param takes the type of its default.
+* With `values`, the param is typed as one of them (`'vn' | 'scenario'`), and its default, or what a default function returns, must be one of them too. Without `values`, the param takes the type of its default.
+* Whatever sets a param, the URL, a simulated participant or a default function, a value of another type stops the experiment with an error: one outside `values`, text for a number, or anything but `true` or `false` for a switch. Only a default function without `values` declares no type, so its values are not checked.
 * The resolved values are recorded in the data. Simulated participants can set them (see [Simulation](#simulation)).
 * `timeline` may use any JavaScript, such as `shuffle` or loops. Its random draws are seeded per participant, and the seed (`buildSeed`) is recorded, so the exact timeline a participant saw can be rebuilt later.
 * Params exist only inside `timeline`. Parts of the timeline in other files that need one become functions that take it, and components get it as a prop.
-* Each param is a column of the session CSV, so a param cannot be named `sessionId`, `userAgent` or `buildSeed`, or start with `url_` or `session_`.
+* Each param is a column of the session CSV, so a param cannot be named `sessionId`, `userAgent` or `buildSeed`, or start with `url_` or `session_`. The types reject these names, and so does the run.
 
 ### Typed store
 
@@ -256,9 +281,9 @@ The timeline context's `store`, the `updateStore` block, and the `store` and `up
 `defineComponent` turns a React component into one that can be used in the timeline:
 
 ```tsx
-function ReactionView({ next, target }: BaseComponentProps<{ rtMs: number }> & { target: string }) {
+function ReactionView({ next, target }: BaseComponentProps<{ reactionTimeMs: number }> & { target: string }) {
   ...
-  next({ rtMs });
+  next({ reactionTimeMs });
 }
 
 export default defineComponent({
@@ -270,9 +295,11 @@ export default defineComponent({
 });
 ```
 
-`BaseComponentProps<R>` gives the component `next`, which records its response of type `R` and moves on, along with `data`, `store`, `updateStore` and `name`, the trial's name. Only `name` and `component` are required. The name identifies the component in the data, since function names do not survive minification. A defined component is still an ordinary React component.
+`BaseComponentProps<R>` gives the component `next`, which records its response of type `R` and moves on (only a response that allows `undefined` can be left out), along with `data`, `store`, `updateStore` and `name`, the trial's name. Only `name` and `component` are required. The name identifies the component in the data, since function names do not survive minification. A defined component is still an ordinary React component.
 
 Write the component as a named function, as above, rather than inline in `defineComponent`: hot reloading then keeps the state of a trial that is on screen when its file changes.
+
+A component that measures times takes them with `now()`, the clock of the rows' `startMs` and `endMs`. To match the built-in screens, `useTheme()` returns the experiment's theme, and `t(theme)` its Tailwind classes, such as `t(useTheme()).button` for a button that ends a screen and `.article` for a screen's text.
 
 A component can declare params of its own, in the same format as the experiment's. The settings page lists them whenever the component is in the timeline, the URL can set them, and the component reads their values with `useParams(params)`, typed like the experiment's. Upload's `upload` and `download` switches work this way:
 
@@ -289,7 +316,26 @@ function ReactionView(...) {
 defineComponent({ name: 'Reaction', component: ReactionView, params });
 ```
 
-`as const` keeps the `values` of a param as a union of them, as `defineExperiment` does.
+`as const` keeps the `values` of a param as a union of them, as `defineExperiment` does. A param that `useParams` reads but `defineComponent` does not declare would have no value, so it stops the experiment during development and simulation.
+
+A component can check each of its trials when the experiment loads, with `check`. It gets the trial's `props` (`undefined` when they are computed during the run), the run's `params`, every trial of the timeline as `trials` with this one's `index`, and `production`, which is true in a production build. It returns what is wrong, if anything. Any message keeps the run from starting, and the settings screen shows it while you build a link. A check for something only the real link provides, such as a URL param, can leave development and simulation alone by returning nothing unless `production` is set:
+
+```tsx
+defineComponent({
+  name: 'ProlificEnding',
+  …,
+  check: ({ props, params, trials, index, production }) => {
+    if (!trials.slice(0, index).some((trial) => trial.type === 'Upload')) {
+      return 'ProlificEnding ends the experiment, so an Upload has to come before it, or the data is never saved.';
+    }
+    if (production && props !== undefined && !props.prolificCode && !params.cc) {
+      return 'ProlificEnding has no completion code to show: set its prolificCode, or the cc param in the link.';
+    }
+  },
+});
+```
+
+This is ProlificEnding's own check. A ProlificEnding without an Upload before it stops the run everywhere, and in production, so does one without a completion code. The checks see the trials the run will show, so deselecting the Upload on the settings screen while keeping the ProlificEnding stops the run as well.
 
 A component that talks to the experiment's server, such as a multiplayer game or a streamed API response, reaches the routes in `server.ts` at `getBackendUrl()`. That is `/backend` in the browser and the simulation's own server while simulating, so the component and its `simulate` can use the same call:
 
@@ -305,7 +351,7 @@ Edits to the experiment or to its components keep the participant where they are
 
 ### Settings page
 
-`/settings` builds a link for a run. It lists the experiment's params, then the settings: the general ones (`dev`) and those of the components in the selected trials, by component. Below them come the trials, which follow the params entered above. The settings follow which trials are checked, as they would in the run, so excluding a trial drops the settings of components that only it uses. Checking only some trials runs just those, by name or position, through `?includeSubset=` and `?excludeSubset=`.
+`/settings` builds a link for a run. It lists the experiment's params, then the settings: the general ones (`dev`) and those of the components in the selected trials, by component. Below them come the trials, which follow the params entered above. The trials inside an `ifBlock` or `whileBlock` are listed under it, and unchecking a block unchecks all of them. The checked trials run, as does any trial that other param values add; the link lists the unchecked ones in `?excludeSubset=`, each by its name, or without one by its position (`4.2` for the second item of the fourth entry). A block whose items are all unchecked is left out with them. The settings follow which trials are checked, as they would in the run, so unchecking a trial drops the settings of components that only it uses. Custom params are recorded as text, in `url_` columns.
 
 ### Dev panel
 
@@ -383,7 +429,7 @@ Each built-in component (Text, Quest, CanvasBlock, Upload, etc.) has a **simulat
 
 For example, Quest's simulate function iterates through questions and calls `simulators.answerQuestion()` for each one. The default `answerQuestion` picks random valid answers. You can override it to model specific participant behavior.
 
-Simulators and simulate functions take a single object, so each one names only what it uses. A simulator receives `props` and `participant`, plus whatever the simulate function passes along (`question`, for `answerQuestion`). It returns its decision, and a new `participantState` if the participant changed; without one, the participant stays as it was.
+Simulators and simulate functions take a single object, so each one names only what it uses. A simulator receives `props` and `participant`, plus whatever the simulate function passes along (`question`, for `answerQuestion`). It returns `{ value, participant }`: its decision as `value`, and the new `participant` if the participant changed; without one, the participant stays as it was.
 
 ### Overriding simulators on a trial
 
@@ -395,7 +441,7 @@ PlainInput.trial('name', { content: <p>What is your name?</p> }).simulators({
 }),
 ```
 
-The override is merged with the component's defaults — you only need to specify the decision functions you want to change.
+The override is merged with the component's defaults — you only need to specify the decision functions you want to change. A replacement returns what the function it replaces returns, which the types check, and may leave out `participant` to keep the participant as it was. A CanvasBlock's `respondToSlide` also receives the `slide`, so one replacement can decide each slide's response.
 
 ### Custom components
 
@@ -407,8 +453,8 @@ export default defineComponent({
   component: MyTrialView,
   // Simulate function: uses shared trial logic + decision functions
   simulate: ({ props, simulators, participant }) => {
-    const choice = simulators.decide({ props, participant });
-    return { responseData: { choice: choice.value }, participantState: choice.participantState };
+    const result = simulators.decide({ props, participant });
+    return { responseData: { choice: result.value }, participant: result.participant };
   },
   // Default simulators: one per decision point
   defaultSimulators: {
@@ -417,7 +463,9 @@ export default defineComponent({
 });
 ```
 
-A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data`, `store`, `get`, `getOptional`), so a simulation can depend on earlier answers. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participantState ?? participant`).
+A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data`, `store`, `get`, `getOptional`), so a simulation can depend on earlier answers. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participant ?? participant`), and returns the last one as its `participant`.
+
+A component that records nothing, such as a screen of instructions, can use `simulate: noopSimulate`, which moves on at once.
 
 The simulate function orchestrates the trial logic. The decision functions are the parts where a human would interact — these are what users override to model different participant behaviors. Its `responseData` is checked against the response type the component records with `next`. A component without `simulate` works normally, but a simulation stops at its trials with an error.
 
@@ -482,36 +530,36 @@ createParticipants: () => {
 
 ### Built-in simulator decision functions
 
-| Component | Decision functions | Default behavior |
-|---|---|---|
-| Text | `respond` | Click button, random reaction time |
-| PlainInput | `respond` | Returns `'simulated_input'` |
-| Quest | `answerQuestion`, also given `question` | Random valid answer per question type |
-| CanvasBlock | `respondToSlide`, also given `slide` | Random key from `allowedResponseKeys`, random RT; it counts under the same rules as a real key press |
-| Tutorial | `respondToSlide`, also given `slideIndex` | Advances through slides, no interaction data |
-| RandomDotKinematogram | `respond` | Random key from `allowedResponseKeys`, random RT (may timeout) |
-| Upload | *(none)* | Builds CSVs and POSTs to backend |
-| StoreUI | *(none)* | Uses field default values |
-| CheckDevice | *(none)* | Returns simulated device info |
-| VoiceRecording | `respondTTS`, `respondBase64` | Platform TTS with default text; falls back to dummy sine tone |
-| EnterFullscreen, ExitFullscreen, MicrophoneCheck, ProlificEnding, RequestFilePermission | *(none)* | No-op, advances immediately |
+| Component | Decision functions | Its `value` | Default behavior |
+|---|---|---|---|
+| Text | `respond` | `{ key, reactionTimeMs }` | Click button, random reaction time |
+| PlainInput | `respond` | the text entered | Returns `'simulated_input'` |
+| Quest | `answerQuestion`, also given `question` | `{ answer, durationMs }` | Random valid answer per question type |
+| CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }` | Random key from the slide's `response.keys`, random RT; it counts under the same rules as a real key press |
+| Tutorial | `respondToSlide`, also given `slideIndex` | `{ data, durationMs }` | Advances through slides, no interaction data |
+| RandomDotKinematogram | `respond` | `{ key, reactionTimeMs }` | Random key from `allowedResponseKeys`, random RT (may timeout) |
+| Upload | *(none)* | | Builds CSVs and POSTs to backend |
+| StoreUI | *(none)* | | Uses field default values |
+| CheckDevice | *(none)* | | Returns simulated device info |
+| VoiceRecording | `respondTTS`, `respondBase64` | the text to speak, or the audio as base64 | Platform TTS with default text; falls back to dummy sine tone |
+| fullscreenBlock's screen, MicrophoneCheck, ProlificEnding, RequestFilePermission | *(none)* | | No-op, advances immediately |
 
 
 ## Data Saving
 
-Reactive automatically builds CSV files from experiment data. Each component names a default CSV file for its rows, and the Upload component builds the files at the end of the experiment.
+Reactive automatically builds CSV files from experiment data: the session CSV, with one row per participant, and files with rows per trial. The Upload component builds the files at the end of the experiment.
 
 ### How it works
 
-Each component declares where its data should go with the `csv` option of `defineComponent`:
+Each component declares where its data should go, with the `csv` and `session` options of `defineComponent`:
 
 ```tsx
-defineComponent({ name: 'PlainInput', component: PlainInput, csv: 'session' });             // merge into session CSV
-defineComponent({ name: 'CanvasBlock', component: CanvasBlock, csv: 'canvas', flatten });    // own CSV with custom flattener
+defineComponent({ name: 'PlainInput', component: PlainInput, session: true });               // columns in the session CSV
+defineComponent({ name: 'CanvasBlock', component: CanvasBlock, csv: { canvas: flatten } });  // own CSV with custom flattener
 defineComponent({ name: 'ProlificEnding', component: ProlificEnding, csv: null });           // no CSV output
 ```
 
-Without `csv`, a component's rows go to a CSV named after the component in lowercase. Built-in components come configured. The Upload component produces CSVs automatically with no props needed:
+Without `csv`, a component's rows go to a CSV named after the component in lowercase, unless it sets `session`. Built-in components come configured. The Upload component produces CSVs automatically with no props needed:
 
 ```tsx
 Upload.trial('upload')
@@ -521,12 +569,12 @@ Upload.trial('upload')
 
 | Component | Default CSV | Notes |
 |---|---|---|
-| PlainInput, Quest, CheckDevice, VoiceRecording | `session` | Merged into single session row, namespaced by trial name |
+| PlainInput, Quest, CheckDevice, VoiceRecording | session | Columns in the single session row, namespaced by trial name |
 | Text | `text` | One row per Text component |
 | CanvasBlock | `canvas` | One row per slide, with built-in flattener |
 | StoreUI | `storeui` | One row per StoreUI occurrence |
 | RandomDotKinematogram | `rdk` | One row per RDK trial |
-| EnterFullscreen, ExitFullscreen, MicrophoneCheck, ProlificEnding, Upload, RequestFilePermission, Tutorial | *(none)* | No CSV output |
+| fullscreenBlock's screen, MicrophoneCheck, ProlificEnding, Upload, RequestFilePermission, Tutorial | *(none)* | No CSV output |
 
 ### Output files
 
@@ -536,22 +584,45 @@ For a session `abc123`, the Upload component produces:
 - `canvas.abc123.{timestamp}.csv` — multi-row CSV from CanvasBlock trials
 - One CSV per additional group (text, storeui, or any custom group)
 
-### Per-trial CSV override
+### Per-trial CSV files
 
-Override the default target on any trial:
+A trial can rename its component's CSV file:
 
 ```tsx
 CanvasBlock.trial('practice', { timeline: practiceSlides }).csv('practice'), // separate from main canvas
 CanvasBlock.trial('main', { timeline: mainSlides }),                         // uses default 'canvas'
 ```
 
-The trial's rows are flattened as its component's would be, so the practice CSV also has one row per slide.
+The file keeps its flattener under the new name, so the practice CSV also has one row per slide. Flatteners belong to the component, and a trial never needs one of its own.
 
-Route a trial to multiple CSVs with an array:
+A component that only fills the session row has no file to rename, so a name gives its trial one, next to its session columns:
 
 ```tsx
-Quest.trial('survey', { surveyJson }).csv(['session', 'survey']), // both session row and own file
+Quest.trial('survey', { surveyJson }).csv('survey'), // both session row and own file
 ```
+
+For a component with several files (see [Multi-CSV components](#multi-csv-components)), the trial names the files it renames, and the others stay as they are; `null` leaves one out:
+
+```tsx
+SportsGame.trial('practice').csv({ sports_actions: 'practice_actions', sports_matches: null }),
+```
+
+A name of a file the component does not write, or a plain name for a component with several files, stops the experiment when it loads. So does the name `session`, which belongs to the session CSV; `.session(true)` puts a trial's columns there.
+
+### Session columns
+
+The session CSV holds a single row per participant. A component with `session: true` gives each of its trials columns there, one per field of the response, prefixed with the trial's name (`nickname_value`). A function picks the columns instead, and returns them as one object:
+
+```tsx
+defineComponent({
+  name: 'SportsGame',
+  component: SportsGame,
+  session: (item) => ({ finalScore: item.responseData.score }), // game_finalScore for a trial named 'game'
+  csv: { sports_actions: (item) => flattenActions(item.responseData) },
+});
+```
+
+A trial's `.session(true)` puts its columns in the session CSV although its component does not, and `.session(false)` keeps them out. A response that is a list has no fields to spread into columns, so it needs a function: the types reject `true` for it, and a list that reaches the session CSV from a component that does not declare its response stops the experiment during development and simulation.
 
 ### Adding session-level data
 
@@ -569,18 +640,19 @@ Upload.trial('upload', ({ store, get }) => ({
 
 ### Custom flatteners
 
-Give a custom component a `flatten` function to control how `responseData` becomes CSV rows:
+Without a flattener, each trial is one row, with its response's fields as columns, and a response that is a list is one row per item, like CanvasBlock's slides. To give a trial rows of another shape, map the file to a function that returns its row, or a list of rows. The function reads the trial's row with the component's response, so TypeScript checks what it reads:
 
 ```tsx
 defineComponent({
   name: 'MyGame',
   component: MyGame,
-  csv: 'games',
-  flatten: (item) =>
-    item.responseData.moves.map((move) => ({
-      moveType: move.type,
-      score: move.score,
-    })),
+  csv: {
+    games: (item) =>
+      item.responseData.moves.map((move) => ({
+        moveType: move.type,
+        score: move.score,
+      })),
+  },
 });
 ```
 
@@ -588,19 +660,9 @@ Each row automatically gets standard trial fields prefixed with `trial_` (`trial
 
 Column names starting with `trial_`, `meta_`, `response_`, `url_`, `session_` or `slideblock_meta_` belong to the library. A field of a response or of a flattener's output whose name starts with one of them gets `response_` in front (`meta_score` becomes `response_meta_score`), so it can never take the place of a column the library writes.
 
-### Array flattener
-
-For components whose `responseData` is an array of objects (like CanvasBlock), use the built-in `arrayFlattener` instead of writing your own. Each array element becomes a CSV row with a `block` column set to the trial name:
-
-```tsx
-import { arrayFlattener, defineComponent } from '@adriansteffan/reactive';
-
-defineComponent({ name: 'MyBlockTrial', component: MyBlockTrial, csv: 'blocks', flatten: arrayFlattener });
-```
-
 ### Multi-CSV components
 
-Map several files to their flatteners to produce multiple CSV files from one component:
+Map several files to their flatteners to produce multiple CSV files from one component, and a file to `true` for one row per trial:
 
 ```tsx
 defineComponent({
@@ -655,6 +717,8 @@ These are available both as standalone functions and as methods of every array.
 | `shuffle` | `shuffle(arr)` | Returns a new array with elements randomly reordered (Fisher-Yates) |
 | `sample` | `sample(arr, n?)` | Returns `n` random elements from the array (default 1, with replacement) |
 | `chunk` | `chunk(arr, n)` | Splits the array into chunks of `n` items; the last chunk holds what is left |
+| `mean` | `mean(arr)` | The mean of an array of numbers, or 0 for an empty one |
+| `sum` | `sum(arr)` | The sum of an array of numbers |
 | `.pipe` | `arr.pipe(fn)` | Passes the array to `fn` and returns the result (method only) |
 
 As methods, they chain:
@@ -697,7 +761,7 @@ Each dimension spec is one of:
 | Integer | `{ distribution: 'integer', min, max }` | Uniform integer in `[min, max]` inclusive |
 | Discrete | `{ distribution: 'discrete', outcomes }` | Weighted categorical — `outcomes: [{ value, weight }, ...]` |
 
-For a single dimension, both return a flat `number[]`. For multiple dimensions, they return `number[][]`.
+Both return one array of values per point, `number[][]`, also for a single dimension (`sobol(5, [spec]).map(([rt]) => rt)`).
 
 ```tsx
 import { sobol, halton } from '@adriansteffan/reactive';
@@ -755,7 +819,7 @@ const result = simulateDDMTrial({
   stimOffsetMs: 1000,
   postStimStrategy: { type: 'continue' },
 });
-// → { choice: 0 | 1 | null, rtMs, finalEvidence, isContaminated }
+// → { choice: 0 | 1 | null, reactionTimeMs, finalEvidence, isContaminated }
 
 // Map DDM choice to a key press (null-safe)
 mapDDMChoice(result.choice, ['f', 'j'], 'f');
@@ -783,7 +847,7 @@ Place early in your timeline to let participants select and test their microphon
 MicrophoneCheck.trial()
 ```
 
-The selected device ID is stored automatically and used by all subsequent recording components.
+The selected device ID is stored automatically and used by all subsequent recording components. A recording component of your own reads it with `useAudioDeviceId()`.
 
 ### VoiceRecording
 
@@ -811,8 +875,9 @@ When `minDurationMs` is set, only pause and discard buttons are shown. When not 
 | `content` | — | Prompt text/JSX |
 | `buttonText` | `'Continue'` / `'Save & Continue'` (with minDurationMs) | Button text |
 | `shortButtonText` | `'Continue without improving'` | Button text when recording is too short |
-| `shortRecordingWarning` | Generic message | Warning text for short recordings |
+| `shortRecordingContent` | Generic message | Shown when the recording is shorter than `minDurationMs` |
 | `minDurationMs` | — | Minimum recording duration |
+| `silenceWarningMs`, `silenceWarningContent` | — | After this many milliseconds of silence, a banner with this content asks the participant to speak up |
 | `showVisualizer` | `true` | Show volume level meter |
 | `eagerUpload` | `true` | Upload audio immediately after recording |
 | `animate` | `false` | Fade-in animation |
@@ -876,7 +941,7 @@ Experiments can be packaged as Android or iOS apps with [Capacitor](https://capa
 bunx @adriansteffan/reactive native
 ```
 
-This installs the Capacitor packages, creates `capacitor.config.ts` and imports `@adriansteffan/reactive/native` in `src/main.tsx`. It makes sense to develop with the web version and only switch to the device emulators for device-specific features and testing before packaging.
+This installs the Capacitor packages, creates `capacitor.config.ts` and imports `@adriansteffan/reactive/native` in `src/main.tsx`. It makes sense to develop with the web version and only switch to the device emulators for device-specific features and testing before packaging. `getPlatform()` returns `'native'` in the apps and `'web'` in the browser.
 
 ### Android
 

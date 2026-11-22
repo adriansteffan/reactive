@@ -1,6 +1,8 @@
 import { BaseComponentProps } from '../core/component';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { defineComponent } from '../core/component';
+import { t, useTheme } from '../runner/theme';
+import type { ExperimentStore } from '../core/store';
 
 interface BaseFieldConfig {
   type: 'string' | 'integer' | 'float' | 'boolean';
@@ -34,7 +36,24 @@ interface BooleanFieldConfig extends BaseFieldConfig {
 
 type FieldConfig = StringFieldConfig | NumberFieldConfig | BooleanFieldConfig;
 
-function buildFieldValues(fields: FieldConfig[], store?: Record<string, any>): Record<string, any> {
+type StoreKey = keyof ExperimentStore & string;
+
+// The fields that can write the store key K, whose values are of type V
+type FieldsFor<K extends string, V> =
+  | (string extends V ? StringFieldConfig & { storeKey: K } : never)
+  | (number extends V ? NumberFieldConfig & { storeKey: K } : never)
+  | (boolean extends V ? BooleanFieldConfig & { storeKey: K } : never);
+
+/**
+ * A field of StoreUI. When the project declares its store (`interface ExperimentStore` in
+ * `declare module '@adriansteffan/reactive'`), the types check each field against it: `storeKey`
+ * must be one of the store's keys, and the field's `type` must fit that key's values, `'string'`
+ * for a string, `'integer'` or `'float'` for a number, `'boolean'` for a boolean. A key whose values
+ * are of another type, such as a list, takes no field. Without a declared store, any key is allowed.
+ */
+export type StoreField = [StoreKey] extends [never] ? FieldConfig : { [K in StoreKey]: FieldsFor<K, ExperimentStore[K]> }[StoreKey];
+
+function buildFieldValues(fields: readonly FieldConfig[], store?: Record<string, any>): Record<string, any> {
   const values: Record<string, any> = {};
   fields.forEach(field => {
     values[field.storeKey] = store?.[field.storeKey] !== undefined ? store[field.storeKey] : field.defaultValue;
@@ -43,10 +62,11 @@ function buildFieldValues(fields: FieldConfig[], store?: Record<string, any>): R
 }
 
 interface StoreUIProps extends BaseComponentProps<Record<string, any>> {
-  title?: string;
-  description?: string;
-  fields: FieldConfig[];
-  saveButtonText?: string;
+  /** Shown above the fields. */
+  content?: React.ReactNode;
+  /** The fields, each writing its value to the store under its `storeKey`; see `StoreField` for how the types check them. */
+  fields: readonly StoreField[];
+  buttonText?: string;
 }
 
 function validateField(field: FieldConfig, value: any): string | null {
@@ -59,9 +79,11 @@ function validateField(field: FieldConfig, value: any): string | null {
       return `Value must be at most ${field.max}`;
     }
   } else if (field.type === 'string') {
-    if (field.minLength !== undefined && value.length < field.minLength) {
+    // A field nobody has typed in is empty
+    const length = (value ?? '').length;
+    if (field.minLength !== undefined && length < field.minLength) {
       return `Must be at least ${field.minLength} characters`;
-    } else if (field.maxLength !== undefined && value.length > field.maxLength) {
+    } else if (field.maxLength !== undefined && length > field.maxLength) {
       return `Must be at most ${field.maxLength} characters`;
     }
   }
@@ -82,98 +104,32 @@ function StoreUI({
   next,
   updateStore,
   store,
-  title = 'Settings',
-  description,
-  fields,
-  saveButtonText = 'Save Configuration',
+  content = <h1>Settings</h1>,
+  fields: declaredFields,
+  buttonText = 'Save Configuration',
 }: StoreUIProps) {
+  // The fields that the store allows are a few of these; the component handles every kind
+  const fields: readonly FieldConfig[] = declaredFields;
+  const th = t(useTheme());
   
-  const [values, setValues] = useState<Record<string, any>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, any>>(() => buildFieldValues(fields, store));
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  
-  
-  useEffect(() => {
-    setValues(buildFieldValues(fields, store));
-   
-    const initialTouched: Record<string, boolean> = {};
-    fields.forEach(field => {
-      initialTouched[field.storeKey] = false;
-    });
-    setTouched(initialTouched);
-  }, [store, fields]);
-  
-  
-  useEffect(() => {
-    const newErrors: Record<string, string> = {};
-    
-    fields.forEach(field => {
-      const value = values[field.storeKey];
-      
-      if (!touched[field.storeKey]) return;
-      
-      const error = validateField(field, value);
-      if (error) {
-        newErrors[field.storeKey] = error;
-      }
-    });
-    
-    setErrors(newErrors);
-  }, [values, fields, touched]);
-  
-  const handleChange = (storeKey: string, value: any) => {
-    setValues(prev => ({
-      ...prev,
-      [storeKey]: value
-    }));
-    
-    setTouched(prev => ({
-      ...prev,
-      [storeKey]: true
-    }));
-  };
-  
-  const handleSave = () => {
-    const allTouched: Record<string, boolean> = {};
-    fields.forEach(field => {
-      allTouched[field.storeKey] = true;
-    });
-    setTouched(allTouched);
-    
-    const newErrors: Record<string, string> = {};
-    fields.forEach(field => {
-      const value = values[field.storeKey];
-      
+  // A field shows its error once the participant has changed it, or tried to save
+  const errors = Object.fromEntries(
+    fields.flatMap((field) => {
+      const error = touched[field.storeKey] ? validateField(field, values[field.storeKey]) : null;
+      return error ? [[field.storeKey, error]] : [];
+    }),
+  );
 
-      if (field.type === 'integer' || field.type === 'float') {
-        if (value === undefined || value === null || value === '') {
-          newErrors[field.storeKey] = 'This field is required';
-        } else if (field.min !== undefined && value < field.min) {
-          newErrors[field.storeKey] = `Value must be at least ${field.min}`;
-        } else if (field.max !== undefined && value > field.max) {
-          newErrors[field.storeKey] = `Value must be at most ${field.max}`;
-        }
-      } else if (field.type === 'string') {
-        if (field.minLength !== undefined && value.length < field.minLength) {
-          newErrors[field.storeKey] = `Must be at least ${field.minLength} characters`;
-        } else if (field.maxLength !== undefined && value.length > field.maxLength) {
-          newErrors[field.storeKey] = `Must be at most ${field.maxLength} characters`;
-        }
-      }
-      
-      if (field.validate && !newErrors[field.storeKey]) {
-        const validationResult = field.validate(value);
-        if (validationResult !== true && validationResult !== '') {
-          newErrors[field.storeKey] = typeof validationResult === 'string' 
-            ? validationResult 
-            : 'Invalid value';
-        }
-      }
-    });
-    
-    setErrors(newErrors);
-    
-    if (Object.keys(newErrors).length === 0) {
+  const handleChange = (storeKey: string, value: any) => {
+    setValues((prev) => ({ ...prev, [storeKey]: value }));
+    setTouched((prev) => ({ ...prev, [storeKey]: true }));
+  };
+
+  const handleSave = () => {
+    setTouched(Object.fromEntries(fields.map((field) => [field.storeKey, true])));
+    if (fields.every((field) => validateField(field, values[field.storeKey]) === null)) {
       updateStore(values);
       next(values);
     }
@@ -183,22 +139,14 @@ function StoreUI({
   
   return (
     <div className="max-w-prose mx-auto mt-20 mb-20 px-4">
-      <h1 className="text-4xl font-bold mb-6">{title}</h1>
-      
-      {description && (
-        <article className="prose prose-lg mb-10">
-          {description}
-        </article>
-      )}
+      <article className={th.article}>{content}</article>
       
       <div className="mt-12 space-y-12">
         {fields.map((field) => (
           <div key={field.storeKey} className="space-y-2">
             <label className="block text-xl font-medium text-gray-900">
               {field.label}
-              {field.type === 'integer' && field.min !== undefined && field.max !== undefined && 
-                ` (${field.min}-${field.max})`}
-              {field.type === 'float' && field.min !== undefined && field.max !== undefined && 
+              {(field.type === 'integer' || field.type === 'float') && field.min !== undefined && field.max !== undefined &&
                 ` (${field.min}-${field.max})`}
             </label>
             
@@ -264,9 +212,6 @@ function StoreUI({
                       handleChange(field.storeKey, parsedValue);
                     }
                   }}
-                  step={field.step || (field.type === 'integer' ? 1 : 0.1)}
-                  min={field.min}
-                  max={field.max}
                   className="w-24 px-4 py-2 text-center border-2 border-black rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 
@@ -315,9 +260,9 @@ function StoreUI({
         <button
           onClick={handleSave}
           disabled={hasErrors}
-          className={`bg-white cursor-pointer px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hasErrors ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`${th.button} ${hasErrors ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {saveButtonText}
+          {buttonText}
         </button>
       </div>
     </div>

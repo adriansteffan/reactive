@@ -2,8 +2,7 @@ import React, { useCallback, useContext, useEffect, useRef, useState } from 'rea
 import { uuidv4 } from '../utils/ids';
 import { post } from '../core/backend';
 import { BaseComponentProps } from '../core/component';
-import { FileUpload } from '../core/files';
-import { Platform } from '../core/platform';
+import type { FileUpload } from '../core/files';
 import type { ExperimentData } from '../core/rows';
 import { CompiledTimelineContext, useParams } from '../runner/contexts';
 import { strToU8, zipSync, type Zippable } from 'fflate';
@@ -21,39 +20,41 @@ interface UploadPayload {
   files: FileUpload[];
 }
 
-
-
 const params = {
   upload: { default: true, description: 'Upload the data at the end of the experiment?' },
   download: { default: false, description: 'Locally download the data at the end of the experiment?' },
 };
 
-const getFileBackend = (parentFolder?: string): { backend: FileBackend | null; type: Platform } => {
-  const native = getNative();
-  return native
-    ? { backend: native.createFileBackend(parentFolder), type: 'native' }
-    : { backend: null, type: 'web' };
-};
+// The session's id, numbered if the app already has a folder of that name
+async function uniqueDirectoryName(backend: FileBackend, sessionId: string): Promise<string> {
+  let name = sessionId;
+  for (let i = 1; await backend.directoryExists(name); i++) name = `${sessionId}_${i}`;
+  return name;
+}
 
-// Function to generate a unique directory name
-const getUniqueDirectoryName = async (
-  backend: FileBackend,
-  baseSessionId: string,
-): Promise<string> => {
-  let uniqueSessionId = baseSessionId;
-
-  if (await backend.directoryExists(uniqueSessionId)) {
-    let counter = 1;
-    uniqueSessionId = `${baseSessionId}_${counter}`;
-
-    while (await backend.directoryExists(uniqueSessionId)) {
-      counter++;
-      uniqueSessionId = `${baseSessionId}_${counter}`;
+// Saves the files on the participant's computer, as one zip
+function downloadZip(files: FileUpload[]) {
+  const entries: Zippable = {};
+  for (const file of files) {
+    if (file.encoding === 'base64') {
+      // Recordings are already compressed, so they are stored as they are
+      const binary = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0));
+      entries[file.filename] = [binary, { level: 0 }];
+    } else {
+      entries[file.filename] = strToU8(file.content);
     }
   }
 
-  return uniqueSessionId;
-};
+  const blob = new Blob([zipSync(entries)], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'study-data.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function Upload({
   data,
@@ -99,29 +100,6 @@ function Upload({
   const { upload: shouldUpload, download: shouldDownload } = useParams(params);
   const { components } = useContext(CompiledTimelineContext);
 
-  const downloadFiles = useCallback(async (files: FileUpload[]) => {
-    const entries: Zippable = {};
-    for (const file of files) {
-      if (file.encoding === 'base64') {
-        // Recordings are already compressed, so they are stored as they are
-        const binary = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0));
-        entries[file.filename] = [binary, { level: 0 }];
-      } else {
-        entries[file.filename] = strToU8(file.content);
-      }
-    }
-
-    const blob = new Blob([zipSync(entries)], { type: 'application/zip' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'study-data.zip';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, []);
-
   const handleUpload = useCallback(async () => {
     setUploadState('uploading');
 
@@ -144,9 +122,7 @@ function Upload({
     });
 
     try {
-      if (shouldDownload) {
-        await downloadFiles(files);
-      }
+      if (shouldDownload) downloadZip(files);
 
       // Filter out eagerly uploaded files for the server upload (they're already there)
       const filesToUpload = files.filter((f) => !f._alreadyUploaded);
@@ -162,36 +138,23 @@ function Upload({
         return;
       }
 
-      // Get the current platform and appropriate file backend
-      const { backend, type } = getFileBackend(parentFolder);
-
-      if (type === 'web') {
+      // The apps save the files on the device, and the browser sends them to the server
+      const native = getNative();
+      if (native) {
+        const backend = native.createFileBackend(parentFolder);
+        const directory = await uniqueDirectoryName(backend, sessionIdUpload);
+        await backend.createDirectory(directory);
+        for (const file of files) await backend.saveFile(file.filename, file.content, directory);
+      } else {
         const response = await post('/data', payload);
-        if (response.ok) {
-          setUploadState('success');
-          next({});
-        } else {
-          setUploadState('error');
-        }
-      } else if (backend) {
-        try {
-          const uniqueSessionId = await getUniqueDirectoryName(backend, sessionIdUpload);
-
-          await backend.createDirectory(uniqueSessionId);
-
-          for (const file of files) {
-            await backend.saveFile(file.filename, file.content, uniqueSessionId);
-          }
-
-          setUploadState('success');
-          next({});
-        } catch (error) {
-          console.error(`Error saving files with ${type}:`, error);
-          setUploadState('error');
-        }
+        if (!response.ok) throw new Error(`The server answered ${response.status} ${response.statusText}.`);
       }
+      setUploadState('success');
+      next({});
     } catch (error) {
       console.error('Error uploading:', error);
+      // The participant can try again
+      uploadInitiatedRef.current = false;
       setUploadState('error');
     }
   }, [
@@ -201,7 +164,6 @@ function Upload({
     uploadRaw,
     shouldDownload,
     shouldUpload,
-    downloadFiles,
     next,
     store,
     components,
@@ -215,15 +177,7 @@ function Upload({
     }
   }, [autoUpload, handleUpload]);
 
-  // reset the duplicate prevention if there was an error uploading
-  useEffect(() => {
-    if (uploadState === 'error') {
-      uploadInitiatedRef.current = false;
-    }
-  }, [uploadState]);
-
   const th = t(useTheme());
-  const btnClass = `cursor-pointer ${th.buttonBg} px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`;
 
   return (
     <div className={`${centered ? 'flex items-center justify-center' : ''} ${containerClass ?? th.containerBg}`} style={{ position: 'fixed', inset: 0 }}>
@@ -231,7 +185,7 @@ function Upload({
       {uploadState === 'initial' && !autoUpload && (
         <>
           {content ?? <p>Thank you for participating! Please click the button below to submit your data.</p>}
-          <button onClick={handleUpload} className={`mt-8 ${btnClass}`}>
+          <button onClick={handleUpload} className={`mt-8 ${th.button}`}>
             {buttonText}
           </button>
         </>
@@ -244,15 +198,13 @@ function Upload({
           </>}
         </>
       )}
-      {uploadState === 'success' && <></>}
-
       {uploadState === 'error' && (
         <>
           {errorContent ?? <div className={`${th.error} mb-4`}>
             <p>Sorry, there was an error uploading your data.</p>
             <p>Please try again or contact the researcher.</p>
           </div>}
-          <button onClick={handleUpload} className={btnClass}>
+          <button onClick={handleUpload} className={th.button}>
             {retryButtonText}
           </button>
         </>
@@ -276,7 +228,7 @@ export default defineComponent({
       components,
       generateFiles: props.generateFiles,
       sessionData: props.sessionData,
-      uploadRaw: props.uploadRaw ?? true,
+      uploadRaw: props.uploadRaw,
     });
 
     files.push({

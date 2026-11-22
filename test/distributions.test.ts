@@ -29,7 +29,7 @@ const HALTON_2D_EXPECTED = [
 
 describe('sobol', () => {
   it('produces known 1D Van der Corput values', () => {
-    const result = sobol(8, [{ distribution: 'uniform', min: 0, max: 1 }]) as number[];
+    const result = sobol(8, [{ distribution: 'uniform', min: 0, max: 1 }]).flat();
     expect(result).toHaveLength(8);
     for (let i = 0; i < SOBOL_1D_EXPECTED.length; i++) {
       expect(result[i]).toBeCloseTo(SOBOL_1D_EXPECTED[i], 10);
@@ -48,7 +48,7 @@ describe('sobol', () => {
   });
 
   it('scales uniform dimensions correctly', () => {
-    const result = sobol(3, [{ distribution: 'uniform', min: 200, max: 800 }]) as number[];
+    const result = sobol(3, [{ distribution: 'uniform', min: 200, max: 800 }]).flat();
     // 0.5 * 600 + 200 = 500, 0.75 * 600 + 200 = 650, 0.25 * 600 + 200 = 350
     expect(result[0]).toBeCloseTo(500, 10);
     expect(result[1]).toBeCloseTo(650, 10);
@@ -56,13 +56,13 @@ describe('sobol', () => {
   });
 
   it('produces correct count of points', () => {
-    const result = sobol(100, [{ distribution: 'uniform', min: 0, max: 1 }]) as number[];
+    const result = sobol(100, [{ distribution: 'uniform', min: 0, max: 1 }]).flat();
     expect(result).toHaveLength(100);
   });
 
-  it('returns flat array for 1D, nested for multi-D', () => {
+  it('returns a list of values per point, also for 1D', () => {
     const r1 = sobol(3, [{ distribution: 'uniform', min: 0, max: 1 }]);
-    expect(typeof r1[0]).toBe('number');
+    expect(r1[0]).toHaveLength(1);
 
     const r2 = sobol(3, [
       { distribution: 'uniform', min: 0, max: 1 },
@@ -72,7 +72,7 @@ describe('sobol', () => {
   });
 
   it('all 1D values are in [0, 1] for unit range', () => {
-    const result = sobol(1000, [{ distribution: 'uniform', min: 0, max: 1 }]) as number[];
+    const result = sobol(1000, [{ distribution: 'uniform', min: 0, max: 1 }]).flat();
     for (const v of result) {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThan(1);
@@ -121,13 +121,13 @@ describe('halton', () => {
 
 describe('normal distribution spec', () => {
   it('produces values centered around the mean', () => {
-    const result = sobol(1000, [{ distribution: 'normal', mean: 500, sd: 100 }]) as number[];
+    const result = sobol(1000, [{ distribution: 'normal', mean: 500, sd: 100 }]).flat();
     const avg = result.reduce((a, b) => a + b, 0) / result.length;
     expect(avg).toBeCloseTo(500, 0);
   });
 
   it('median is close to mean (symmetric distribution)', () => {
-    const result = sobol(1000, [{ distribution: 'normal', mean: 500, sd: 100 }]) as number[];
+    const result = sobol(1000, [{ distribution: 'normal', mean: 500, sd: 100 }]).flat();
     const sorted = [...result].sort((a, b) => a - b);
     const median = sorted[500];
     expect(median).toBeCloseTo(500, 0);
@@ -136,7 +136,7 @@ describe('normal distribution spec', () => {
 
 describe('poisson distribution spec', () => {
   it('produces non-negative integers', () => {
-    const result = sobol(100, [{ distribution: 'poisson', mean: 5 }]) as number[];
+    const result = sobol(100, [{ distribution: 'poisson', mean: 5 }]).flat();
     for (const v of result) {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(Number.isInteger(v)).toBe(true);
@@ -144,7 +144,7 @@ describe('poisson distribution spec', () => {
   });
 
   it('mean is close to lambda', () => {
-    const result = sobol(1000, [{ distribution: 'poisson', mean: 5 }]) as number[];
+    const result = sobol(1000, [{ distribution: 'poisson', mean: 5 }]).flat();
     const avg = result.reduce((a, b) => a + b, 0) / result.length;
     expect(avg).toBeCloseTo(5, 0);
   });

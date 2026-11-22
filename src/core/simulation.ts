@@ -17,7 +17,8 @@ export async function simulateParticipant(
   participant: ParticipantState,
 ): Promise<ExperimentData> {
   const initialParticipant = { ...participant };
-  let participantState = { ...participant };
+  // The participant as the trials so far have left it
+  let current = { ...participant };
 
   const run = startRun(experiment, { url: {}, overrides: participant.params });
   const { compiled } = run;
@@ -39,12 +40,12 @@ export async function simulateParticipant(
     const result = await simulate({
       ...createTimelineContext(state.data, state.store, compiled.trials),
       props: state.props,
-      participant: participantState,
+      participant: current,
       initialParticipant,
       simulators: { ...defaultSimulators, ...content.simulators },
       components: compiled.components,
     });
-    participantState = result.participantState ?? participantState;
+    current = result.participant ?? current;
 
     const startMs = currentTime;
     currentTime += result.durationMs ?? 0;
@@ -59,7 +60,6 @@ export async function simulateParticipant(
 
   return state.data;
 }
-
 
 export interface RunSimulationConfig {
   /**

@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { noopSimulate } from '../core/simulation';
 import { defineComponent } from '../core/component';
 import { getNative } from '../core/platform';
+import { t, useTheme } from '../runner/theme';
 
 function RequestFilePermission({
   next,
@@ -19,25 +20,25 @@ function RequestFilePermission({
   content?: ReactNode;
   buttonText?: string;
 }) {
-  const [permissionStatus, setPermissionStatus] = useState('checking');
-  
+  const [checking, setChecking] = useState(true);
+  const th = t(useTheme());
+
   useEffect(() => {
-    if (permissionStatus !== 'checking') return;
-    
+    if (!checking) return;
+
     const checkPermission = async () => {
       const native = getNative();
       if (!native || (await native.canWriteFiles())) {
-        setPermissionStatus('granted');
         next({});
       } else {
-        setPermissionStatus('denied');
+        setChecking(false);
       }
     };
-    
-    checkPermission();
-  }, [next, permissionStatus]);
 
-  if (permissionStatus === 'checking') {
+    checkPermission();
+  }, [next, checking]);
+
+  if (checking) {
     return null;
   }
   
@@ -45,8 +46,8 @@ function RequestFilePermission({
     <div className="flex flex-col items-center justify-center gap-4 p-6 text-xl mt-16 px-10">
       {content}
       <button 
-        onClick={() => setPermissionStatus('checking')} 
-        className="mt-8 bg-white px-8 py-3 border-2 border-black font-bold text-black text-lg rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none"
+        onClick={() => setChecking(true)} 
+        className={`mt-8 ${th.button}`}
       >
         {buttonText}
       </button>

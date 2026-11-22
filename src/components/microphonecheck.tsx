@@ -41,7 +41,7 @@ function MicrophoneSelect({
             }));
           setMicrophones(mics);
 
-          if (mics.length > 0 && !selectedMic) {
+          if (mics.length > 0) {
             setSelectedMic(mics[0].deviceId);
             onMicrophoneSelect(mics[0].deviceId);
           }
@@ -96,7 +96,7 @@ const MicrophoneCheck = ({
   next,
   updateStore,
   animate = false,
-  discardLabel,
+  discardButtonText,
   content = (
     <>
       <h1 className='text-3xl mb-6 font-semibold'>Let's test your microphone!</h1>
@@ -124,7 +124,8 @@ const MicrophoneCheck = ({
   placeholder = 'Select Microphone',
 }: BaseComponentProps & {
   animate?: boolean;
-  discardLabel?: string;
+  /** The button that throws a test recording away. */
+  discardButtonText?: string;
   /** Shown above the microphone menu. */
   content?: ReactNode;
   /** Shown above the recording button. */
@@ -148,12 +149,12 @@ const MicrophoneCheck = ({
   return (
     <div className={`min-h-screen ${th.containerBg}`}>
       <div className={`max-w-prose mx-auto mt-20 mb-20 px-4 ${animate ? 'animate-fade-in opacity-0' : ''}`}>
-        <article className={`prose prose-2xl ${th.prose} text-xl ${th.text} leading-relaxed`}>
+        <article className={th.article}>
           {content}
         </article>
         <MicrophoneSelect onMicrophoneSelect={handleMicSelect} disabled={isRecording} placeholder={placeholder} />
 
-        <article className={`prose prose-2xl ${th.prose} text-xl ${th.text} leading-relaxed`}>
+        <article className={th.article}>
           {recordingContent}
         </article>
 
@@ -165,20 +166,20 @@ const MicrophoneCheck = ({
             deviceId={selectedDeviceId}
             showPause={false}
             showDiscard={false}
-            discardLabel={discardLabel}
+            discardButtonText={discardButtonText}
           />
         </div>
 
         {recordingExists && (
           <div className='animate-fade-in opacity-0'>
-            <article className={`prose prose-2xl ${th.prose} text-xl ${th.text} leading-relaxed`}>
+            <article className={th.article}>
               {playbackContent}
             </article>
 
             <div className='mt-16 flex justify-center'>
               <button
                 onClick={() => next({})}
-                className={`${th.buttonBg} cursor-pointer px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`}
+                className={th.button}
               >
                 {buttonText}
               </button>

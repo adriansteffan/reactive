@@ -1,17 +1,30 @@
 import type React from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { isFullscreen } from '../utils/fullscreen';
+import { getNative } from '../core/platform';
+import { enterFullscreen, exitFullscreen, isFullscreen } from '../utils/fullscreen';
 
 const SetGuardContext = createContext<(config: FullscreenGuardConfig | null) => void>(() => {});
 
 /** Turns the fullscreen guard on with a config, or off with `null`. Unlike a store change, it takes effect at once. */
 export const useSetFullscreenGuard = () => useContext(SetGuardContext);
 
-/** Asks the participant back into fullscreen while EnterFullscreen's keepFullscreen is on. */
-export function FullscreenGuard({ children }: { children: React.ReactNode }) {
+/**
+ * Asks the participant back into fullscreen while a fullscreenBlock with keepFullscreen runs, and
+ * leaves fullscreen once the run is outside every fullscreenBlock, whether it ended or a jump left it.
+ */
+export function FullscreenGuard({ within, children }: { within: boolean; children: React.ReactNode }) {
   const [cfg, setCfg] = useState<FullscreenGuardConfig | null>(null);
   const [fs, setFs] = useState(isFullscreen());
   const active = !!cfg;
+
+  useEffect(() => {
+    if (!within) return;
+    return () => {
+      setCfg(null);
+      getNative()?.exitFullscreen();
+      if (isFullscreen()) exitFullscreen().catch((err) => console.error('Leaving fullscreen failed:', err));
+    };
+  }, [within]);
 
   useEffect(() => {
     if (!active) return;
@@ -36,18 +49,14 @@ export function FullscreenGuard({ children }: { children: React.ReactNode }) {
 
 function GuardPrompt({ cfg }: { cfg: FullscreenGuardConfig }) {
   const reenter = async () => {
-    const el = document.documentElement as any;
     try {
       // Clear stale DOM fullscreen state first — on macOS Chrome after ESC,
       // fullscreenElement may still be set even though the window is windowed,
       // causing requestFullscreen to silently no-op.
       if (document.fullscreenElement) {
-        await document.exitFullscreen().catch(() => {});
+        await exitFullscreen().catch(() => {});
       }
-      if (el.requestFullscreen) await el.requestFullscreen();
-      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
-      else if (el.mozRequestFullScreen) await el.mozRequestFullScreen();
-      else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+      await enterFullscreen();
     } catch (err) {
       console.error('[FullscreenGuard] requestFullscreen failed:', err);
     }
@@ -75,8 +84,10 @@ function GuardPrompt({ cfg }: { cfg: FullscreenGuardConfig }) {
   );
 }
 
-export interface FullscreenGuardConfig {
-  mode?: 'button' | 'overlay';
-  buttonText?: string;
-  content?: React.ReactNode;
-}
+/**
+ * How a fullscreen block asks the participant back into fullscreen: with a small button in the
+ * top-left corner (the default), or with a screen over the trial that shows `content` above the button.
+ */
+export type FullscreenGuardConfig =
+  | { mode?: 'button'; buttonText?: string; content?: never }
+  | { mode: 'overlay'; buttonText?: string; content?: React.ReactNode };

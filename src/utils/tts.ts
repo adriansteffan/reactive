@@ -52,9 +52,7 @@ export async function textToWebmBase64(text: string): Promise<string | null> {
     const webmData = fs.readFileSync(webmPath);
     const base64 = webmData.toString('base64');
 
-    try { fs.unlinkSync(wavPath); } catch { /* ignore */ }
-    try { fs.unlinkSync(webmPath); } catch { /* ignore */ }
-    try { fs.rmdirSync(dir); } catch { /* ignore */ }
+    fs.rmSync(dir, { recursive: true, force: true });
 
     return base64;
   } catch {

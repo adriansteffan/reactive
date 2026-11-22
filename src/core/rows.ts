@@ -1,4 +1,5 @@
 import type { Run } from './experiment';
+import type { TrialCsv } from './files';
 import { type ParamType, paramType } from './params';
 import { type TimelineContext, resolve, type TrialContent } from './timeline';
 
@@ -9,9 +10,11 @@ export interface TrialData {
   /** The component's name. */
   type: string;
   name: string;
-  /** Set with `.csv()`: the CSV file(s) for this row instead of its component's. `null` keeps it out of the CSVs. */
-  csv?: string | string[] | null;
-  responseData?: any;
+  /** Set with `.csv()`: how the row's CSV files differ from its component's. */
+  csv?: TrialCsv;
+  /** Set with `.session()`: whether the row has columns in the session CSV, unlike its component's. */
+  session?: boolean;
+  responseData: any;
   /** Set with `.metadata()`. */
   metadata?: Record<string, any>;
   startMs: number;
@@ -34,6 +37,7 @@ export function createTrialRow(
     type: content.type,
     name: content.name ?? '',
     ...(content.csv !== undefined ? { csv: content.csv } : {}),
+    ...(content.session !== undefined ? { session: content.session } : {}),
     responseData: trial.responseData,
     ...(metadata !== undefined ? { metadata } : {}),
   };
@@ -67,7 +71,7 @@ export interface ExperimentData {
 
 /** The data a session starts with: its params and how it was built, and no trials yet. */
 export function createExperimentData(info: { userAgent: string; url: Record<string, unknown>; run: Run }): ExperimentData {
-  const { specs, session } = info.run;
+  const { specs, params: values, buildSeed } = info.run;
   const params: Record<string, RecordedParam> = {};
   // URL params that nothing declares are recorded too, and appear in the CSVs with a url_ prefix
   for (const [name, value] of Object.entries(info.url)) {
@@ -77,12 +81,12 @@ export function createExperimentData(info: { userAgent: string; url: Record<stri
   }
   for (const [name, spec] of Object.entries(specs)) {
     params[name] = {
-      value: session.params[name],
+      value: values[name],
       registered: true,
       defaultValue: typeof spec.default === 'function' ? undefined : spec.default,
       type: paramType(spec),
       description: spec.description,
     };
   }
-  return { session: { userAgent: info.userAgent, params, buildSeed: session.buildSeed }, trials: [] };
+  return { session: { userAgent: info.userAgent, params, buildSeed }, trials: [] };
 }

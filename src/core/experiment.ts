@@ -4,8 +4,8 @@ import type { Theme } from '../runner/theme';
 import { withSeed } from '../utils/distributions';
 import { advanceToNextContent } from './bytecode';
 import { isReservedParamName, sessionColumns, sessionPrefixes } from './columns';
-import { freezeInDevelopment } from './development';
-import { libraryParams, type ParamSpec, type ParamValues, resolveParams } from './params';
+import { freezeInDevelopment, isProduction } from './development';
+import { type CheckedParams, libraryParams, type ParamSpec, type ParamValues, resolveParams } from './params';
 import { createTrialRow, type ExperimentData } from './rows';
 import type { RunSimulationConfig } from './simulation';
 import type { Store } from './store';
@@ -13,7 +13,9 @@ import {
   type CompiledTimeline,
   compileExperimentTimeline,
   createTimelineContext,
-  describeEntry,
+  describeTimeline,
+  excludeEntries,
+  itemsOf,
   resolve,
   type Timeline,
   type TrialContent,
@@ -36,27 +38,26 @@ export interface Experiment<Params extends Record<string, ParamSpec> = Record<st
 }
 
 export function defineExperiment<const Params extends Record<string, ParamSpec> = {}>(
-  experiment: Experiment<Params>,
+  experiment: Omit<Experiment<Params>, 'params'> & { params?: CheckedParams<Params> },
 ): Experiment<Params> {
-  return experiment;
+  // The checked params are the declared ones, which the types only compare against what they allow
+  return experiment as Experiment<Params>;
 }
 
 // --- Runs ---
 
-/** What stays the same for a participant across hot reloads. */
-export interface Session {
+export interface Run {
   /** The values of every param: the experiment's, those of the components in its timeline, and the library's. */
   params: Record<string, unknown>;
   /** Seeds the random draws made while the timeline is built, so that a rebuild repeats them. */
   buildSeed: number;
-}
-
-export interface Run {
-  session: Session;
   compiled: CompiledTimeline;
   /** Every param of the run as declared, for recording them. */
   specs: Record<string, ParamSpec>;
 }
+
+/** What a run keeps across hot reloads, so that the rebuilt timeline matches the one the participant is in. */
+export type KeptRun = Pick<Run, 'params' | 'buildSeed'>;
 
 /** Builds the timeline for the experiment's params and returns its top-level entries, with nested lists flattened. */
 export function buildTimeline(
@@ -67,24 +68,7 @@ export function buildTimeline(
   const timeline = withSeed(buildSeed, () =>
     typeof experiment.timeline === 'function' ? experiment.timeline(params) : experiment.timeline,
   );
-  const flatten = (items: Timeline): Timeline =>
-    items.flatMap((item) => (Array.isArray(item) ? flatten(item) : item ? [item] : []));
-  return flatten(timeline);
-}
-
-/** Whether a list of the settings screen (1-based positions and trial names) holds a top-level entry. */
-export function inSubset(list: string, index: number, name: string | undefined): boolean {
-  return list.split(',').some((value) => Number(value) === index + 1 || (name !== undefined && value === name));
-}
-
-// Keeps the entries chosen on the settings screen
-function selectSubset(entries: Timeline, url: Record<string, unknown>): Timeline {
-  const include = String(url.includeSubset ?? '');
-  const exclude = String(url.excludeSubset ?? '');
-  return entries.filter((entry, index) => {
-    const { name } = describeEntry(entry);
-    return (!include || inSubset(include, index, name)) && (!exclude || !inSubset(exclude, index, name));
-  });
+  return itemsOf(timeline) as Timeline;
 }
 
 /**
@@ -97,35 +81,53 @@ export function componentParams(compiled: CompiledTimeline) {
   const shown = new Set<string>();
   for (const instruction of compiled.bytecode.instructions) {
     if (instruction.type !== 'ExecuteContent') continue;
-    const { component, hideSettings } = instruction.content;
+    const { component, hideParams } = instruction.content;
     for (const [name, spec] of Object.entries(component.reactive.params)) {
       specs[name] = spec;
       owners[name] ??= component.reactive.name;
-      const hidden = hideSettings === true || (Array.isArray(hideSettings) && hideSettings.includes(name));
+      const hidden = hideParams === true || (Array.isArray(hideParams) && hideParams.includes(name));
       if (!hidden) shown.add(name);
     }
   }
   return { specs, owners, shown };
 }
 
-/**
- * Starts a participant's run: resolves the experiment's params, builds and compiles its
- * timeline, and resolves the params of the components in it and the library's. A previous
- * session, kept across a hot reload, keeps its values and build seed.
- */
-export function startRun(
+/** What the components' checks find wrong with the trials, which keeps a run from starting. */
+export function checkTrials(compiled: CompiledTimeline, params: Record<string, unknown>, production: boolean): string[] {
+  const contents = compiled.bytecode.instructions.flatMap((instruction) =>
+    instruction.type === 'ExecuteContent' ? [instruction.content] : [],
+  );
+  const trials = contents.map(({ type, name }) => ({ type, name }));
+  return contents.flatMap((content, index) => {
+    const problem = content.component.reactive.check?.({
+      props: typeof content.props === 'function' ? undefined : content.props,
+      params,
+      trials,
+      index,
+      production,
+    });
+    return problem ? [problem] : [];
+  });
+}
+
+// What a run and the settings screen both work out: the params, the timeline they build with the
+// trials the URL selects, and what the components' checks find wrong with it
+function prepareRun(
   experiment: Experiment<any>,
   sources: { url: Record<string, unknown>; overrides?: Record<string, unknown> },
-  previous?: Session,
-): Run {
+  previous: KeptRun | undefined,
+) {
   const experimentValues = resolveParams(experiment.params, { ...sources, previous: previous?.params });
   const buildSeed = previous?.buildSeed ?? Math.floor(Math.random() * 2 ** 32);
   const entries = buildTimeline(experiment, experimentValues, buildSeed);
-  const compiled = compileExperimentTimeline(selectSubset(entries, sources.url));
+  // The settings screen's unchecked trials, which its link lists by name or position
+  const excluded = new Set(String(sources.url.excludeSubset ?? '').split(','));
+  const compiled = compileExperimentTimeline(excludeEntries(entries, excluded));
+  const components = componentParams(compiled);
   const own = experiment.params ?? {};
   // The library's params come first, which keeps the order of the CSV columns
   const settings = Object.fromEntries(
-    Object.entries({ ...libraryParams, ...componentParams(compiled).specs }).filter(([name]) => !(name in own)),
+    Object.entries({ ...libraryParams, ...components.specs }).filter(([name]) => !(name in own)),
   );
   for (const name of Object.keys({ ...settings, ...own })) {
     if (isReservedParamName(name)) {
@@ -134,28 +136,40 @@ export function startRun(
       );
     }
   }
-  const settingValues = resolveParams(settings, { ...sources, previous: previous?.params });
-  return {
-    session: { params: { ...settingValues, ...experimentValues }, buildSeed },
-    compiled,
-    specs: { ...settings, ...own },
-  };
+  const params = { ...resolveParams(settings, { ...sources, previous: previous?.params }), ...experimentValues };
+  const run: Run = { params, buildSeed, compiled, specs: { ...settings, ...own } };
+  return { run, entries, components, problems: checkTrials(compiled, params, isProduction()) };
+}
+
+/**
+ * Starts a participant's run: resolves the experiment's params, builds and compiles its
+ * timeline, and resolves the params of the components in it and the library's. A run kept
+ * across a hot reload keeps its values and build seed.
+ */
+export function startRun(
+  experiment: Experiment<any>,
+  sources: { url: Record<string, unknown>; overrides?: Record<string, unknown> },
+  previous?: KeptRun,
+): Run {
+  const { run, problems } = prepareRun(experiment, sources, previous);
+  if (problems.length > 0) throw new Error(`The experiment cannot start: ${problems.join(' ')}`);
+  return run;
 }
 
 /**
  * What the settings screen shows for the values in `url`: the top-level entries of the timeline
- * its params build, and the settings besides the experiment's own params, by whose they are: the
- * library's under `General`, then each component's. As in a run, only the components of the trials
- * that `url` selects count. Params that `url` does not set take the values in `defaults`.
+ * its params build, the settings besides the experiment's own params, by whose they are (the
+ * library's under `General`, then each component's), and what would keep a run from starting. As
+ * in a run, only the components of the trials that `url` selects count. Params that `url` does not
+ * set take the values in `defaults`.
  */
 export function previewTimeline(
   experiment: Experiment<any>,
   url: Record<string, unknown>,
   defaults: Record<string, unknown>,
 ) {
-  const params = resolveParams(experiment.params, { url, previous: defaults });
-  const entries = buildTimeline(experiment, params, 0);
-  const { specs, owners, shown } = componentParams(compileExperimentTimeline(selectSubset(entries, url)));
+  const { entries, components, problems } = prepareRun(experiment, { url }, { params: defaults, buildSeed: 0 });
+  const { specs, owners, shown } = components;
   const own = experiment.params ?? {};
   const settings: Record<string, Record<string, ParamSpec>> = { General: {} };
   for (const [name, spec] of Object.entries(libraryParams)) {
@@ -164,7 +178,7 @@ export function previewTimeline(
   for (const name of shown) {
     if (!(name in own)) settings[owners[name]] = { ...settings[owners[name]], [name]: specs[name] };
   }
-  return { entries: entries.map(describeEntry), settings };
+  return { entries: describeTimeline(entries), settings, problems };
 }
 
 // --- Steps ---

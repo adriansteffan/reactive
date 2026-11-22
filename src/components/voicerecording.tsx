@@ -11,7 +11,6 @@ import { post } from '../core/backend';
 // 0.5s 440Hz sine tone, Opus codec; fallback when system TTS/ffmpeg unavailable
 const DUMMY_AUDIO_BASE64 = 'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAARQEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggE/TbuMU6uEHFO7a1OsggQ67AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNTguNzYuMTAwV0GNTGF2ZjU4Ljc2LjEwMESJiEB/wAAAAAAAFlSua+KuAQAAAAAAAFnXgQFzxYhRMt5OPJYVP5yBACK1nIN1bmSGhkFfT1BVU1aqg2MuoFa7hATEtACDgQLhkZ+BAbWIQOdwAAAAAABiZIEQY6KTT3B1c0hlYWQBATgBgLsAAAAAABJUw2dAm3NzAQAAAAAAACdjwIBnyAEAAAAAAAAaRaOHRU5DT0RFUkSHjUxhdmY1OC43Ni4xMDBzcwEAAAAAAABgY8CLY8WIUTLeTjyWFT9nyAEAAAAAAAAjRaOHRU5DT0RFUkSHlkxhdmM1OC4xMzQuMTAwIGxpYm9wdXNnyKJFo4hEVVJBVElPTkSHlDAwOjAwOjAwLjUwODAwMDAwMAAAH0O2dUJU54EAo5GBAACACINtgtAc/epJ/gE/wKOZgQAVgAinGl2KmC5fWspQj0PpJrkNsG40QKOVgQApgAihLxDkXfvcBBqwyPJFmpFgo5OBAD2ACKE40Hcyqlc9/1ttqV84o5SBAFGACKE40Hcyql5YIeRahOZfwKOXgQBlgAihTMA96uabsR453W080Xeb9h6jkYEAeYAIoTjQdzKqXDNU2kjGo5aBAI2ACKDZbPIJxX8xM7SEPNZetOMco5OBAKGACKE40Hcyqla9XawRHUWoo5OBALWACKE40Hcyqmb1XKO++uAQo5SBAMmACKEvEORd+8XekK1/rf/rrKOVgQDdgAihONB3MqpWRgIfsDV4YBUIo5OBAPGACKE40Hcyql5SyE1S2QFAo5SBAQWACKE40Hcyqla+8h2o+iaxgKOVgQEZgAihONB3MqpeqdUAtSaZmdKAo5OBAS2ACKFIA0bVUn3Jmsi7ollwo5OBAUGACKE40Hcyql6pt6b1uh3oo5WBAVWACKEvEORd+9/La7aeTKZnv/CjlYEBaYAIoTjO/AZGOE9OIX9kO96+gKOTgQF9gAihONB3MqpekAQ00UpCUKOTgQGRgAihSANG1VJz2oSiMZRZKqOQgQGlgAihONB3MqpeqbeK3KORgQG5gAihLxDkXfvfy2sJCQyjmoEBzYAIosXU/J/RyZHEovOUhd6Ypj7UPC8Bo5uBAeGACKRIuuxKsgM4Wle7xUaBZDTNWofASYGgAQAAAAAAABuhkoEB9QAIBkQ+QjevBKpbiF1qJHWihADN/mAcU7trkbuPs4EAt4r3gQHxggHg8IED';
 
-export { DUMMY_AUDIO_BASE64 };
 
 function VoiceRecording({
   content,
@@ -23,24 +22,24 @@ function VoiceRecording({
   data,
   store,
   minDurationMs,
-  shortRecordingWarning,
+  shortRecordingContent,
   showVisualizer = true,
   eagerUpload = true,
   animate = false,
   name,
   silenceWarningMs,
-  silenceWarningText,
+  silenceWarningContent,
 }: BaseComponentProps & {
   content?: React.ReactNode;
   buttonText?: string;
-  /** Button text when recording is shorter than minDurationMs. Defaults to buttonText. */
+  /** Button text when the recording is shorter than minDurationMs. */
   shortButtonText?: string;
   className?: string;
   containerClass?: string;
   /** Minimum recording duration. If shorter, a warning is shown when paused. */
   minDurationMs?: number;
-  /** Custom warning text for short recordings. */
-  shortRecordingWarning?: React.ReactNode;
+  /** Shown when the recording is shorter than minDurationMs. */
+  shortRecordingContent?: React.ReactNode;
   /** Show the volume level meter during recording. Default true. */
   showVisualizer?: boolean;
   /** Upload audio immediately after recording to reduce final upload size. Default true. */
@@ -48,8 +47,8 @@ function VoiceRecording({
   animate?: boolean;
   /** Milliseconds of continuous silence before a "speak up" banner appears. Disabled when undefined. */
   silenceWarningMs?: number;
-  /** Text shown in the silence banner. */
-  silenceWarningText?: string;
+  /** Shown in the silence banner. */
+  silenceWarningContent?: React.ReactNode;
 }) {
   const th = t(useTheme());
   const resolvedButtonText = buttonText ?? (minDurationMs != null ? 'Save & Continue' : 'Continue');
@@ -104,7 +103,7 @@ function VoiceRecording({
       <div className={`max-w-prose mx-auto ${className} pt-20 pb-20 px-4 ${animate ? 'animate-fade-in opacity-0' : ''}`}>
         {content && (
           <article
-            className={`prose prose-2xl ${th.prose} text-xl ${th.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${th.text} leading-relaxed`}
+            className={th.article}
           >
             {content}
           </article>
@@ -119,7 +118,7 @@ function VoiceRecording({
           showDiscard={minDurationMs != null}
           showVisualizer={showVisualizer}
           silenceWarningMs={silenceWarningMs}
-          silenceWarningText={silenceWarningText}
+          silenceWarningContent={silenceWarningContent}
           onPause={handlePause}
           onResume={handleResume}
         />
@@ -129,7 +128,7 @@ function VoiceRecording({
           <div className={`mt-8 flex items-start space-x-3 p-4 border-2 ${th.buttonBorder} ${th.text} ${animate ? 'animate-fade-in opacity-0' : ''}`}>
             <ExclamationTriangleIcon className='w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5' />
             <p className='text-sm'>
-              {shortRecordingWarning ?? 'Your recording seems quite short. Please consider adding more detail to your description.'}
+              {shortRecordingContent ?? 'Your recording seems quite short. Please consider adding more detail to your description.'}
             </p>
           </div>
         )}
@@ -139,7 +138,7 @@ function VoiceRecording({
           <div className={`mt-8 flex justify-center ${animate ? 'animate-fade-in opacity-0' : ''}`}>
             <button
               onClick={finalize}
-              className={`${th.buttonBg} cursor-pointer px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`}
+              className={th.button}
             >
               {isTooShort ? shortButtonText : resolvedButtonText}
             </button>
@@ -151,7 +150,7 @@ function VoiceRecording({
           <div className={`mt-16 flex justify-center ${animate ? 'animate-fade-in opacity-0' : ''}`}>
             <button
               onClick={() => next(recordingData)}
-              className={`${th.buttonBg} cursor-pointer px-8 py-3 border-2 ${th.buttonBorder} font-bold ${th.buttonText} text-lg rounded-xl ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`}
+              className={th.button}
             >
               {resolvedButtonText}
             </button>
@@ -165,12 +164,11 @@ function VoiceRecording({
 export default defineComponent({
   name: 'VoiceRecording',
   component: VoiceRecording,
-  csv: 'session',
+  session: true,
   simulate: async ({ props, simulators, participant }) => {
     // A trial can set respondTTS to undefined to use the base64 simulator instead
     const { respondTTS } = simulators as Partial<typeof simulators>;
     const result = await (respondTTS ?? simulators.respondBase64)({ props, participant });
-    const { participantState } = result;
 
     let data64: string;
     if (respondTTS) {
@@ -191,7 +189,7 @@ export default defineComponent({
         timestamp: new Date().toISOString(),
         recordingDurationMs,
       },
-      participantState,
+      participant: result.participant,
       durationMs: recordingDurationMs,
     };
   },

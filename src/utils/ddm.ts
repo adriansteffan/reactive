@@ -60,7 +60,7 @@ export interface DDMTrialParams {
 
 export interface DDMTrialResult {
   choice: 0 | 1 | null;
-  rtMs: number;            // Total reaction time including delays
+  reactionTimeMs: number;  // Total reaction time including delays
   finalEvidence: number;   // Accumulator value at trial end
   isContaminated: boolean; // True if trial was a random lapse
 }
@@ -73,8 +73,10 @@ function resolveParam(def: ParameterDef): number {
   return uniform(def.min, def.max);
 }
 
-function resolveParamClamped(def: ParameterDef): number {
-  return Math.max(0, resolveParam(def));
+function crossed(evidence: number, lower: number, upper: number): 0 | 1 | null {
+  if (evidence >= upper) return 1;
+  if (evidence <= lower) return 0;
+  return null;
 }
 
 // --- Simulation ---
@@ -90,7 +92,7 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
   if (params.contaminationRate && uniform(0, 1) < params.contaminationRate) {
     return {
       choice: uniform(0, 1) < 0.5 ? 0 : 1,
-      rtMs: uniform(0, params.timeLimitMs),
+      reactionTimeMs: uniform(0, params.timeLimitMs),
       finalEvidence: startingPoint,
       isContaminated: true,
     };
@@ -99,8 +101,8 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
   // A3. Resolve remaining distributions for this trial
   const baseDrift = resolveParam(params.driftRate);
   const baseNoise = Math.max(0, resolveParam(params.noiseLevel));
-  const sensoryDelay = params.sensoryDelayMs != null ? resolveParamClamped(params.sensoryDelayMs) : 0;
-  const motorDelay = params.motorDelayMs != null ? resolveParamClamped(params.motorDelayMs) : 0;
+  const sensoryDelay = Math.max(0, resolveParam(params.sensoryDelayMs ?? 0));
+  const motorDelay = Math.max(0, resolveParam(params.motorDelayMs ?? 0));
 
   // A4. Resolve boundaries
   let currentUpper: number;
@@ -116,7 +118,6 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
   // A5. Fast-forward clock past sensory delay
   let time = sensoryDelay;
   let evidence = startingPoint;
-  let boundaryHit = false;
   let choice: 0 | 1 | null = null;
 
   // B. Simulation loop
@@ -143,7 +144,7 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
         const distToLower = Math.abs(evidence - currentLower);
         return {
           choice: distToUpper <= distToLower ? 1 : 0,
-          rtMs: time + motorDelay,
+          reactionTimeMs: time + motorDelay,
           finalEvidence: evidence,
           isContaminated: false,
         };
@@ -161,56 +162,34 @@ export function simulateDDMTrial(params: DDMTrialParams): DDMTrialResult {
       }
     }
 
-    // B3. Check if evidence crossed or was passed by a boundary
-    if (evidence >= currentUpper) {
-      choice = 1;
-      boundaryHit = true;
-      break;
-    }
-    if (evidence <= currentLower) {
-      choice = 0;
-      boundaryHit = true;
-      break;
-    }
+    // B3. A collapsing boundary can pass the evidence, so check before the step as well
+    choice = crossed(evidence, currentLower, currentUpper);
+    if (choice !== null) break;
 
     // B4. Step evidence
     evidence += currentDrift * dt + currentNoise * sqrtDt * normal(0, 1);
 
     // B5. Check thresholds after stepping
-    if (evidence >= currentUpper) {
-      choice = 1;
-      boundaryHit = true;
-      break;
-    }
-    if (evidence <= currentLower) {
-      choice = 0;
-      boundaryHit = true;
-      break;
-    }
+    choice = crossed(evidence, currentLower, currentUpper);
+    if (choice !== null) break;
   }
 
-  // C. Finalize output
-  let rt: number;
-  if (boundaryHit) {
-    rt = time + motorDelay;
-  } else {
-    // timeLimitMs reached; no decision made
-    rt = params.timeLimitMs;
-    choice = null;
-  }
-
-  return { choice, rtMs: rt, finalEvidence: evidence, isContaminated: false };
+  // C. Without a decision, the trial ends at the time limit
+  return {
+    choice,
+    reactionTimeMs: choice === null ? params.timeLimitMs : time + motorDelay,
+    finalEvidence: evidence,
+    isContaminated: false,
+  };
 }
 
 export function mapDDMChoice(
   choice: 0 | 1 | null,
-  allowedResponseKeys: string[],
-  correctResponse?: string | string[],
+  allowedResponseKeys: readonly string[],
+  correctResponse?: string | readonly string[],
 ): string | null {
   if (choice == null || allowedResponseKeys.length === 0) return null;
-  const correctKeys = Array.isArray(correctResponse)
-    ? correctResponse.map((k) => k.toLowerCase())
-    : correctResponse ? [correctResponse.toLowerCase()] : null;
+  const correctKeys = correctResponse === undefined ? null : [correctResponse].flat().map((k) => k.toLowerCase());
 
   if (!correctKeys) {
     return allowedResponseKeys[Math.floor(uniform(0, allowedResponseKeys.length))];

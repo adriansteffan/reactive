@@ -3,6 +3,7 @@ import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { BaseComponentProps } from '../core/component';
 import { defineComponent } from '../core/component';
 import { useTheme, t } from '../runner/theme';
+import { type ResponseKey, responseKey } from '../utils/keys';
 
 interface TutorialSlideContextValue {
   setCanProgress: (canProgress: boolean) => void;
@@ -43,12 +44,14 @@ export interface TutorialProps
   slides: ReactNode[];
   /** Fade duration in milliseconds (default: 300) */
   fadeDurationMs?: number;
-  finishText?: string;
+  /** The button on the last slide, which ends the screen. */
+  buttonText?: string;
+  className?: string;
   containerClass?: string;
-  /** Key to go forward (default: 'ArrowRight', set to false to disable) */
-  nextKey?: string | false;
-  /** Key to go back (default: 'ArrowLeft', set to false to disable) */
-  backKey?: string | false;
+  /** Key to go forward, a letter in either case (default: 'ArrowRight', set to false to disable) */
+  nextKey?: ResponseKey | false;
+  /** Key to go back, a letter in either case (default: 'ArrowLeft', set to false to disable) */
+  backKey?: ResponseKey | false;
   /** Slide-down + fade-in entrance animation (default: false) */
   animate?: boolean;
 }
@@ -60,7 +63,8 @@ const TutorialComponent = ({
   next,
   slides,
   fadeDurationMs = 300,
-  finishText = 'Start',
+  buttonText = 'Start',
+  className = '',
   containerClass,
   animate = false,
   nextKey = 'ArrowRight',
@@ -130,8 +134,8 @@ const TutorialComponent = ({
   useEffect(() => {
     if (nextKey === false && backKey === false) return;
     const onKey = (e: KeyboardEvent) => {
-      if (nextKey && e.key === nextKey) { e.preventDefault(); goNextIfCan(); }
-      if (backKey && e.key === backKey) { e.preventDefault(); goBack(); }
+      if (nextKey && responseKey([nextKey], e.key)) { e.preventDefault(); goNextIfCan(); }
+      if (backKey && responseKey([backKey], e.key)) { e.preventDefault(); goBack(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -149,7 +153,7 @@ const TutorialComponent = ({
           overflow: 'hidden',
         }}
       >
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div className={className} style={{ flex: 1, position: 'relative' }}>
           <AnimatePresence mode='popLayout'>
             <motion.div
               key={page}
@@ -216,7 +220,7 @@ const TutorialComponent = ({
               transition={{ type: 'spring', stiffness: 500, damping: 15 }}
               className={(canProgress ? NAV_BTN_ACTIVE : NAV_BTN_DISABLED) + (page === slides.length - 1 ? ' px-8' : '')}
             >
-              {page === slides.length - 1 ? finishText : '→'}
+              {page === slides.length - 1 ? buttonText : '→'}
             </motion.button>
           </div>
         </div>
@@ -234,13 +238,13 @@ export const Tutorial = defineComponent({
     let totalDuration = 0;
     for (let i = 0; i < (props.slides?.length ?? 0); i++) {
       const result = simulators.respondToSlide({ props, participant, slideIndex: i });
-      participant = result.participantState ?? participant;
-      slideData[i] = result.value ?? {};
-      totalDuration += result.durationMs ?? 500;
+      participant = result.participant ?? participant;
+      slideData[i] = result.value.data;
+      totalDuration += result.value.durationMs;
     }
-    return { responseData: { slides: slideData }, participantState: participant, durationMs: totalDuration };
+    return { responseData: { slides: slideData }, participant, durationMs: totalDuration };
   },
   defaultSimulators: {
-    respondToSlide: () => ({ value: {}, durationMs: 500 }),
+    respondToSlide: () => ({ value: { data: {}, durationMs: 500 } }),
   },
 });

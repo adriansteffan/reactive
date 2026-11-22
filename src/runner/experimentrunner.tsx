@@ -5,7 +5,7 @@ import {
   realign,
   respond,
   type RunState,
-  type Session,
+  type KeptRun,
   startRun,
   trialAt,
 } from '../core/experiment';
@@ -21,51 +21,22 @@ import { ProgressBar } from './progressbar';
 import { SettingsScreen } from './settingsscreen';
 import { ThemeContext } from './theme';
 
-function collectRefreshRate(callback: (refreshRate: number | null) => void) {
-  let frameCount = 0;
-  const startTime = now();
-  const maxDuration = 20000;
-  let rafId: number;
-  let lastUpdateTime = startTime;
-  const updateInterval = 1000;
-
-  const calculateRefreshRate = () => {
-    const currentTime = now();
-    const elapsedTime = currentTime - startTime;
-    if (elapsedTime > 0) {
-      const refreshRate = Math.round((frameCount * 1000) / elapsedTime);
-      return refreshRate;
+// Counts the frames the screen shows and reports their rate every second, for 20 seconds
+function collectRefreshRate(callback: (refreshRate: number) => void) {
+  const start = now();
+  let frames = 0;
+  let reported = start;
+  let rafId = 0;
+  const count = (timestamp: number) => {
+    frames++;
+    if (timestamp - reported >= 1000) {
+      callback(Math.round((frames * 1000) / (timestamp - start)));
+      reported = timestamp;
     }
-    return null;
+    if (timestamp - start < 20_000) rafId = requestAnimationFrame(count);
   };
-
-  const cleanup = () => {
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-    }
-  };
-
-  const countFrames = (timestamp: number) => {
-    frameCount++;
-    const elapsedTime = timestamp - startTime;
-
-    // Check if it's time for an update (once per second)
-    if (timestamp - lastUpdateTime >= updateInterval) {
-      callback(calculateRefreshRate());
-      lastUpdateTime = timestamp;
-    }
-
-    if (elapsedTime < maxDuration) {
-      rafId = requestAnimationFrame(countFrames);
-    } else {
-      cleanup();
-      callback(calculateRefreshRate());
-    }
-  };
-
-  rafId = requestAnimationFrame(countFrames);
-
-  return cleanup;
+  rafId = requestAnimationFrame(count);
+  return () => cancelAnimationFrame(rafId);
 }
 
 type RunEvent =
@@ -99,6 +70,18 @@ export default function ExperimentRunner({
   /** Turns off the ?dev=true inspector panel, which shows the store and all recorded data. */
   disableDev?: boolean | string;
 }) {
+  const showSettings =
+    !parseBooleanProp(disableSettings) && window.location.pathname.endsWith('/settings');
+
+  return showSettings ? (
+    <SettingsScreen experiment={experiment} />
+  ) : (
+    <Runner experiment={experiment} devDisabled={parseBooleanProp(disableDev)} />
+  );
+}
+
+function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devDisabled: boolean }) {
+  // Space would scroll the participant's page, where it is often a response key
   useEffect(() => {
     const preventSpaceScroll = (e: KeyboardEvent) => {
       if (
@@ -114,23 +97,12 @@ export default function ExperimentRunner({
     return () => window.removeEventListener('keydown', preventSpaceScroll);
   }, []);
 
-  const showSettings =
-    !parseBooleanProp(disableSettings) && window.location.pathname.endsWith('/settings');
-
-  return showSettings ? (
-    <SettingsScreen experiment={experiment} />
-  ) : (
-    <Runner experiment={experiment} devDisabled={parseBooleanProp(disableDev)} />
-  );
-}
-
-function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devDisabled: boolean }) {
-  // Hot reloading renders this runner again with the edited experiment; the session keeps the
-  // participant's params and build seed, so the rebuilt timeline matches the one they are in
-  const sessionRef = useRef<Session | null>(null);
+  // Hot reloading renders this runner again with the edited experiment, which keeps the participant's
+  // params and build seed, so the rebuilt timeline matches the one they are in
+  const keptRef = useRef<KeptRun | undefined>(undefined);
   const run = useMemo(() => {
-    const started = startRun(experiment, { url: urlParams() }, sessionRef.current ?? undefined);
-    sessionRef.current = started.session;
+    const started = startRun(experiment, { url: urlParams() }, keptRef.current);
+    keptRef.current = started;
     return started;
   }, [experiment]);
 
@@ -160,9 +132,9 @@ function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devD
   // The changes the trial on screen made to the store, which take effect when it ends
   const storeUpdatesRef = useRef<Record<string, any>>({});
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each trial starts at the top of the page
   useEffect(() => {
     window.scrollTo(0, 0);
-    trialStartRef.current = { trialNumber, ms: now() };
   }, [trialNumber]);
 
   const next = useCallback(
@@ -173,7 +145,7 @@ function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devD
       const storeUpdates = storeUpdatesRef.current;
       storeUpdatesRef.current = {};
       dispatch({ type: 'respond', responseData, storeUpdates, startMs: start.ms, endMs: now() });
-      // The next trial's start, until it appears; a component that finishes while it appears keeps this
+      // The next trial starts as this one ends, also when its component ends it as soon as it appears
       trialStartRef.current = { trialNumber: trialNumber + 1, ms: now() };
     },
     [trialNumber],
@@ -213,20 +185,21 @@ function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devD
   }
 
   const length = compiled.bytecode.instructions.length;
+  const withinFullscreen = compiled.bytecode.fullscreen.some(([start, end]) => state.pointer >= start && state.pointer < end);
   return (
     <ThemeContext.Provider value={experiment.config?.theme ?? 'light'}>
       <AudioDeviceContext.Provider value={state.store.__audioInputId}>
-        <ParamsProvider value={run.session.params}>
+        <ParamsProvider value={run.params}>
           <CompiledTimelineContext.Provider value={compiled}>
             <div className='w-full h-full'>
-              <FullscreenGuard>
+              <FullscreenGuard within={withinFullscreen}>
                 {experiment.config?.showProgressBar && (
                   <ProgressBar progress={length > 0 ? state.pointer / length : 0} />
                 )}
                 {componentToRender}
               </FullscreenGuard>
-              {!devDisabled && run.session.params.dev === true && (
-                <DevPanel content={content ?? null} store={state.store} data={state.data} />
+              {!devDisabled && run.params.dev === true && (
+                <DevPanel content={content} props={state.props} store={state.store} data={state.data} />
               )}
             </div>
           </CompiledTimelineContext.Provider>

@@ -18,7 +18,6 @@ const DARK_TOKENS = {
   buttonDisabledBorder: 'border-gray-600',
   buttonDisabledShadow: 'shadow-[2px_2px_0px_rgba(75,85,99,1)]',
   error: 'text-red-400',
-  focusRing: 'focus:ring-blue-400',
   inputBg: 'bg-gray-700',
   inputBorder: 'border-gray-500',
   inputText: 'text-[#f5f5f5]',
@@ -45,7 +44,6 @@ const THEME = {
     buttonDisabledBorder: 'border-gray-400',
     buttonDisabledShadow: 'shadow-[2px_2px_0px_rgba(156,163,175,1)]',
     error: 'text-red-500',
-    focusRing: 'focus:ring-blue-500',
     inputBg: '',
     inputBorder: 'border-black',
     inputText: '',
@@ -67,5 +65,12 @@ const THEME = {
 } as const;
 
 export function t(theme: Theme) {
-  return THEME[theme];
+  const tokens = THEME[theme];
+  return {
+    ...tokens,
+    /** The button that ends a screen. */
+    button: `${tokens.buttonBg} cursor-pointer px-8 py-3 border-2 ${tokens.buttonBorder} font-bold ${tokens.buttonText} text-lg rounded-xl ${tokens.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`,
+    /** A screen's text. */
+    article: `prose prose-2xl ${tokens.prose} text-xl ${tokens.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${tokens.text} leading-relaxed`,
+  };
 }

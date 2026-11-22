@@ -4,10 +4,12 @@ import type { ExperimentData, TrialData } from '../src/core/rows';
 import { defineExperiment } from '../src/core/experiment';
 import { seedDistributions } from '../src/utils/distributions';
 import { simulateParticipant } from '../src/core/simulation';
-import { type TimelineContext, compileExperimentTimeline, createTimelineContext, ifBlock, ifGoto, marker, type Timeline, updateStore, whileBlock } from '../src/core/timeline';
+import { type TimelineContext, type Trial, compileExperimentTimeline, createTimelineContext, ifBlock, ifGoto, marker, type Timeline, updateStore, whileBlock } from '../src/core/timeline';
 import { defineComponent } from '../src/core/component';
-import { arrayFlattener, buildUploadFiles, type FileUpload, markRecordingUploaded } from '../src/core/files';
-import CanvasBlock from '../src/components/canvasblock';
+import { buildUploadFiles, type FileUpload, markRecordingUploaded } from '../src/core/files';
+import CanvasBlock, { canvasSize } from '../src/components/canvasblock';
+import Text from '../src/components/text';
+import type { ResponseKey } from '../src/utils/keys';
 import type { SlideData } from '../src/core/slides';
 import { RandomDotKinematogram } from '../src/components/randomdotkinematogram';
 
@@ -137,6 +139,32 @@ describe('compiling', () => {
     expect(() => compileExperimentTimeline([ifGoto(() => true, 'nowhere')])).toThrow("'nowhere'");
   });
 
+  test('a loop that never reaches a trial stops the experiment instead of freezing it', async () => {
+    await expect(run([whileBlock(() => true, [updateStore(() => ({}))]), Answer.trial()])).rejects.toThrow(
+      'The timeline repeats a whileBlock without reaching anything to show',
+    );
+    await expect(run([marker('top'), ifBlock(() => false, [Answer.trial()]), ifGoto(() => true, 'top')])).rejects.toThrow(
+      "The timeline repeats the ifGoto back to the marker 'top'",
+    );
+    const count = updateStore(({ store }) => ({ count: (store.count ?? 0) + 1 }));
+    const counted = await run([whileBlock(({ store }) => (store.count ?? 0) < 1000, [count]), Answer.trial('after')]);
+    expect(names(counted)).toEqual(['after']);
+  });
+
+  test('rejects a marker id used twice, also in different branches', () => {
+    expect(() =>
+      compileExperimentTimeline([ifBlock(() => true, [marker('top')]).else([marker('top')]), ifGoto(() => true, 'top')]),
+    ).toThrow("The marker 'top' is in the timeline twice");
+  });
+
+  test('ifGoto can jump into a block, which runs its remaining items and then checks its condition as usual', async () => {
+    const rows = await run([
+      ifGoto(() => true, 'inside'),
+      whileBlock(({ data }) => data.trials.length < 3, [Answer.trial('first'), marker('inside'), Answer.trial('second')]),
+    ]);
+    expect(names(rows)).toEqual(['second', 'first', 'second']);
+  });
+
   test('rejects anything that is not a trial or a block', () => {
     expect(() => compileExperimentTimeline([{ type: 'Text' } as any])).toThrow('can only hold trials');
   });
@@ -146,7 +174,7 @@ describe('compiling', () => {
       .metadata({ block: 2 })
       .csv('other')
       .collectRefreshRate()
-      .hideSettings(true);
+      .hideParams(true);
     const { bytecode } = compileExperimentTimeline([trial]);
     expect(bytecode.instructions[0]).toEqual({
       type: 'ExecuteContent',
@@ -158,7 +186,7 @@ describe('compiling', () => {
         metadata: { block: 2 },
         csv: 'other',
         collectRefreshRate: true,
-        hideSettings: true,
+        hideParams: true,
       },
     });
   });
@@ -181,20 +209,19 @@ describe('compiling', () => {
 
 describe('trial builder', () => {
   const base = Answer.trial('base', { value: 1 });
-  const contentOf = (trial: ReturnType<typeof Answer.trial>) =>
+  const contentOf = (trial: Trial) =>
     compileExperimentTimeline([trial]).bytecode.instructions[0] as { content: any };
   const context = createTimelineContext(dataOf([]), {}, new Set()) as TimelineContext;
-  const props = (trial: ReturnType<typeof Answer.trial>) => {
+  const props = (trial: Trial) => {
     const value = contentOf(trial).content.props;
     return typeof value === 'function' ? value(context) : value;
   };
 
   test('methods return new trials and leave the base unchanged', () => {
-    const renamed = base.name('other').metadata({ x: 1 });
-    expect(renamed).not.toBe(base);
-    expect(contentOf(base).content.name).toBe('base');
+    const changed = base.metadata({ x: 1 });
+    expect(changed).not.toBe(base);
     expect(contentOf(base).content.metadata).toBeUndefined();
-    expect(contentOf(renamed).content.name).toBe('other');
+    expect(contentOf(changed).content.metadata).toEqual({ x: 1 });
   });
 
   test('the order of calls does not matter', () => {
@@ -204,30 +231,23 @@ describe('trial builder', () => {
   });
 
   test('undefined leaves a setting as it is', () => {
-    const configured = base.csv('x').metadata({ m: 1 }).collectRefreshRate().hideSettings(['a']);
+    const configured = base.csv('x').metadata({ m: 1 }).collectRefreshRate().hideParams(true);
     const same = configured
-      .name(undefined)
-      .props(undefined)
       .metadata(undefined)
       .csv(undefined)
       .collectRefreshRate(undefined)
-      .hideSettings(undefined)
+      .hideParams(undefined)
       .simulators(undefined);
     expect(contentOf(same).content).toEqual(contentOf(configured).content);
   });
 
-  test('props() merges into the props, for objects and context functions alike', () => {
-    const fromCtx = (value: number) => () => ({ value });
-    expect(props(Answer.trial({ value: 1, label: 'a' }).props({ value: 2 }))).toEqual({ value: 2, label: 'a' });
-    expect(props(Answer.trial({ label: 'a' }).props(fromCtx(2)))).toEqual({ value: 2, label: 'a' });
-    expect(props(Answer.trial(() => ({ value: 1, label: 'a' })).props({ value: 2 }))).toEqual({
-      value: 2,
-      label: 'a',
-    });
-    expect(props(Answer.trial(() => ({ value: 1, label: 'a' })).props(fromCtx(2)))).toEqual({
-      value: 2,
-      label: 'a',
-    });
+  test('metadata() merges into the metadata set before, for objects and context functions alike', () => {
+    const metadata = (trial: Trial) => {
+      const value = contentOf(trial).content.metadata;
+      return typeof value === 'function' ? value(context) : value;
+    };
+    expect(metadata(base.metadata({ block: 1 }).metadata({ stimulus: 'a' }))).toEqual({ block: 1, stimulus: 'a' });
+    expect(metadata(base.metadata({ block: 1 }).metadata(() => ({ block: 2 })))).toEqual({ block: 2 });
   });
 
   test('trials of components without props need no argument', () => {
@@ -276,6 +296,7 @@ describe('reading results', () => {
 
   test('unnamed trials and unknown names throw', async () => {
     const unnamed = Answer.trial({ value: 1 });
+    // @ts-expect-error the types reject reading an unnamed trial, and so does the run
     await expect(run([unnamed, Answer.trial('x', ({ get }) => ({ value: get(unnamed).value }))])).rejects.toThrow(
       'Only named trials',
     );
@@ -355,7 +376,7 @@ describe('components', () => {
   test('metadata stays apart from the row and the response, in the data and in the CSVs', async () => {
     const timeline = [
       Answer.trial('a', { value: 7 }).metadata({ name: 'block A', value: 'from metadata' }),
-      Answer.trial('b', { value: 8 }).metadata({ value: 'from metadata' }).csv('session'),
+      Answer.trial('b', { value: 8 }).metadata({ value: 'from metadata' }).session(true),
     ];
     const data = await simulateParticipant(defineExperiment({ timeline }), {});
     expect(data.trials[0]).toMatchObject({
@@ -380,7 +401,7 @@ describe('components', () => {
   });
 
   test('sessionData goes into the session CSV as session_ columns, apart from the params', async () => {
-    const timeline = [Answer.trial('a', { value: 7 }).csv('session')];
+    const timeline = [Answer.trial('a', { value: 7 }).session(true)];
     const data = await simulateParticipant(defineExperiment({ params: { bonus: { default: 1 } }, timeline }), {});
     const files = filesOf(timeline, data, { bonus: 2 });
     expect(csvColumns(files, 'session')).toMatchObject({ bonus: '1', session_bonus: '2', a_value: '7' });
@@ -396,7 +417,7 @@ describe('components', () => {
     });
     const timeline = [
       Odd.trial('a').metadata({ value: 'meta' }),
-      Odd.trial('b').metadata({ value: 'meta' }).csv('session'),
+      Odd.trial('b').metadata({ value: 'meta' }).session(true),
     ];
     const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
     expect(csvColumns(files, 'odd')).toMatchObject({
@@ -432,13 +453,22 @@ describe('components', () => {
     expect([rows('moves'), rows('players')]).toEqual([3, 2]);
   });
 
-  test("a trial's own CSV file keeps its component's flattener", async () => {
+  test('a response that is a list is a row per item, also in a trial\'s own file', async () => {
     const List = defineComponent({
       name: 'List',
       component: (_props: BaseComponentProps<{ x: number }[]>) => null,
-      flatten: arrayFlattener,
       simulate: () => ({ responseData: [{ x: 1 }, { x: 2 }] }),
     });
+    const Numbers = defineComponent({
+      name: 'Numbers',
+      component: (_props: BaseComponentProps<number[]>) => null,
+      simulate: () => ({ responseData: [4, 5] }),
+    });
+    const numbers = [Numbers.trial('n')];
+    const numberLines = filesOf(numbers, await simulateParticipant(defineExperiment({ timeline: numbers }), {}))
+      .find((file) => file.filename.startsWith('numbers.s.'))
+      ?.content.split('\n');
+    expect(numberLines?.map((line) => line.split(',').at(-1))).toEqual(['value', '4', '5']);
     const timeline = [List.trial('practice').csv('practice'), List.trial('main')];
     const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
     const lines = (prefix: string) =>
@@ -448,14 +478,97 @@ describe('components', () => {
     expect(lines('list')?.length).toBe(3);
   });
 
+  test("a trial renames the files of a component with several by name, and each keeps its flattener", async () => {
+    const Game = defineComponent({
+      name: 'Game',
+      component: (_props: BaseComponentProps<{ moves: number[] }>) => null,
+      csv: { moves: (row) => row.responseData.moves.map((move: number) => ({ move })), log: true },
+      session: true,
+      simulate: () => ({ responseData: { moves: [1, 2] } }),
+    });
+    const timeline = [Game.trial('practice').csv({ moves: 'practice_moves', log: null })];
+    const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
+    const lines = (prefix: string) =>
+      files.find((file) => file.filename.startsWith(`${prefix}.s.`))?.content.split('\n');
+    expect(files.map((file) => file.filename.split('.')[0]).sort()).toEqual(['practice_moves', 'session']);
+    expect(lines('practice_moves')?.length).toBe(3);
+    expect(lines('practice_moves')?.[0].split(',')).toContain('move');
+  });
+
+  test("a component's session function picks the trial's columns in the session row, and a file's function can return one row", async () => {
+    const Game = defineComponent({
+      name: 'Game',
+      component: (_props: BaseComponentProps<{ moves: number[] }>) => null,
+      csv: { summary: (item) => ({ last: item.responseData.moves.at(-1) }) },
+      session: (item) => ({ total: item.responseData.moves.length }),
+      simulate: () => ({ responseData: { moves: [1, 2] } }),
+    });
+    const timeline = [Game.trial('g')];
+    const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
+    const session = csvColumns(files, 'session');
+    expect(session.g_total).toBe('2');
+    expect(session).not.toHaveProperty('g_moves');
+    expect(csvColumns(files, 'summary')).toMatchObject({ trial_name: 'g', last: '2' });
+  });
+
+  test('a list in the session CSV, which cannot be spread into columns, stops the experiment', async () => {
+    // The types reject a list for the session CSV, but a component that does not declare its response gets past them
+    const Untyped = defineComponent({
+      name: 'Untyped',
+      component: (_props: BaseComponentProps) => null,
+      session: true,
+      simulate: () => ({ responseData: [{ x: 1 }] }),
+    });
+    const timeline = [Untyped.trial('l')];
+    const data = await simulateParticipant(defineExperiment({ timeline }), {});
+    expect(() => filesOf(timeline, data)).toThrow("The Untyped trial 'l' gives the session CSV a list");
+  });
+
+  test('a component that fills the session row writes no file unless it names one, and a trial can leave the row', async () => {
+    const Input = defineComponent({
+      name: 'Input',
+      component: (_props: BaseComponentProps<{ value: number }>) => null,
+      session: true,
+      simulate: () => ({ responseData: { value: 1 } }),
+    });
+    const timeline = [Input.trial('a'), Input.trial('b').session(false).csv('inputs')];
+    const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
+    expect(files.map((file) => file.filename.split('.')[0]).sort()).toEqual(['inputs', 'session']);
+    expect(csvColumns(files, 'session')).toHaveProperty('a_value');
+    expect(csvColumns(files, 'session')).not.toHaveProperty('b_value');
+  });
+
+  test("no CSV file can be named 'session', which is the session CSV", () => {
+    const component = (_props: BaseComponentProps) => null;
+    expect(() => defineComponent({ name: 'SessionFile', component, csv: 'session' })).toThrow(
+      "SessionFile cannot write a CSV file named 'session'",
+    );
+    expect(() => compileExperimentTimeline([Answer.trial().csv({ answers: 'session' })])).toThrow('use .session(true)');
+  });
+
+  test('a trial that renames CSV files the component does not write, or one of several without saying which, stops at load', () => {
+    const Game = defineComponent({
+      name: 'Game',
+      component: (_props: BaseComponentProps) => null,
+      csv: { moves: true, players: true },
+    });
+    expect(() => compileExperimentTimeline([Game.trial().csv('practice')])).toThrow(
+      "Game writes the CSV files 'moves', 'players', so a trial's .csv() needs to say which",
+    );
+    expect(() => compileExperimentTimeline([Game.trial().csv({ moevs: 'practice' })])).toThrow(
+      "renames the CSV file 'moevs', but Game writes 'moves', 'players'",
+    );
+    expect(() => compileExperimentTimeline([Game.trial().csv(null), Answer.trial().csv('own')])).not.toThrow();
+  });
+
   test('unnamed trials in the session CSV are named after their component', async () => {
     const Input = defineComponent({
       name: 'Input',
       component: (_props: BaseComponentProps<{ value: number }>) => null,
-      csv: 'session',
+      session: true,
       simulate: () => ({ responseData: { value: 1 } }),
     });
-    const timeline = [Input.trial(), Input.trial('age'), Input.trial(), Input.trial().csv('inputs'), Input.trial()];
+    const timeline = [Input.trial(), Input.trial('age'), Input.trial(), Input.trial().session(false), Input.trial()];
     const rows = await run(timeline);
     expect(names(rows)).toEqual(['Input', 'age', 'Input_2', '', 'Input_3']);
     expect(Object.keys(csvColumns(filesOf(timeline, dataOf(rows)), 'session'))).toEqual(
@@ -495,13 +608,13 @@ describe('components', () => {
       name: 'Counter',
       component: (_props: BaseComponentProps<{ seen: number; earlierRows: number }>) => null,
       defaultSimulators: {
-        see: ({ participant }) => ({ participantState: { ...participant, seen: participant.seen + 1 } }),
+        see: ({ participant }) => ({ participant: { ...participant, seen: participant.seen + 1 } }),
       },
       simulate: ({ props, simulators, participant, data }) => {
         const result = simulators.see({ props, participant });
         return {
-          responseData: { seen: result.participantState?.seen, earlierRows: data.trials.length },
-          participantState: result.participantState,
+          responseData: { seen: result.participant?.seen, earlierRows: data.trials.length },
+          participant: result.participant,
         };
       },
     });
@@ -528,7 +641,7 @@ describe('components', () => {
   });
 
   test('CanvasBlock runs slides with the blocks of the main timeline, in the context of the experiment', async () => {
-    const slide = (key: string) => ({ draw: () => {}, allowedResponseKeys: [key], responseTimeLimitMs: 1000 });
+    const slide = (key: ResponseKey) => ({ draw: () => {}, response: { keys: [key], timeLimitMs: 1000 } });
     const rows = await run([
       Answer.trial('before', { value: 3 }),
       CanvasBlock.trial('canvas', {
@@ -549,6 +662,33 @@ describe('components', () => {
     expect(rows[2].responseData.value).toBe(2);
   });
 
+  test("a timed Text screen ends after its duration, unless its button ends it first", async () => {
+    const clickAfter = (reactionTimeMs: number) => () => ({ value: { key: 'button', reactionTimeMs } });
+    const rows = await run([
+      Text.trial({ durationMs: 1000 }),
+      Text.trial({ durationMs: 1000, buttonText: 'Skip' }).simulators({ respond: clickAfter(300) }),
+      Text.trial({ durationMs: 1000, buttonText: 'Skip' }).simulators({ respond: clickAfter(1500) }),
+    ]);
+    expect(rows.map((row) => [row.responseData, row.durationMs])).toEqual([
+      [{}, 1000],
+      [{ key: 'button', reactionTimeMs: 300 }, 300],
+      [{}, 1000],
+    ]);
+  });
+
+  test('the canvas takes its size from pixels, shares of the screen and ratios, and fits the screen', () => {
+    const on = (width: Parameters<typeof canvasSize>[0], height: Parameters<typeof canvasSize>[1]) =>
+      canvasSize(width, height, 1600, 900);
+    expect(on(undefined, undefined)).toEqual({ width: 900, height: 900 });
+    expect(on(400, undefined)).toEqual({ width: 400, height: 400 });
+    expect(on('50%', '50%')).toEqual({ width: 800, height: 450 });
+    expect(on(800, '16:9')).toEqual({ width: 800, height: 450 });
+    expect(on('4:3', 600)).toEqual({ width: 800, height: 600 });
+    expect(on('16:9', undefined)).toEqual({ width: 1600, height: 900 });
+    expect(on(undefined, '4:3')).toEqual({ width: 1200, height: 900 });
+    expect(canvasSize('16:9', undefined, 900, 1600)).toEqual({ width: 900, height: 506 });
+  });
+
   test('a slide function runs once per slide', async () => {
     let calls = 0;
     await run([CanvasBlock.trial({ timeline: [() => ({ draw: () => {}, displayDurationMs: ++calls })] })]);
@@ -556,16 +696,22 @@ describe('components', () => {
   });
 
   test('a simulated slide lasts until the response that ends it, or until its time runs out', async () => {
-    const respond = (key: string | null, reactionTimeMs: number | null) => () => ({ key, reactionTimeMs });
+    // The simulated participant's answers to the slides, in order
+    const answers: [string | null, number | null][] = [[null, null], ['F', 300], ['f', 600], ['f', 700], ['f', 100]];
     const rows = await run([
       CanvasBlock.trial({
         timeline: [
           { draw: () => {}, displayDurationMs: 500, ignoreData: true },
-          { draw: () => {}, allowedResponseKeys: ['f'], simulate: respond('f', 300) },
-          { draw: () => {}, allowedResponseKeys: ['f'], displayDurationMs: 200, responseTimeLimitMs: 1000, simulate: respond('f', 600) },
-          { draw: () => {}, allowedResponseKeys: ['f'], responseTimeLimitMs: 400, simulate: respond('f', 700) },
-          { draw: () => {}, allowedResponseKeys: ['f'], endSlideOnResponse: false, responseTimeLimitMs: 400, simulate: respond('f', 100) },
+          { draw: () => {}, response: { keys: ['f'] } },
+          { draw: () => {}, displayDurationMs: 200, response: { keys: ['f'], timeLimitMs: 1000 } },
+          { draw: () => {}, response: { keys: ['f'], timeLimitMs: 400 } },
+          { draw: () => {}, response: { keys: ['f'], endsSlide: false, timeLimitMs: 400 } },
         ],
+      }).simulators({
+        respondToSlide: () => {
+          const [key, reactionTimeMs] = answers.shift() ?? [null, null];
+          return { value: { key, reactionTimeMs } };
+        },
       }),
     ]);
     expect(rows[0].responseData).toEqual([
@@ -578,10 +724,16 @@ describe('components', () => {
   });
 
   test('a slide that can never end stops the experiment', async () => {
+    // The types reject these slides; the run checks them too, and also catches an empty list of keys
+    // @ts-expect-error
     await expect(run([CanvasBlock.trial({ timeline: [{ draw: () => {} }] })])).rejects.toThrow('never end');
     await expect(
-      run([CanvasBlock.trial({ timeline: [{ draw: () => {}, allowedResponseKeys: true, endSlideOnResponse: false }] })]),
+      // @ts-expect-error
+      run([CanvasBlock.trial({ timeline: [{ draw: () => {}, response: { keys: true, endsSlide: false } }] })]),
     ).rejects.toThrow('never end');
+    await expect(run([CanvasBlock.trial({ timeline: [{ draw: () => {}, response: { keys: [] } }] })])).rejects.toThrow(
+      'never end',
+    );
   });
 
   test("the canvas CSV has a row per slide, with the slide's metadata apart from the block's", async () => {
@@ -611,7 +763,7 @@ describe('components', () => {
     );
     seedDistributions(1);
     const data = await simulateParticipant(defineExperiment({ timeline: trials }), {});
-    const responses = new Set(data.trials.map((row) => row.responseData.response));
+    const responses = new Set(data.trials.map((row) => row.responseData.key));
     // A participant who runs out of time responds with null
     expect([...responses].filter((response) => response !== null).sort()).toEqual([' ', 'f']);
   });

@@ -263,11 +263,8 @@ function resolveTransform(spec: DimensionSpec): (unitValue: number) => number {
   }
 }
 
-function transformPoints(unitPoints: number[][], specs: DimensionSpec[]): number[] | number[][] {
+function transformPoints(unitPoints: number[][], specs: DimensionSpec[]): number[][] {
   const transforms = specs.map(resolveTransform);
-  if (specs.length === 1) {
-    return unitPoints.map((point) => transforms[0](point[0]));
-  }
   return unitPoints.map((point) =>
     point.map((unitValue, dim) => transforms[dim](unitValue)),
   );
@@ -355,13 +352,13 @@ function radicalInverse(index: number, base: number): number {
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73];
 const HALTON_MAX_EFFECTIVE_DIMS = 6;
 
-function sobol(count: number, specs: DimensionSpec[]): number[] | number[][] {
+function sobol(count: number, specs: DimensionSpec[]): number[][] {
   // Generate count+1 and skip the first point (always zero in every dimension)
   const unitPoints = generateSobol(count + 1, specs.length).slice(1);
   return transformPoints(unitPoints, specs);
 }
 
-function halton(count: number, specs: DimensionSpec[]): number[] | number[][] {
+function halton(count: number, specs: DimensionSpec[]): number[][] {
   if (specs.length > HALTON_MAX_EFFECTIVE_DIMS) {
     console.warn(`Halton sequence quality degrades above ${HALTON_MAX_EFFECTIVE_DIMS} dimensions. Consider using sobol() instead.`);
   }
@@ -381,7 +378,7 @@ function sampleParticipants<T extends Record<string, DimensionSpec>>(
   const keys = Object.keys(specs) as (keyof T & string)[];
   const dimSpecs = keys.map((k) => specs[k]);
 
-  let points: number[] | number[][];
+  let points: number[][];
   switch (method) {
     case 'sobol':
       points = sobol(count, dimSpecs);
@@ -395,26 +392,19 @@ function sampleParticipants<T extends Record<string, DimensionSpec>>(
   }
 
   return Array.from({ length: count }, (_, i) => {
-    const row = keys.length === 1 ? [points[i] as number] : (points[i] as number[]);
-    return { index: i, ...Object.fromEntries(keys.map((k, d) => [k, row[d]])) } as { [K in keyof T]: number } & { index: number };
+    return { index: i, ...Object.fromEntries(keys.map((k, d) => [k, points[i][d]])) } as { [K in keyof T]: number } & { index: number };
   });
 }
 
-function randomPoints(count: number, specs: DimensionSpec[]): number[] | number[][] {
+function randomPoints(count: number, specs: DimensionSpec[]): number[][] {
   const transforms = specs.map(resolveTransform);
-  if (specs.length === 1) {
-    return Array.from({ length: count }, () => transforms[0](uniform(0, 1)));
-  }
   return Array.from({ length: count }, () =>
     transforms.map((t) => t(uniform(0, 1))),
   );
 }
 
-function draw(spec: DimensionSpec): number {
-  return resolveTransform(spec)(uniform(0, 1));
-}
 
-export { normal, poisson, uniform, seedDistributions, withSeed, withStream, countDraws, sobol, halton, sampleParticipants, draw };
+export { normal, poisson, uniform, seedDistributions, withSeed, withStream, countDraws, sobol, halton, sampleParticipants };
 // Exported for the tests, not part of the public API
-export { mt19937, standardNormalQuantile, poissonQuantile, radicalInverse };
+export { mt19937, standardNormalQuantile, poissonQuantile };
 export type { DimensionSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod };

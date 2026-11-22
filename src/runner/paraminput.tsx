@@ -3,6 +3,23 @@ import type { ParamType } from '../core/params';
 const fieldClass =
   'block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm';
 
+/** The settings page's on/off switch. */
+export function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type='button'
+      onClick={onClick}
+      className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${on ? 'bg-blue-600' : 'bg-gray-200'}`}
+      role='switch'
+      aria-checked={on}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${on ? 'translate-x-5' : 'translate-x-0'}`}
+      />
+    </button>
+  );
+}
+
 /** The settings page's field for a param's value, kept as text; an empty value leaves the param at its default. */
 export function ParamInput({
   type,
@@ -38,17 +55,7 @@ export function ParamInput({
     const on = (value || String(defaultValue)) === 'true';
     return (
       <>
-        <button
-          type='button'
-          onClick={() => onChange(on ? 'false' : 'true')}
-          className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${on ? 'bg-blue-600' : 'bg-gray-200'}`}
-          role='switch'
-          aria-checked={on}
-        >
-          <span
-            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${on ? 'translate-x-5' : 'translate-x-0'}`}
-          />
-        </button>
+        <Switch on={on} onClick={() => onChange(on ? 'false' : 'true')} />
         <span className='ml-4 text-gray-500'>{on ? 'True' : 'False'}</span>
       </>
     );

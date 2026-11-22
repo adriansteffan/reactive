@@ -7,16 +7,18 @@ import type { TrialContent } from '../core/timeline';
 const showJson = (value: unknown) =>
   JSON.stringify(value, (_key, v) => (React.isValidElement(v) ? '<element>' : v), 2);
 
-// Props and metadata given as functions of the timeline context are only known once the trial runs
-const showSetting = (value: unknown) => showJson(typeof value === 'function' ? '(dynamic)' : value);
+// Metadata given as a function of the timeline context is only known once the trial ends
+const showMetadata = (value: unknown) => showJson(typeof value === 'function' ? '(dynamic)' : value);
 
-/** The ?dev=true panel: the trial on screen, the store, and everything recorded so far. */
+/** The ?dev=true panel: the trial on screen and its props, the store, and everything recorded so far. */
 export function DevPanel({
   content,
+  props,
   store,
   data,
 }: {
-  content: TrialContent | null;
+  content: TrialContent | undefined;
+  props: Record<string, any>;
   store: Store;
   data: ExperimentData;
 }) {
@@ -32,20 +34,24 @@ export function DevPanel({
       >
         {open ? '✕' : 'DEV'}
       </button>
-      {open && content && (
+      {open && (
         <div className='fixed top-10 right-2 z-50 w-96 max-h-[80vh] overflow-auto bg-white text-black text-xs font-mono border-2 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] p-3'>
-          <div className='font-bold mb-2 text-sm'>
-            {content.type} {content.name ? `(${content.name})` : ''}
-          </div>
-          <div className='mb-2'>
-            <span className='font-bold'>Props:</span>
-            <pre className='mt-1 whitespace-pre-wrap break-all'>{showSetting(content.props)}</pre>
-          </div>
-          {content.metadata && (
-            <div className='mb-2'>
-              <span className='font-bold'>Metadata:</span>
-              <pre className='mt-1 whitespace-pre-wrap break-all'>{showSetting(content.metadata)}</pre>
-            </div>
+          {content && (
+            <>
+              <div className='font-bold mb-2 text-sm'>
+                {content.type} {content.name ? `(${content.name})` : ''}
+              </div>
+              <div className='mb-2'>
+                <span className='font-bold'>Props:</span>
+                <pre className='mt-1 whitespace-pre-wrap break-all'>{showJson(props)}</pre>
+              </div>
+              {content.metadata && (
+                <div className='mb-2'>
+                  <span className='font-bold'>Metadata:</span>
+                  <pre className='mt-1 whitespace-pre-wrap break-all'>{showMetadata(content.metadata)}</pre>
+                </div>
+              )}
+            </>
           )}
           <div className='mb-2'>
             <span className='font-bold'>Store:</span>

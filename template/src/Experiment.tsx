@@ -53,12 +53,12 @@ const CustomTrial = defineComponent({
     let totalTimeMs = 0;
     for (let i = 0; i < props.maxCount; i++) {
       const result = simulators.click({ props, participant });
-      participant = result.participantState ?? participant;
+      participant = result.participant ?? participant;
       totalTimeMs += result.value;
     }
     return {
       responseData: { totalTimeMs, clicks: props.maxCount },
-      participantState: participant,
+      participant,
       durationMs: totalTimeMs,
     };
   },

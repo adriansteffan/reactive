@@ -1,8 +1,6 @@
 import { useContext, useEffect, useRef } from 'react';
 import { type BaseComponentProps, defineComponent } from '../core/component';
-import { arrayFlattener } from '../core/files';
 import {
-  acceptsKey,
   compileSlides,
   endSlide,
   type Slide,
@@ -16,128 +14,56 @@ import { createTimelineContext } from '../core/timeline';
 import { CompiledTimelineContext } from '../runner/contexts';
 import { uniform } from '../utils/distributions';
 import { isFullscreen } from '../utils/fullscreen';
+import { responseKey } from '../utils/keys';
+
+/** Pixels, a share of the screen (`'80%'`), or a ratio to the other side (`'16:9'`). */
+type CanvasSize = number | `${number}%` | `${number}:${number}`;
 
 type CanvasBlockProps = {
   /** The slides, with ifBlock, whileBlock and updateStore for control flow. */
   timeline: SlideTimeline;
-  width?: number | string;
-  height?: number | string;
+  width?: CanvasSize;
+  height?: CanvasSize;
   /** Sets colors and fonts before each slide is drawn. */
   styleCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
   /** Runs once, after the canvas is set up. */
   initCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
 } & BaseComponentProps<SlideData[]>;
 
-// The canvas's size in CSS pixels: a number is pixels, a percentage is of the viewport, and a ratio
-// such as '16:9' sets one side from the other
-function canvasSize(width: number | string | undefined, height: number | string | undefined) {
-  const vpWidth = isFullscreen() ? window.screen.width : window.innerWidth;
-  const vpHeight = isFullscreen() ? window.screen.height : window.innerHeight;
-  let computedWidth: number;
-  let computedHeight: number;
-  const parseNonRatioDimension = (
-    dim: number | string | undefined,
-    vpDim: number,
-  ): number | null => {
-    if (typeof dim === 'number') {
-      return dim;
-    }
-    if (typeof dim === 'string' && dim.includes('%')) {
-      const p = parseFloat(dim);
-      if (!Number.isNaN(p)) {
-        return (vpDim * p) / 100;
-      }
-    }
-    return null;
+/**
+ * The canvas's size in CSS pixels on a screen of the given size. A number is pixels, and a percentage
+ * is a share of the screen. A ratio such as `'16:9'` is width to height: it sets one side from the
+ * other, or without the other, makes the largest canvas of that shape that fits the screen. Without
+ * any, the canvas is the largest square that fits.
+ */
+export function canvasSize(
+  width: CanvasSize | undefined,
+  height: CanvasSize | undefined,
+  screenWidth: number,
+  screenHeight: number,
+) {
+  const pixels = (size: CanvasSize | undefined, screen: number) =>
+    typeof size === 'number' ? size : size?.endsWith('%') ? (screen * Number.parseFloat(size)) / 100 : undefined;
+  const ratio = (size: CanvasSize | undefined) => {
+    if (typeof size !== 'string' || !size.includes(':')) return undefined;
+    const [w, h] = size.split(':').map(Number);
+    return w / h;
   };
-  const initialWidthPx = parseNonRatioDimension(width, vpWidth);
-  const initialHeightPx = parseNonRatioDimension(height, vpHeight);
-  const isWidthRatio = typeof width === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(width);
-  const isHeightRatio =
-    typeof height === 'string' && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(height);
-  if (initialWidthPx !== null && initialHeightPx !== null) {
-    computedWidth = initialWidthPx;
-    computedHeight = initialHeightPx;
-  } else if (initialWidthPx !== null && initialHeightPx === null && !isHeightRatio) {
-    computedWidth = initialWidthPx;
-    computedHeight = initialWidthPx;
-  } else if (initialHeightPx !== null && initialWidthPx === null && !isWidthRatio) {
-    computedHeight = initialHeightPx;
-    computedWidth = initialHeightPx;
-  } else if (
-    initialWidthPx === null &&
-    initialHeightPx === null &&
-    !isWidthRatio &&
-    !isHeightRatio
-  ) {
-    const s = Math.min(vpWidth, vpHeight);
-    computedWidth = s;
-    computedHeight = s;
+  let w = pixels(width, screenWidth);
+  let h = pixels(height, screenHeight);
+  const shape = ratio(width) ?? ratio(height);
+  if (shape === undefined) {
+    w ??= h ?? Math.min(screenWidth, screenHeight);
+    h ??= w;
+  } else if (w !== undefined) {
+    h = w / shape;
+  } else if (h !== undefined) {
+    w = h * shape;
   } else {
-    let baseW = initialWidthPx;
-    let baseH = initialHeightPx;
-    if (isHeightRatio && baseW === null) {
-      baseW = baseH ?? vpHeight;
-    }
-    if (isWidthRatio && baseH === null) {
-      baseH = baseW ?? vpWidth;
-    }
-    if (baseW === null && baseH === null) {
-      const s = Math.min(vpWidth, vpHeight);
-      baseW = s;
-      baseH = s;
-    } else if (baseW === null) {
-      baseW = baseH!;
-    } else if (baseH === null) {
-      baseH = baseW!;
-    }
-    computedWidth = baseW;
-    computedHeight = baseH ?? 0;
+    w = Math.min(screenWidth, screenHeight * shape);
+    h = w / shape;
   }
-  if (isWidthRatio && !isHeightRatio) {
-    try {
-      const m = (width as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-      if (m) {
-        computedWidth = (computedHeight / parseFloat(m[2])) * parseFloat(m[1]);
-      }
-    } catch {
-      console.error('Invalid width ratio string:', width);
-    }
-  } else if (isHeightRatio && !isWidthRatio) {
-    try {
-      const m = (height as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-      if (m) {
-        computedHeight = (computedWidth / parseFloat(m[1])) * parseFloat(m[2]);
-      }
-    } catch {
-      console.error('Invalid height ratio string:', height);
-    }
-  } else if (isWidthRatio && isHeightRatio) {
-    console.warn(`Both width (${width}) and height (${height}) are ratios. Prioritizing width.`);
-    try {
-      const mW = (width as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-      if (mW) {
-        computedWidth = (vpHeight / parseFloat(mW[2])) * parseFloat(mW[1]);
-        const mH = (height as string).match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-        if (mH) {
-          computedHeight = (computedWidth / parseFloat(mH[1])) * parseFloat(mH[2]);
-        } else {
-          computedHeight = computedWidth;
-        }
-      } else {
-        const s = Math.min(vpWidth, vpHeight);
-        computedWidth = s;
-        computedHeight = s;
-      }
-    } catch (e) {
-      console.error('Error parsing ratios:', e);
-      const s = Math.min(vpWidth, vpHeight);
-      computedWidth = s;
-      computedHeight = s;
-    }
-  }
-
-  return { width: Math.round(computedWidth), height: Math.round(computedHeight) };
+  return { width: Math.round(w), height: Math.round(h) };
 }
 
 function CanvasBlock({
@@ -161,7 +87,13 @@ function CanvasBlock({
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-    const size = canvasSize(width, height);
+    const fullscreen = isFullscreen();
+    const size = canvasSize(
+      width,
+      height,
+      fullscreen ? window.screen.width : window.innerWidth,
+      fullscreen ? window.screen.height : window.innerHeight,
+    );
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(size.width * dpr);
     canvas.height = Math.round(size.height * dpr);
@@ -225,9 +157,10 @@ function CanvasBlock({
       for (const press of pressed) {
         // Key events are timestamped on the frames' clock; a key pressed before the slide appeared does not count
         const reactionTimeMs = press.timeStamp - onset;
-        if (response || reactionTimeMs < 0 || reactionTimeMs >= timeoutMs || !acceptsKey(slide, press.key)) continue;
-        response = { key: press.key, reactionTimeMs: Math.round(reactionTimeMs) };
-        if (slide.hideOnResponse) {
+        const key = responseKey(slide.response?.keys, press.key);
+        if (response || reactionTimeMs < 0 || reactionTimeMs >= timeoutMs || key === undefined) continue;
+        response = { key, reactionTimeMs: Math.round(reactionTimeMs) };
+        if (slide.response?.hidesDrawing) {
           clear();
           hidden = true;
         }
@@ -236,7 +169,7 @@ function CanvasBlock({
 
       // Half a frame more ends the slide on the frame nearest its time
       const elapsed = timestamp - drawnAt + halfFrame;
-      if ((response && slide.endSlideOnResponse !== false) || elapsed >= timeoutMs) {
+      if ((response && slide.response?.endsSlide !== false) || elapsed >= timeoutMs) {
         run = endSlide(compiled, context, run, {
           startMs: Math.round(onset),
           // It disappears with the next frame, as long after this one as it appeared after the frame that drew it
@@ -276,9 +209,8 @@ function CanvasBlock({
 export default defineComponent({
   name: 'CanvasBlock',
   component: CanvasBlock,
-  csv: 'canvas',
   // Every slide's row has metadata, if only empty, so the block's own always goes to slideblock_meta_ columns
-  flatten: (item) => arrayFlattener(item).map((row) => ({ metadata: {}, ...row })),
+  csv: { canvas: (item) => item.responseData.map((row) => ({ metadata: {}, ...row })) },
   simulate: ({ props, simulators, participant, data, store, get, getOptional }) => {
     const compiled = compileSlides(props.timeline);
     const context = { data, store, get, getOptional, slides: [] };
@@ -287,19 +219,16 @@ export default defineComponent({
 
     while (run.slide) {
       const slide = run.slide;
-      const result = slide.simulate
-        ? slide.simulate({ slide, participant })
-        : simulators.respondToSlide({ props, participant, slide });
-      participant = result.participantState ?? participant;
+      const result = simulators.respondToSlide({ props, participant, slide });
+      participant = result.participant ?? participant;
 
       // The same rules as in the browser: a key counts within the slide's time, and ends it unless the slide says otherwise
       const timeoutMs = slideTimeoutMs(slide);
-      const { key, reactionTimeMs } = result;
+      const { key: pressed, reactionTimeMs } = result.value;
+      const key = pressed === null ? undefined : responseKey(slide.response?.keys, pressed);
       const response =
-        key !== null && reactionTimeMs !== null && reactionTimeMs < timeoutMs && acceptsKey(slide, key)
-          ? { key, reactionTimeMs }
-          : undefined;
-      const durationMs = response && slide.endSlideOnResponse !== false ? response.reactionTimeMs : timeoutMs;
+        key !== undefined && reactionTimeMs !== null && reactionTimeMs < timeoutMs ? { key, reactionTimeMs } : undefined;
+      const durationMs = response && slide.response?.endsSlide !== false ? response.reactionTimeMs : timeoutMs;
       if (durationMs === Number.POSITIVE_INFINITY) {
         throw new Error('A simulated participant gave no response to a slide that only a response ends.');
       }
@@ -313,27 +242,24 @@ export default defineComponent({
       time += durationMs;
     }
 
-    return { responseData: run.slides, participantState: participant, storeUpdates: run.store, durationMs: time };
+    return { responseData: run.slides, participant, storeUpdates: run.store, durationMs: time };
   },
   defaultSimulators: {
     respondToSlide: ({ slide }): SlideSimulatorResult => {
-      const keys = (slide as Slide).allowedResponseKeys;
+      const keys = (slide as Slide).response?.keys;
       if (keys === true) {
-        return { key: ' ', reactionTimeMs: uniform(200, 800) };
+        return { value: { key: ' ', reactionTimeMs: uniform(200, 800) } };
       }
-      if (Array.isArray(keys) && keys.length > 0) {
-        return { key: keys[Math.floor(uniform(0, keys.length))], reactionTimeMs: uniform(200, 800) };
+      if (keys && keys.length > 0) {
+        return { value: { key: keys[Math.floor(uniform(0, keys.length))], reactionTimeMs: uniform(200, 800) } };
       }
-      return { key: null, reactionTimeMs: null };
+      return { value: { key: null, reactionTimeMs: null } };
     },
   },
 });
 
 /** Slides that count down from `seconds`, one second each, recording nothing. */
 export function canvasCountdown(seconds: number): Slide[] {
-  if (seconds <= 0) {
-    return [];
-  }
   return Array.from({ length: seconds }, (_, i) => {
     const number = seconds - i;
 

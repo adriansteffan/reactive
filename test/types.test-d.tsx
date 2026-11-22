@@ -6,8 +6,10 @@ import {
   type TimelineContext,
   defineComponent,
   defineExperiment,
+  fullscreenBlock,
   ifBlock,
   PlainInput,
+  StoreUI,
   Text,
   Upload,
   updateStore,
@@ -32,7 +34,7 @@ const CustomTrial = defineComponent({
   defaultSimulators: {
     click: ({ props, participant }) => {
       const n: number = props.maxCount;
-      return { value: 300 * n, participantState: { ...participant, clicked: true } };
+      return { value: 300 * n, participant: { ...participant, clicked: true } };
     },
   },
   simulate: ({ props, simulators, participant, store, get }) => {
@@ -51,7 +53,9 @@ const CustomTrial = defineComponent({
 defineComponent({
   name: 'Bad',
   component: ({ next }: BaseComponentProps<ClickResponse>) => {
+    // @ts-expect-error a component that declares a response ends with it
     next();
+    next({ totalTime: 1, clicks: 1 });
     return null;
   },
   // @ts-expect-error responseData does not match the component's response
@@ -90,7 +94,7 @@ defineComponent({
 
 // A component's own params are typed like the experiment's
 const readerParams = { showFeedback: { default: true }, mode: { values: ['a', 'b'], default: 'a' } } as const;
-defineComponent({
+const ParamReader = defineComponent({
   name: 'ParamReader',
   component: (_props: BaseComponentProps) => {
     const { showFeedback, mode } = useParams(readerParams);
@@ -100,6 +104,23 @@ defineComponent({
     return shown && other ? null : null;
   },
   params: readerParams,
+});
+
+// A response that allows undefined can be left out
+defineComponent({
+  name: 'MaybeResponse',
+  component: ({ next }: BaseComponentProps<{ key: string } | undefined>) => {
+    next();
+    return null;
+  },
+});
+defineComponent({
+  name: 'Undeclared',
+  component: ({ next }: BaseComponentProps) => {
+    next();
+    next({ anything: 1 });
+    return null;
+  },
 });
 
 // Only name and component are required
@@ -127,6 +148,19 @@ CustomTrial.trial({ maxCount: 5, maxCont: 6 });
 Text.trial();
 Text.trial('intro');
 Text.trial({ content: <p>Hi</p> });
+Text.trial({ allowedResponseKeys: ['Enter', ' '] });
+Text.trial({ durationMs: 500, buttonText: 'Skip', allowedResponseKeys: [' '] });
+
+// A component whose props come in variants keeps each variant's own props
+const Variant = defineComponent({
+  name: 'Variant',
+  component: (_props: BaseComponentProps & ({ mode: 'a'; a: number } | { mode: 'b'; b: string })) => null,
+});
+Variant.trial({ mode: 'a', a: 1 });
+// @ts-expect-error b belongs to the other variant
+Variant.trial({ mode: 'a', b: 'x' });
+// Keys outside the suggested names, such as letters of other layouts
+Text.trial({ allowedResponseKeys: ['ö', 'ñ'] });
 Text.trial('intro', { content: 'Hi', buttonText: 'Go' });
 // @ts-expect-error wrong prop type on an optional prop
 Text.trial({ buttonText: 3 });
@@ -140,17 +174,55 @@ const asJsx = <Warmup next={() => {}} data={noData} store={{}} updateStore={() =
 
 // --- chained methods ---
 const base = CustomTrial.trial({ maxCount: 5 });
-base.name('a').props({ maxCount: 2 }).metadata({ block: 1 }).collectRefreshRate().csv(null);
-base.props((context) => ({ maxCount: context.get(PlainInput, 'nickname').value.length }));
-// @ts-expect-error wrong type in props()
-base.props({ maxCount: 'x' });
+base.metadata({ block: 1 }).collectRefreshRate().csv(null);
+CustomTrial.trial((context) => ({ maxCount: context.get(PlainInput, 'nickname').value.length }));
 base.simulators({ click: ({ participant }) => ({ value: participant.speed }) });
 // @ts-expect-error simulator the component does not have
 base.simulators({ tap: () => ({ value: 1 }) });
+// @ts-expect-error a replacement returns what the simulator it replaces returns
+base.simulators({ click: () => ({ wrong: 1 }) });
+PlainInput.trial('typed').simulators({ respond: () => ({ value: 'typed' }) });
+defineComponent({
+  name: 'OutsideValue',
+  component: (_props: BaseComponentProps) => null,
+  defaultSimulators: {
+    // @ts-expect-error a simulator's decision goes in value
+    decide: () => ({ key: 'f' }),
+  },
+});
+CanvasBlock.trial({ timeline: [] }).simulators({ respondToSlide: () => ({ value: { key: 'f', reactionTimeMs: 300 } }) });
+// @ts-expect-error a replacement returns the decision in value, like the simulator it replaces
+CanvasBlock.trial({ timeline: [] }).simulators({ respondToSlide: () => ({ key: 'f', reactionTimeMs: 300 }) });
+// A replacement receives the participant, also where the default simulator takes nothing
+PlainInput.trial('typed').simulators({ respond: ({ participant }) => ({ value: String(participant.nickname) }) });
+// @ts-expect-error PlainInput's simulated answer is text
+PlainInput.trial('typed').simulators({ respond: () => ({ value: 5 }) });
 
 // --- get ---
 const nickname = PlainInput.trial('nickname', { placeholder: 'Name' });
 const click = CustomTrial.trial('customtrial', { maxCount: 5 });
+const unnamed = PlainInput.trial();
+const renamed = PlainInput.trial('renamed');
+
+const readsNames = ({ get, getOptional }: TimelineContext) => {
+  // @ts-expect-error only named trials can be read
+  get(unnamed);
+  // @ts-expect-error only named trials can be read
+  getOptional(unnamed);
+  return get(renamed).value;
+};
+
+// --- names and settings ---
+// @ts-expect-error the session CSV keeps columns starting with session_
+Text.trial('session_end');
+// @ts-expect-error the session CSV keeps url_ columns
+Text.trial('url');
+Text.trial('sessions');
+// @ts-expect-error also for a component without props of its own
+Warmup.trial('session_end');
+ParamReader.trial().hideParams(['mode']).hideParams(true);
+// @ts-expect-error a setting the component does not have
+ParamReader.trial().hideParams(['moed']);
 
 const reads = ({ get, getOptional }: TimelineContext) => {
   const a: string = get(nickname).value;
@@ -217,8 +289,59 @@ CanvasBlock.trial({
     updateStore(({ slides }) => ({ bonus: slides.length })),
     // @ts-expect-error a slide draws itself
     { displayDurationMs: 100 },
+    // @ts-expect-error a slide needs a way to end
+    { draw: () => {} },
+    { draw: () => {}, response: { keys: ['f', 'J', ' ', 'ArrowLeft', 'Enter'] } },
+    // @ts-expect-error a response that does not end the slide leaves it without an end
+    { draw: () => {}, response: { keys: ['f'], endsSlide: false } },
+    { draw: () => {}, response: { keys: ['f'], endsSlide: false, timeLimitMs: 2000 } },
+    { draw: () => {}, displayDurationMs: 500, response: { keys: true, endsSlide: false, hidesDrawing: true } },
+    // @ts-expect-error what a response does needs the keys it takes
+    { draw: () => {}, displayDurationMs: 500, response: { timeLimitMs: 2000 } },
+  ],
+  width: '80%',
+  height: '16:9',
+});
+// Blocks hold either trials or slides, and only fit timelines of their kind
+CanvasBlock.trial({
+  timeline: [
+    ifBlock(() => true, [{ draw: (ctx) => ctx.fillText('x', 0, 0), displayDurationMs: 1 }]).else([
+      ({ slides }) => ({ draw: () => {}, displayDurationMs: slides.length }),
+    ]),
   ],
 });
+defineExperiment({
+  timeline: [
+    // @ts-expect-error a block of slides belongs in a CanvasBlock
+    ifBlock(() => true, [{ draw: () => {}, displayDurationMs: 1 }]),
+  ],
+});
+CanvasBlock.trial({
+  timeline: [
+    // @ts-expect-error a block of trials belongs in the experiment's timeline
+    whileBlock(() => false, [Text.trial()]),
+  ],
+});
+defineExperiment({ timeline: [fullscreenBlock({ keepFullscreen: true }, [Text.trial(), ifBlock(() => true, [Text.trial()])])] });
+fullscreenBlock({ keepFullscreen: { buttonText: 'Back to fullscreen' } }, []);
+fullscreenBlock({ keepFullscreen: { mode: 'overlay', content: 'Please return to fullscreen' } }, []);
+// @ts-expect-error only the overlay shows content
+fullscreenBlock({ keepFullscreen: { content: 'Please return to fullscreen' } }, []);
+// @ts-expect-error only the overlay shows content
+fullscreenBlock({ keepFullscreen: { mode: 'button', content: 'Please return to fullscreen' } }, []);
+CanvasBlock.trial({
+  timeline: [
+    // @ts-expect-error a fullscreenBlock holds trials
+    fullscreenBlock({}, [Text.trial()]),
+  ],
+});
+// @ts-expect-error the else holds the same kind as the block
+ifBlock(() => true, [Text.trial()]).else([{ draw: () => {}, displayDurationMs: 1 }]);
+const either = ifBlock(() => true, [updateStore(() => ({ bonus: 1 }))]).else(undefined);
+defineExperiment({ timeline: [either, whileBlock(() => false, [])] });
+CanvasBlock.trial({ timeline: [either, whileBlock(() => false, [])] });
+// @ts-expect-error a size that cannot be read
+CanvasBlock.trial({ timeline: [], width: '16x9' });
 const slideKey = ({ slides }: TimelineContext) => {
   const ms: number | null | undefined = slides.at(-1)?.reactionTimeMs;
   // @ts-expect-error field that does not exist
@@ -234,10 +357,82 @@ defineExperiment({
 defineExperiment({ timeline: [Text.trial()] });
 
 defineExperiment({
+  // @ts-expect-error a default outside the values
+  params: { group: { values: ['a', 'b'], default: 'c' } },
+  timeline: [],
+});
+// @ts-expect-error a computed default outside the values
+defineExperiment({ params: { group: { values: ['a', 'b'], default: () => 'c' } }, timeline: [] });
+// @ts-expect-error the session CSV keeps url_ columns for URL params that nothing declares
+defineExperiment({ params: { url_source: { default: 'x' } }, timeline: [] });
+defineComponent({
+  name: 'BadDefault',
+  component: (_props: BaseComponentProps) => null,
+  // @ts-expect-error a component's params are checked too
+  params: { speed: { values: [1, 2], default: 3 } },
+});
+
+// --- StoreUI writes the declared store ---
+StoreUI.trial({ fields: [{ type: 'integer', storeKey: 'bonus', label: 'Bonus', min: 0 }] });
+// @ts-expect-error a key the store does not declare
+StoreUI.trial({ fields: [{ type: 'integer', storeKey: 'bonsu', label: 'Bonus' }] });
+// @ts-expect-error a boolean field cannot write a number
+StoreUI.trial({ fields: [{ type: 'boolean', storeKey: 'bonus', label: 'Bonus' }] });
+
+// --- CSV files and the session row ---
+const movesComponent = (_props: BaseComponentProps<{ moves: number[] }>) => null;
+defineComponent({
+  name: 'Files',
+  component: movesComponent,
+  csv: { moves: (row) => row.responseData.moves.map((move) => ({ move })), summary: (row) => ({ n: row.responseData.moves.length }) },
+  session: true,
+});
+defineComponent({
+  name: 'SessionColumns',
+  component: movesComponent,
+  session: (row) => ({ total: row.responseData.moves.length }),
+});
+defineComponent({
+  name: 'NotRows',
+  component: movesComponent,
+  // @ts-expect-error a file's function returns rows, not the values in them
+  csv: { moves: (row) => row.responseData.moves },
+});
+defineComponent({
+  name: 'Typo',
+  component: movesComponent,
+  // @ts-expect-error the rows have the component's response
+  csv: { moves: (row) => row.responseData.moevs.map((move: number) => ({ move })) },
+});
+defineComponent({
+  name: 'SessionRows',
+  component: movesComponent,
+  // @ts-expect-error the session CSV holds a single row per participant
+  session: (row) => row.responseData.moves.map((move) => ({ move })),
+});
+const listComponent = (_props: BaseComponentProps<{ x: number }[]>) => null;
+defineComponent({
+  name: 'ListToSession',
+  component: listComponent,
+  // @ts-expect-error a list has no fields to spread into the session row's columns
+  session: true,
+});
+const ListCount = defineComponent({
+  name: 'ListCount',
+  component: listComponent,
+  session: (row) => ({ n: row.responseData.length }),
+});
+ListCount.trial().session(false);
+PlainInput.trial().session(false).csv('inputs');
+Text.trial().session(true);
+// @ts-expect-error a list has no fields to spread into the session row's columns
+CanvasBlock.trial({ timeline: [] }).session(true);
+
+defineExperiment({
   timeline: [Text.trial()],
   // @ts-expect-error participants are produced by a function, so that their draws come from the seed
   simulation: { seed: 1, createParticipants: [{ id: 1 }] },
 });
 defineExperiment({ timeline: [Text.trial()], simulation: { createParticipants: () => [{ id: 1 }] } });
 
-export { asJsx, bonusRead, experiment, reads, slideKey };
+export { asJsx, bonusRead, experiment, reads, readsNames, slideKey };

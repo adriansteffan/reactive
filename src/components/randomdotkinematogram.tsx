@@ -12,12 +12,13 @@ import { BaseComponentProps } from '../core/component';
 import { shuffle } from '../utils/array';
 import { defineComponent } from '../core/component';
 import { simulateDDMTrial, mapDDMChoice } from '../utils/ddm';
+import { type ResponseKey, responseKey } from '../utils/keys';
 
 // Single source of truth for all RDK parameter defaults.
 // Used by RDKCanvas, the trial component, and the simulation.
 const RDK_DEFAULTS = {
-  allowedResponseKeys: true as string[] | boolean,
-  durationMs: 1000,
+  allowedResponseKeys: true as readonly ResponseKey[] | boolean,
+  timeLimitMs: 1000,
   responseEndsTrial: true,
   dotCount: 300,
   dotSetCount: 1,
@@ -51,7 +52,7 @@ export interface RDKMessage {
 }
 
 export interface RDKFeedback {
-  /** Shown when rtMs === null (no response within durationMs) */
+  /** Shown when no key counted within the time limit */
   onTimeout?: RDKMessage;
   /** Shown when the response was incorrect (correct === false) */
   onIncorrect?: RDKMessage;
@@ -101,7 +102,7 @@ interface Aperture {
   centerY: number;
   getRandomPosition(): [number, number];
   isOutside(x: number, y: number, margin: number): boolean;
-  getOppositePosition(dot: Dot, dirX?: number, dirY?: number): [number, number];
+  getOppositePosition(dot: Dot, dirX: number, dirY: number): [number, number];
   getOppositePositionSimple(dot: Dot): [number, number];
   wrap(x: number, y: number): [number, number];
   clip(ctx: CanvasRenderingContext2D): void;
@@ -150,35 +151,33 @@ const createAperture = (
       },
       getOppositePosition(dot, dirX, dirY) {
         // Ray-ellipse intersection: find where backward ray hits far side of boundary
-        if (dirX !== undefined && dirY !== undefined) {
-          const dirMagSq = dirX * dirX + dirY * dirY;
-          if (dirMagSq > 1e-10) {
-            // Normalize direction
-            const mag = Math.sqrt(dirMagSq);
-            const dx = dirX / mag;
-            const dy = dirY / mag;
+        const dirMagSq = dirX * dirX + dirY * dirY;
+        if (dirMagSq > 1e-10) {
+          // Normalize direction
+          const mag = Math.sqrt(dirMagSq);
+          const dx = dirX / mag;
+          const dy = dirY / mag;
 
-            // Position relative to center
-            const xRel = dot.x - centerX;
-            const yRel = dot.y - centerY;
+          // Position relative to center
+          const xRel = dot.x - centerX;
+          const yRel = dot.y - centerY;
 
-            // Ellipse: semi-axes squared
-            const a2 = horizontalAxis * horizontalAxis;
-            const b2 = verticalAxis * verticalAxis;
+          // Ellipse: semi-axes squared
+          const a2 = horizontalAxis * horizontalAxis;
+          const b2 = verticalAxis * verticalAxis;
 
-            // Quadratic coefficients for ray-ellipse intersection
-            // Ray: P(t) = (dot.x - dx*t, dot.y - dy*t)
-            const A = (dx * dx) / a2 + (dy * dy) / b2;
-            const B = (xRel * dx) / a2 + (yRel * dy) / b2;
-            const C = (xRel * xRel) / a2 + (yRel * yRel) / b2 - 1;
+          // Quadratic coefficients for ray-ellipse intersection
+          // Ray: P(t) = (dot.x - dx*t, dot.y - dy*t)
+          const A = (dx * dx) / a2 + (dy * dy) / b2;
+          const B = (xRel * dx) / a2 + (yRel * dy) / b2;
+          const C = (xRel * xRel) / a2 + (yRel * yRel) / b2 - 1;
 
-            const discriminant = B * B - A * C;
-            if (discriminant >= 0) {
-              // Larger root gives far intersection (entry point from other side)
-              const t = (B + Math.sqrt(discriminant)) / A;
-              if (t > 0 && Number.isFinite(t)) {
-                return [dot.x - dx * t, dot.y - dy * t];
-              }
+          const discriminant = B * B - A * C;
+          if (discriminant >= 0) {
+            // Larger root gives far intersection (entry point from other side)
+            const t = (B + Math.sqrt(discriminant)) / A;
+            if (t > 0 && Number.isFinite(t)) {
+              return [dot.x - dx * t, dot.y - dy * t];
             }
           }
         }
@@ -238,10 +237,6 @@ const createAperture = (
     },
     getOppositePosition(dot, dirX, dirY) {
       // Ray-rectangle intersection using slab method
-      if (dirX === undefined || dirY === undefined) {
-        return this.getOppositePositionSimple(dot);
-      }
-
       const mag = Math.sqrt(dirX * dirX + dirY * dirY);
       if (mag < 1e-10) {
         return this.getOppositePositionSimple(dot);
@@ -448,6 +443,7 @@ export interface RDKCanvasProps {
   apertureCenterY?: number;
   reinsertMode?: ReinsertType;
   noiseMovement?: NoiseMovement;
+  /** How often the dots' roles are drawn again: never without it, every update with 0, or every this many milliseconds. */
   reassignEveryMs?: number;
   showFixation?: boolean;
   fixationWidth?: number;
@@ -495,7 +491,6 @@ export const RDKCanvas = forwardRef<RDKCanvasHandle, RDKCanvasProps>(
     // Refresh rate estimation
     const frameIntervalsRef = useRef<number[]>([]);
     const estimatedFrameIntervalRef = useRef<number | null>(null);
-    const isCalibrated = useRef(false);
 
     // Default aperture center to canvas center
     const effectiveCenterX = apertureCenterX ?? width / 2;
@@ -524,18 +519,10 @@ export const RDKCanvas = forwardRef<RDKCanvasHandle, RDKCanvasProps>(
 
     // Initialize dots
     useEffect(() => {
-      const nCoherent = Math.floor(dotCount * coherence);
-      const nOpposite = Math.floor(dotCount * opposite);
-
       dotSetsRef.current = Array.from({ length: dotSetCount }, () =>
-        Array.from({ length: dotCount }, (_, i) => {
-          let assignedMovement: FrameMovement;
-          if (i < nCoherent) assignedMovement = 'coherent';
-          else if (i < nCoherent + nOpposite) assignedMovement = 'opposite';
-          else assignedMovement = noiseMovement;
-
-          return createDot(assignedMovement, dotLifetimeMs, aperture);
-        }),
+        generateShuffledAssignments(dotCount, coherence, opposite, noiseMovement).map((movement) =>
+          createDot(movement, dotLifetimeMs, aperture),
+        ),
       );
       currentSetRef.current = 0;
     }, [dotCount, dotSetCount, coherence, opposite, noiseMovement, dotLifetimeMs, aperture]);
@@ -548,7 +535,6 @@ export const RDKCanvas = forwardRef<RDKCanvasHandle, RDKCanvasProps>(
         initialRefreshRate <= 300
       ) {
         estimatedFrameIntervalRef.current = 1000 / initialRefreshRate;
-        isCalibrated.current = true;
       }
     }, [initialRefreshRate]);
 
@@ -636,27 +622,25 @@ export const RDKCanvas = forwardRef<RDKCanvasHandle, RDKCanvasProps>(
         frameCountRef.current++;
 
         // Update refresh rate estimate
+        const estimate = estimatedFrameIntervalRef.current;
         if (frameDelta > 0 && frameDelta < 500) {
-          if (!isCalibrated.current) {
+          if (estimate === null) {
             frameIntervalsRef.current.push(frameDelta);
             if (frameIntervalsRef.current.length >= CALIBRATION_FRAME_COUNT) {
               const sorted = [...frameIntervalsRef.current].sort((a, b) => a - b);
               const mid = Math.floor(sorted.length / 2);
               estimatedFrameIntervalRef.current =
                 sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-              isCalibrated.current = true;
             }
           } else {
-            estimatedFrameIntervalRef.current =
-              EMA_ALPHA * frameDelta + (1 - EMA_ALPHA) * estimatedFrameIntervalRef.current!;
+            estimatedFrameIntervalRef.current = EMA_ALPHA * frameDelta + (1 - EMA_ALPHA) * estimate;
           }
         }
 
-        const rawTimeSinceLastUpdate = timestamp - (lastUpdateTimeRef.current ?? timestamp);
         // Cap delta to avoid massive jumps when returning from a backgrounded tab
-        const timeSinceLastUpdate = Math.min(rawTimeSinceLastUpdate, 100);
+        const timeSinceLastUpdate = Math.min(timestamp - lastUpdateTimeRef.current, 100);
         const updateInterval = updateRate && updateRate > 0 ? 1000 / updateRate : 0;
-        const shouldUpdate = !updateRate || updateRate <= 0 || timeSinceLastUpdate >= updateInterval;
+        const shouldUpdate = timeSinceLastUpdate >= updateInterval;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -680,10 +664,7 @@ export const RDKCanvas = forwardRef<RDKCanvasHandle, RDKCanvasProps>(
                 shouldReassign = true;
               } else {
                 timeSinceReassignRef.current += timeSinceLastUpdate;
-                const halfFrameCorrection =
-                  isCalibrated.current && estimatedFrameIntervalRef.current
-                    ? estimatedFrameIntervalRef.current * 0.5
-                    : 0;
+                const halfFrameCorrection = (estimatedFrameIntervalRef.current ?? 0) * 0.5;
                 const correctedTime = timeSinceReassignRef.current + halfFrameCorrection;
                 shouldReassign = correctedTime >= reassignEveryMs;
                 if (shouldReassign) {
@@ -791,43 +772,33 @@ export const RDKCanvas = forwardRef<RDKCanvasHandle, RDKCanvasProps>(
 
 // ─── Trial Component ────────────────────────────────────────────────────────────
 
-export interface RDKProps extends BaseComponentProps<Record<string, any>> {
-  /** Keys that count as a response; `true` for any key. */
-  allowedResponseKeys?: string[] | boolean;
-  correctResponse?: string | string[];
-  durationMs?: number;
-  stimulusDurationMs?: number; // How long to show stimulus (defaults to durationMs)
+// The message shown after the response, or after no response in time
+const feedbackFor = (feedback: RDKFeedback | undefined, rt: number | null, correct: boolean | null) => {
+  if (rt === null) return feedback?.onTimeout ?? null;
+  if (correct === false) return feedback?.onIncorrect ?? null;
+  if (correct === true) return feedback?.onCorrect ?? null;
+  return null;
+};
+
+// Whether the key is a correct response, ignoring case like the keys that count; `null` without a key or a correct response
+const isCorrect = (key: string | null, correctResponse: ResponseKey | readonly ResponseKey[] | undefined) =>
+  key && correctResponse !== undefined ? responseKey([correctResponse].flat(), key) !== undefined : null;
+
+// The canvas's settings, which a trial passes on as they are
+type CanvasSettings = Omit<RDKCanvasProps, 'width' | 'height' | 'active' | 'initialRefreshRate' | 'style' | 'className'>;
+
+/** A trial's settings: the canvas's, and how the trial takes its response. */
+export interface RDKSettings extends CanvasSettings {
+  /** Keys that count as a response, letters in either case; `true` for any key. */
+  allowedResponseKeys?: readonly ResponseKey[] | boolean;
+  correctResponse?: ResponseKey | readonly ResponseKey[];
+  /** How long after the dots appear a key counts as a response. The trial ends then, if no response has ended it. */
+  timeLimitMs?: number;
+  /** How long the dots are shown; `timeLimitMs` by default. */
+  displayDurationMs?: number;
+  /** Whether the first response ends the trial. Defaults to `true`. */
   responseEndsTrial?: boolean;
-  dotCount?: number;
-  dotSetCount?: number;
-  direction?: number;
-  coherence?: number;
-  opposite?: number;
-  speed?: number;
-  dotLifetimeMs?: number;
-  updateRate?: number;
-  dotRadius?: number;
-  dotCharacter?: string;
-  dotColor?: string;
-  coherentDotColor?: string;
-  backgroundColor?: string;
-  apertureShape?: ApertureShape;
-  apertureWidth?: number;
-  apertureHeight?: number;
-  apertureCenterX?: number;
-  apertureCenterY?: number;
-  reinsertMode?: ReinsertType;
-  noiseMovement?: NoiseMovement;
-  reassignEveryMs?: number; // undefined = never, 0 = every update, > 0 = every X ms
-  showFixation?: boolean;
   fixationTimeMs?: number;
-  fixationWidth?: number;
-  fixationHeight?: number;
-  fixationColor?: string;
-  fixationThickness?: number;
-  showBorder?: boolean;
-  borderWidth?: number;
-  borderColor?: string;
   responseHint?: string;
   /** Timed message shown before the fixation cross. Useful for per-trial condition cues. */
   preTrialMessage?: RDKMessage;
@@ -835,20 +806,28 @@ export interface RDKProps extends BaseComponentProps<Record<string, any>> {
   feedback?: RDKFeedback;
 }
 
+/** What a trial records: its settings, the key pressed and when, and what it showed. */
+export type RDKResponse = RDKSettings & {
+  key: string | null;
+  /** From when the dots appeared. */
+  reactionTimeMs: number | null;
+  correct: boolean | null;
+  framesDisplayed: number;
+  measuredRefreshRate: number | null;
+  feedbackShown: string | null;
+  feedbackDurationMs: number | null;
+};
+
+export type RDKProps = RDKSettings & BaseComponentProps<RDKResponse>;
+
 const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
   const {
-    store,
-    stimulusDurationMs, updateRate, dotCharacter, coherentDotColor,
-    apertureCenterX = window.innerWidth / 2,
-    apertureCenterY = window.innerHeight / 2,
-    reassignEveryMs, responseHint,
-    allowedResponseKeys, durationMs, responseEndsTrial,
-    dotCount, dotSetCount, direction, coherence, opposite, speed, dotLifetimeMs,
-    dotRadius, dotColor, backgroundColor,
-    apertureShape, apertureWidth, apertureHeight, reinsertMode, noiseMovement,
-    showFixation, fixationTimeMs, fixationWidth, fixationHeight, fixationColor, fixationThickness,
-    showBorder, borderWidth, borderColor,
+    next: _next, data: _data, store, updateStore: _updateStore, name: _name,
+    allowedResponseKeys, correctResponse: _correctResponse, timeLimitMs, displayDurationMs, responseEndsTrial,
+    fixationTimeMs, responseHint, preTrialMessage: _preTrialMessage, feedback: _feedback,
+    ...canvasSettings
   } = { ...RDK_DEFAULTS, ...rawProps };
+  const { backgroundColor } = canvasSettings;
   // Keep a ref to the latest props so endTrial can read them without recreating on every render.
   const propsRef = useRef(rawProps);
   propsRef.current = rawProps;
@@ -856,7 +835,8 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
   const preTrialDuration = rawProps.preTrialMessage?.durationMs ?? 0;
 
   const canvasHandle = useRef<RDKCanvasHandle>(null);
-  const startTimeRef = useRef<number>(performance.now());
+  // When the dots appeared, which reaction times count from
+  const startTimeRef = useRef(0);
   const trialEndedRef = useRef(false);
   const responseRef = useRef<string | null>(null);
   const responseTimeRef = useRef<number | null>(null);
@@ -867,7 +847,7 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
   const [stimulusVisible, setStimulusVisible] = useState(true);
   const [feedbackMsg, setFeedbackMsg] = useState<RDKMessage | null>(null);
 
-  const initialRefreshRate = store.__screenRefreshRate ?? undefined;
+  const initialRefreshRate = store.__screenRefreshRate;
 
   // Pre-trial message timer
   // biome-ignore lint/correctness/useExhaustiveDependencies: the message is shown once per trial, a new props object must not restart it
@@ -881,20 +861,15 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
     if (trialEndedRef.current) return;
     trialEndedRef.current = true;
 
-    const { next: nextFn, data: _d, store: _s, updateStore: _u, ...rdkProps } = propsRef.current;
+    const { next: nextFn, data: _d, store: _s, updateStore: _u, name: _n, ...rdkProps } = propsRef.current;
     const stats = canvasHandle.current?.getStats();
-    const correctKeys = Array.isArray(rdkProps.correctResponse)
-      ? rdkProps.correctResponse.map((c) => c.toLowerCase())
-      : rdkProps.correctResponse
-        ? [rdkProps.correctResponse.toLowerCase()]
-        : null;
-    const correct = key && correctKeys ? correctKeys.includes(key) : null;
+    const correct = isCorrect(key, rdkProps.correctResponse);
 
-    const responseData: Record<string, any> = {
+    const responseData: RDKResponse = {
       ...RDK_DEFAULTS,
       ...rdkProps,
-      rtMs: rt,
-      response: key,
+      key,
+      reactionTimeMs: rt,
       correct,
       framesDisplayed: stats?.framesDisplayed ?? 0,
       measuredRefreshRate: stats?.measuredRefreshRate ?? null,
@@ -902,14 +877,7 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
       feedbackDurationMs: null,
     };
 
-    const fb = rdkProps.feedback;
-    let shown: RDKMessage | null = null;
-    if (fb) {
-      if (rt === null && fb.onTimeout) shown = fb.onTimeout;
-      else if (correct === false && fb.onIncorrect) shown = fb.onIncorrect;
-      else if (correct === true && fb.onCorrect) shown = fb.onCorrect;
-    }
-
+    const shown = feedbackFor(rdkProps.feedback, rt, correct);
     if (shown) {
       responseData.feedbackShown = shown.content;
       responseData.feedbackDurationMs = shown.durationMs;
@@ -929,32 +897,33 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
 
   // Stimulus duration timer (offset by preTrialDuration)
   useEffect(() => {
-    const effectiveStimDur = stimulusDurationMs ?? durationMs;
+    const effectiveStimDur = displayDurationMs ?? timeLimitMs;
     if (effectiveStimDur <= 0) return;
     const timer = setTimeout(() => setStimulusVisible(false), preTrialDuration + fixationTimeMs + effectiveStimDur);
     return () => clearTimeout(timer);
-  }, [preTrialDuration, fixationTimeMs, stimulusDurationMs, durationMs]);
+  }, [preTrialDuration, fixationTimeMs, displayDurationMs, timeLimitMs]);
 
   // Trial duration timer — ends trial with whatever response was collected (offset by preTrialDuration)
   useEffect(() => {
-    if (durationMs <= 0) return;
+    if (timeLimitMs <= 0) return;
     const timer = setTimeout(() => {
       endTrial(responseRef.current, responseTimeRef.current);
-    }, preTrialDuration + fixationTimeMs + durationMs);
+    }, preTrialDuration + fixationTimeMs + timeLimitMs);
     return () => clearTimeout(timer);
-  }, [preTrialDuration, fixationTimeMs, durationMs, endTrial]);
+  }, [preTrialDuration, fixationTimeMs, timeLimitMs, endTrial]);
 
-  // Handle keyboard response (blocked during preTrialMessage)
+  // The dots appear once the pre-trial message and the fixation are over, and keys count from then on
+  const stimulusShown = preTrialDone && fixationComplete;
+  useEffect(() => {
+    if (stimulusShown) startTimeRef.current = performance.now();
+  }, [stimulusShown]);
+
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (trialEndedRef.current || responseRef.current || !preTrialDone) return;
+      if (trialEndedRef.current || responseRef.current || !stimulusShown) return;
 
-      const key = e.key.toLowerCase();
-      const allowed =
-        allowedResponseKeys === true ||
-        (Array.isArray(allowedResponseKeys) && allowedResponseKeys.some((k) => k.toLowerCase() === key));
-
-      if (allowed) {
+      const key = responseKey(allowedResponseKeys, e.key);
+      if (key !== undefined) {
         const rt = performance.now() - startTimeRef.current;
         responseRef.current = key;
         responseTimeRef.current = rt;
@@ -968,7 +937,7 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [allowedResponseKeys, responseEndsTrial, endTrial, preTrialDone]);
+  }, [allowedResponseKeys, responseEndsTrial, endTrial, stimulusShown]);
 
   const messageOverlay = (text: string) => (
     <div
@@ -995,40 +964,12 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
       ) : (
         <>
           <RDKCanvas
+            {...canvasSettings}
             ref={canvasHandle}
             width={window.innerWidth}
             height={window.innerHeight}
             active={fixationComplete && stimulusVisible}
             initialRefreshRate={initialRefreshRate}
-            dotCount={dotCount}
-            dotSetCount={dotSetCount}
-            direction={direction}
-            coherence={coherence}
-            opposite={opposite}
-            speed={speed}
-            dotLifetimeMs={dotLifetimeMs}
-            updateRate={updateRate}
-            dotRadius={dotRadius}
-            dotCharacter={dotCharacter}
-            dotColor={dotColor}
-            coherentDotColor={coherentDotColor}
-            backgroundColor={backgroundColor}
-            apertureShape={apertureShape}
-            apertureWidth={apertureWidth}
-            apertureHeight={apertureHeight}
-            apertureCenterX={apertureCenterX}
-            apertureCenterY={apertureCenterY}
-            reinsertMode={reinsertMode}
-            noiseMovement={noiseMovement}
-            reassignEveryMs={reassignEveryMs}
-            showFixation={showFixation}
-            fixationWidth={fixationWidth}
-            fixationHeight={fixationHeight}
-            fixationColor={fixationColor}
-            fixationThickness={fixationThickness}
-            showBorder={showBorder}
-            borderWidth={borderWidth}
-            borderColor={borderColor}
           />
           {responseHint && !stimulusVisible && !response && (
             <div
@@ -1057,25 +998,19 @@ export const RandomDotKinematogram = defineComponent({
   simulate: ({ props, simulators, participant }) => {
     const merged: any = { ...RDK_DEFAULTS, ...props };
     const result = simulators.respond({ props: merged, participant });
-    const { rtMs: rt, response } = result.value;
+    const { reactionTimeMs: rt, key } = result.value;
 
     const preTrialDuration = merged.preTrialMessage?.durationMs ?? 0;
-    const fixation = merged.fixationTimeMs ?? RDK_DEFAULTS.fixationTimeMs;
-    const trialDuration = merged.durationMs ?? RDK_DEFAULTS.durationMs;
-    const responseEndsTrial = merged.responseEndsTrial ?? RDK_DEFAULTS.responseEndsTrial;
-    const elapsed = (responseEndsTrial && rt != null) ? rt : trialDuration;
+    const elapsed = merged.responseEndsTrial && rt != null ? rt : merged.timeLimitMs;
 
-    const correctKeys = Array.isArray(merged.correctResponse)
-      ? merged.correctResponse.map((c: string) => c.toLowerCase())
-      : merged.correctResponse ? [merged.correctResponse.toLowerCase()] : null;
-    const correct = response && correctKeys ? correctKeys.includes(response.toLowerCase()) : null;
+    const correct = isCorrect(key, merged.correctResponse);
 
-    let totalDuration = preTrialDuration + fixation + elapsed;
+    let totalDuration = preTrialDuration + merged.fixationTimeMs + elapsed;
 
-    const responseData: Record<string, any> = {
+    const responseData: RDKResponse = {
       ...merged,
-      rtMs: rt,
-      response,
+      key,
+      reactionTimeMs: rt,
       correct,
       framesDisplayed: 0,
       measuredRefreshRate: null,
@@ -1083,23 +1018,16 @@ export const RandomDotKinematogram = defineComponent({
       feedbackDurationMs: null as number | null,
     };
 
-    const fb = merged.feedback as RDKFeedback | undefined;
-    if (fb) {
-      let shown: RDKMessage | null = null;
-      if (rt === null && fb.onTimeout) shown = fb.onTimeout;
-      else if (correct === false && fb.onIncorrect) shown = fb.onIncorrect;
-      else if (correct === true && fb.onCorrect) shown = fb.onCorrect;
-
-      if (shown) {
-        responseData.feedbackShown = shown.content;
-        responseData.feedbackDurationMs = shown.durationMs;
-        totalDuration += shown.durationMs;
-      }
+    const shown = feedbackFor(merged.feedback, rt, correct);
+    if (shown) {
+      responseData.feedbackShown = shown.content;
+      responseData.feedbackDurationMs = shown.durationMs;
+      totalDuration += shown.durationMs;
     }
 
     return {
       responseData,
-      participantState: result.participantState,
+      participant: result.participant,
       durationMs: totalDuration,
     };
   },
@@ -1112,8 +1040,8 @@ export const RandomDotKinematogram = defineComponent({
         noiseLevel: 0.02,
         sensoryDelayMs: { distribution: 'uniform', min: 150, max: 250 },
         motorDelayMs: { distribution: 'uniform', min: 130, max: 210 },
-        timeLimitMs: props.durationMs ?? RDK_DEFAULTS.durationMs,
-        stimOffsetMs: props.stimulusDurationMs ?? props.durationMs ?? RDK_DEFAULTS.durationMs,
+        timeLimitMs: props.timeLimitMs ?? RDK_DEFAULTS.timeLimitMs,
+        stimOffsetMs: props.displayDurationMs ?? props.timeLimitMs ?? RDK_DEFAULTS.timeLimitMs,
         postStimStrategy: { type: 'continue' },
       });
 
@@ -1123,7 +1051,7 @@ export const RandomDotKinematogram = defineComponent({
       const keys = allowed === true ? [...correct, ' '] : allowed === false ? [] : allowed;
       const key = mapDDMChoice(ddm.choice, keys, props.correctResponse);
 
-      return { value: { rtMs: key ? ddm.rtMs : null, response: key } };
+      return { value: { reactionTimeMs: key ? ddm.reactionTimeMs : null, key } };
     },
   },
 });

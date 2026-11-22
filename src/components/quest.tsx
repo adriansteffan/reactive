@@ -1,4 +1,4 @@
-import { useCallback, createElement, ComponentType } from 'react';
+import { createElement, type ComponentType, useState } from 'react';
 import { defaultCss, Model, Question, Serializer } from 'survey-core';
 import { ReactQuestionFactory, Survey, SurveyQuestionElementBase } from 'survey-react-ui';
 import { ContrastLight, ContrastDark } from 'survey-core/themes';
@@ -65,6 +65,7 @@ function Quest({
   surveyJson,
   customQuestions,
   surveyTheme,
+  className = '',
   containerClass,
 }: {
   next: (data?: Record<string, any>) => void;
@@ -73,40 +74,29 @@ function Quest({
   customQuestions?: ComponentsMap;
   /** A SurveyJS theme; by default one that matches the experiment's theme. */
   surveyTheme?: any;
+  className?: string;
   containerClass?: string;
 }) {
   const contextTheme = useTheme();
   const th = t(contextTheme);
 
-  const questions: ComponentsMap = {
-    voicerecorder: VoiceRecorderQuestion,
-    ...customQuestions,
-  };
-  Object.keys(questions).forEach((name) => {
-    registerCustomQuestion(name, questions[name]);
+  // One survey for the trial, so that a re-render keeps the participant's answers
+  const [survey] = useState(() => {
+    for (const [name, component] of Object.entries({ voicerecorder: VoiceRecorderQuestion, ...customQuestions })) {
+      registerCustomQuestion(name, component);
+    }
+    const model = new Model({ ...surveyJson, css: { ...defaultCss, root: 'sd-root-modern custom-root' } });
+    model.applyTheme(surveyTheme ?? (contextTheme.startsWith('dark') ? ContrastDark : ContrastLight));
+    model.onComplete.add((sender: Model) => next({ ...sender.data }));
+    return model;
   });
-
-  const survey = new Model({
-    ...surveyJson,
-    css: { ...defaultCss, root: 'sd-root-modern custom-root' },
-  });
-  survey.applyTheme(surveyTheme ?? (contextTheme.startsWith('dark') ? ContrastDark : ContrastLight));
-
-  const saveResults = useCallback(
-    (sender: any) => {
-      next({ ...sender.data });
-    },
-    [next],
-  );
-
-  survey.onComplete.add(saveResults);
 
   const useCustomBg = !!containerClass || contextTheme.startsWith('dark');
 
   return (
     <div className={`min-h-screen ${containerClass ?? th.containerBg}`}>
       {!useCustomBg && <div className='absolute inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]' />}
-      <div className={`max-w-4xl mx-auto px-4${useCustomBg ? ' quest-custom-bg' : ''}`}>
+      <div className={`max-w-4xl mx-auto px-4 ${className}${useCustomBg ? ' quest-custom-bg' : ''}`}>
         <Survey model={survey} />
       </div>
     </div>
@@ -116,7 +106,7 @@ function Quest({
 export default defineComponent({
   name: 'Quest',
   component: Quest,
-  csv: 'session',
+  session: true,
   simulate: ({ props, simulators, participant }) => {
     const responseData: Record<string, any> = {};
     let totalDuration = 0;
@@ -125,12 +115,12 @@ export default defineComponent({
       for (const el of page.elements || []) {
         if (!el.name) continue;
         const result = simulators.answerQuestion({ props, participant, question: el });
-        participant = result.participantState ?? participant;
-        responseData[el.name] = result.value;
-        totalDuration += result.durationMs ?? 0;
+        participant = result.participant ?? participant;
+        responseData[el.name] = result.value.answer;
+        totalDuration += result.value.durationMs;
       }
     }
-    return { responseData, participantState: participant, durationMs: totalDuration };
+    return { responseData, participant, durationMs: totalDuration };
   },
   defaultSimulators: {
     answerQuestion: ({ question }) => {
@@ -170,7 +160,7 @@ export default defineComponent({
         }
         default: value = null;
       }
-      return { value, durationMs: uniform(1000, 5000) };
+      return { value: { answer: value, durationMs: uniform(1000, 5000) } };
     },
   },
 });

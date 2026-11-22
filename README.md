@@ -44,7 +44,7 @@ export default defineExperiment({
 Premade components available so far:
 
 * Text: A simple display of Text and a Button
-* Screen: A stimulus, made of any React or a canvas, answered by keys, buttons, or the content itself (see [Screens](#screens))
+* Stimulus: Any React or a canvas, answered by keys, buttons, or the content itself (see [Stimuli](#stimuli))
 * PlainInput: A text input with a prompt
 * MicrophoneCheck: used to test the voice recording feature and choose a preferred microphone to use
 * CanvasBlock: A sequence of canvas slides with keyboard responses, for timed tasks (see [Timed slides](#timed-slides))
@@ -110,7 +110,7 @@ Props, metadata, conditions and store updates can be functions of the timeline c
 Text.trial(({ data }) => ({ content: <p>Hello {PlainInput.getLatest(data, 'nickname').recorded.value}</p> }));
 
 // Repeat the practice until 8 of the last 10 answers are correct
-whileBlock(({ data }) => Screen.getAll(data, 'practice').slice(-10)
+whileBlock(({ data }) => Stimulus.getAll(data, 'practice').slice(-10)
   .filter((row) => row.recorded.response === row.metadata?.correct).length < 8, [practice]),
 ```
 
@@ -176,12 +176,12 @@ On the settings screen, the block's screen is listed as an item of its own, so t
 
 Within one timeline, two different trials cannot share a name, even if their components differ, unless they sit in different branches of the same `ifBlock`. A name cannot be `url` or `session`, or start with `url_` or `session_`, since its columns in the session CSV would then take the library's (see [Output files](#output-files)); the types reject these names too. An unnamed trial that goes to the session CSV is named after its component for its columns there: the first `PlainInput` (`PlainInput_value`), the next ones `PlainInput_2`, `PlainInput_3` and so on, in the order they appear in the timeline. These names count positions, so they change when the timeline does; give a trial a name of its own when your analysis reads its columns.
 
-### Screens
+### Stimuli
 
-`Screen` shows a stimulus and takes an answer, by a key, a button, or both:
+`Stimulus` shows any React and takes an answer, by a key, a button, or both:
 
 ```tsx
-Screen.trial('face', {
+Stimulus.trial('face', {
   content: <img src={face} />,
   response: {
     choices: {
@@ -201,19 +201,19 @@ Its row records the `response`, the `key` that gave it, empty for a button, and 
 | `choices` | Answers recorded by their names, each given by a `key`, a `button`, or both |
 | `keys` | Keys recorded as themselves, or `true` for any key |
 | `buttons` | Buttons recorded as their text |
-| `timeLimitMs` | How long after the screen appears an answer counts; the screen ends then |
-| `endsScreen` | Whether the first answer ends the screen; `true` by default, and otherwise the screen ends at its time limit |
-| `recordAll` | Records every answer until the time limit, not only the first, and keeps the screen on until then |
+| `timeLimitMs` | How long after the stimulus appears an answer counts; the trial ends then |
+| `endsTrial` | Whether the first answer ends the trial; `true` by default, and otherwise the trial ends at its time limit |
+| `recordAll` | Records every answer until the time limit, not only the first, so the trial lasts until then |
 
-`displayDurationMs` hides the content after that time, while answers count until the time limit. Without a time limit, the screen ends when the content disappears. A screen needs a way to end, an answer, a time limit or a display duration, which the types check.
+`displayDurationMs` hides the content after that time, while answers count until the time limit. Without a time limit, the trial ends when the content disappears. A trial needs a way to end, an answer, a time limit or a display duration, which the types check.
 
-With `endsScreen: false`, every trial lasts until its time limit, whenever the answer came, as fixed-duration designs need. With `recordAll`, a screen records each answer in `responses`, in order, such as a press for every target in a stream; `response`, `key` and `reactionTimeMs` still hold the first. In the screen CSV, such a screen has a row for each answer, or one empty row without any. Both need a time limit, and the types reject `recordAll` together with `endsScreen: true`.
+With `endsTrial: false`, every trial lasts until its time limit, whenever the answer came, as fixed-duration designs need. With `recordAll`, a trial records each answer in `responses`, in order, such as a press for every target in a stream; `response`, `key` and `reactionTimeMs` still hold the first. In the stimulus CSV, such a trial has a row for each answer, or one empty row without any. Both need a time limit, and the types reject `recordAll` together with `endsTrial: true`.
 
 Named choices record what an answer means, so a counterbalanced key mapping stays in the experiment and out of the analysis:
 
 ```tsx
 timeline: ({ group }) => [
-  Screen.trial('face', {
+  Stimulus.trial('face', {
     content: <img src={face} />,
     response: {
       choices: {
@@ -227,30 +227,30 @@ timeline: ({ group }) => [
 
 Both groups record `happy` and `sad`, and the key next to it. Two answers that share a key or a button stop the experiment when it loads, since only one of them could be given.
 
-The content can also answer by itself. As a function, it receives `respond`, which ends the screen with whatever it is given as the `response`; an object is written to the CSV as JSON. The function is rendered as a component, so it can use hooks. `Canvas` draws within the content, sized like a CanvasBlock, and its `onClick` gives a click's position in the drawing's coordinates:
+The content can also answer by itself. As a function, it receives `respond`, which ends the trial with whatever it is given as the `response`; an object is written to the CSV as JSON. The function is rendered as a component, so it can use hooks. `Canvas` draws within the content, sized like a CanvasBlock, and its `onClick` gives a click's position in the drawing's coordinates:
 
 ```tsx
-Screen.trial('location', {
+Stimulus.trial('location', {
   content: ({ respond }) => (
     <Canvas width={600} height={400} draw={drawScene} onClick={(x, y) => respond({ x, y })} />
   ),
 }),
 ```
 
-The simulation cannot guess such answers, so a screen whose content answers needs a simulator of its own (see [Overriding simulators on a trial](#overriding-simulators-on-a-trial)):
+The simulation cannot guess such answers, so a Stimulus whose content answers needs a simulator of its own (see [Overriding simulators on a trial](#overriding-simulators-on-a-trial)):
 
 ```tsx
 .simulators({ respond: () => ({ value: { response: { x: 300, y: 200 }, reactionTimeMs: 900 } }) })
 ```
 
-A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ response: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the screen does not take, or a key that gives another answer, stops the simulation with an error. For a screen that records every answer, `respond` is asked again after each, with the `answers` so far, until it gives none or one after the time limit; each answer has to come after the one before:
+A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ response: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the Stimulus does not take, or a key that gives another answer, stops the simulation with an error. For a trial that records every answer, `respond` is asked again after each, with the `answers` so far, until it gives none or one after the time limit; each answer has to come after the one before:
 
 ```tsx
 // a tap every 700 ms
 .simulators({ respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: (answers.length + 1) * 700 } }) })
 ```
 
-Times work as for slides (below): a reaction time runs from the frame with which the screen appeared to the moment the browser timestamped the key press or click, and a key pressed before the screen appeared does not count. The screen appears once the images in its content have loaded, so their loading time is not part of a reaction time or a display duration; an image that fails to load shows as broken. Background images in CSS and videos are not waited for. Rendering a page can take varying time, though, so fast sequences, such as a fixation cross, a 50 ms stimulus and a mask, belong in a CanvasBlock.
+Times work as for slides (below): a reaction time runs from the frame with which the stimulus appeared to the moment the browser timestamped the key press or click, and a key pressed before the stimulus appeared does not count. The stimulus appears once the images in its content have loaded, so their loading time is not part of a reaction time or a display duration; an image that fails to load shows as broken. Background images in CSS and videos are not waited for. Rendering a page can take varying time, though, so fast sequences, such as a fixation cross, a 50 ms stimulus and a mask, belong in a CanvasBlock.
 
 ### Timed slides
 
@@ -288,7 +288,7 @@ CanvasBlock.trial('main', {
 | `draw(ctx, width, height)` | Draws the slide on a canvas cleared to white, with black as the fill color |
 | `displayDurationMs` | How long the drawing stays visible |
 | `response.keys` | The keys that count as a response, or `true` for any key (see below) |
-| `response.choices` | Responses recorded by their names, each given by its `key`, as on a Screen |
+| `response.choices` | Responses recorded by their names, each given by its `key`, as on a Stimulus |
 | `response.click` | Takes a click on the canvas as a response |
 | `response.timeLimitMs` | How long after the slide appears a response counts |
 | `response.endsSlide` | Whether the first response ends the slide; `true` by default |
@@ -629,7 +629,7 @@ createParticipants: () => {
 | Component | Decision functions | Its `value` | Default behavior |
 |---|---|---|---|
 | Text | `respond` | `{ key, reactionTimeMs }` | Click button, random reaction time |
-| Screen | `respond`, also given the `answers` so far | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT; a screen whose content answers needs its own |
+| Stimulus | `respond`, also given the `answers` so far | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT; a Stimulus whose content answers needs its own |
 | PlainInput | `respond` | the text entered | Returns `'simulated_input'` |
 | Quest | `answerQuestion`, also given `question` | `{ answer, durationMs }` | Random valid answer per question type |
 | CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }`, or `{ x, y, reactionTimeMs }` for a click | Random key from the slide's `keys` and `choices`, or a random point on a slide that takes clicks, random RT; it counts under the same rules as a real response |
@@ -668,7 +668,7 @@ Upload.trial('upload')
 |---|---|---|
 | PlainInput, Quest, CheckDevice, VoiceRecording | session | Columns in the single session row, namespaced by trial name |
 | Text | `text` | One row per Text component |
-| Screen | `screen` | One row per Screen |
+| Stimulus | `stimulus` | One row per Stimulus |
 | CanvasBlock | `canvas` | One row per slide, with built-in flattener |
 | StoreUI | `storeui` | One row per StoreUI occurrence |
 | RandomDotKinematogram | `rdk` | One row per RDK trial |

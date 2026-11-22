@@ -8,7 +8,7 @@ COPY . .
 RUN bun run build
 
 
-FROM oven/bun:1-alpine
+FROM oven/bun:1-distroless
 WORKDIR /app
 
 COPY --from=build /app/dist-server ./
@@ -16,4 +16,5 @@ COPY --from=build /app/public ./public
 
 EXPOSE 8001
 
-CMD ["bun", "server.js"]
+# The image's entrypoint is bun
+CMD ["server.js"]

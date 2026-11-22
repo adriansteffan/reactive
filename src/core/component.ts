@@ -124,7 +124,7 @@ export type RuntimeComponent = AnyComponent & { reactive: ComponentInfo };
 type HasRequired<T> = {} extends T ? false : true;
 
 // Props are an object, so that a name is never taken for them, even by a component without props of
-// its own. Keyed on the component's props, which error messages name, as in TrialProps<ScreenProps>
+// its own. Keyed on the component's props, which error messages name, as in TrialProps<StimulusProps>
 type TrialProps<P> = ContextArg<WithoutRunnerProps<P> & object>;
 
 // TypeScript reports the error of the last overload, so a name that reaches it, being taken or

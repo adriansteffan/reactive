@@ -11,7 +11,7 @@ import {
   ifBlock,
   PlainInput,
   sampleParticipants,
-  Screen,
+  Stimulus,
   StoreUI,
   Text,
   Upload,
@@ -461,35 +461,35 @@ sampleParticipants('sobol', 10, {
   openness: { distribution: 'normal', mean: 3, sd: 1, correlations: { openness: 0.4 } },
 });
 
-// --- screens ---
-Screen.trial('face', {
+// --- stimuli ---
+Stimulus.trial('face', {
   content: <img src='face.png' alt='' />,
   response: { choices: { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' } }, timeLimitMs: 3000 },
   displayDurationMs: 500,
 });
-Screen.trial('fixation', { content: '+', displayDurationMs: 500 });
-Screen.trial({ response: { buttons: ['Yes', 'No'] } });
-Screen.trial({
+Stimulus.trial('fixation', { content: '+', displayDurationMs: 500 });
+Stimulus.trial({ response: { buttons: ['Yes', 'No'] } });
+Stimulus.trial({
   content: ({ respond }) => <Canvas draw={(ctx, width, height) => ctx.fillRect(0, 0, width, height)} onClick={(x, y) => respond({ x, y })} />,
 });
-// @ts-expect-error a screen needs a way to end
-Screen.trial({ content: 'Nothing ends this screen' });
+// @ts-expect-error a trial needs a way to end
+Stimulus.trial({ content: 'Nothing ends this trial' });
 // @ts-expect-error a choice is given by a key, a button, or both
-Screen.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
+Stimulus.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
 // An answer through respond is the simulator's to give, typed like the default's
-Screen.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
+Stimulus.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
   respond: () => ({ value: { response: 'typed', reactionTimeMs: 2000 } }),
 });
-// Answers that do not end a screen need its time limit, and recording every answer cannot end it
-Screen.trial({ response: { choices: { yes: { key: 'f' } }, timeLimitMs: 2000, endsScreen: false } });
-Screen.trial({ response: { keys: [' '], timeLimitMs: 30000, recordAll: true } });
-// @ts-expect-error a screen that its answers do not end needs a time limit
-Screen.trial({ response: { keys: ['f'], endsScreen: false } });
+// Answers that do not end a trial need its time limit, and recording every answer cannot end it
+Stimulus.trial({ response: { choices: { yes: { key: 'f' } }, timeLimitMs: 2000, endsTrial: false } });
+Stimulus.trial({ response: { keys: [' '], timeLimitMs: 30000, recordAll: true } });
+// @ts-expect-error a trial that its answers do not end needs a time limit
+Stimulus.trial({ response: { keys: ['f'], endsTrial: false } });
 // @ts-expect-error so does one that records every answer
-Screen.trial({ response: { keys: ['f'], recordAll: true } });
-// @ts-expect-error recording every answer keeps the screen on
-Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000, recordAll: true, endsScreen: true } });
-const tapCount = ({ data }: TimelineContext) => Screen.getLatest(data, 'taps').recorded.responses?.length ?? 0;
-const screenAnswer = ({ data }: TimelineContext) => Screen.getLatest(data, 'face').recorded.response === 'happy';
+Stimulus.trial({ response: { keys: ['f'], recordAll: true } });
+// @ts-expect-error recording every answer keeps the trial going
+Stimulus.trial({ response: { keys: ['f'], timeLimitMs: 2000, recordAll: true, endsTrial: true } });
+const tapCount = ({ data }: TimelineContext) => Stimulus.getLatest(data, 'taps').recorded.responses?.length ?? 0;
+const stimulusAnswer = ({ data }: TimelineContext) => Stimulus.getLatest(data, 'face').recorded.response === 'happy';
 
-export { asJsx, bonusRead, experiment, reads, sampledTraits, screenAnswer, slideKey, tapCount };
+export { asJsx, bonusRead, experiment, reads, sampledTraits, stimulusAnswer, slideKey, tapCount };

@@ -1,6 +1,7 @@
 // Type tests, checked by `bun check`: every @ts-expect-error marks a mistake the types must catch
 import {
   type BaseComponentProps,
+  Canvas,
   CanvasBlock,
   type ExperimentData,
   type TimelineContext,
@@ -10,6 +11,7 @@ import {
   ifBlock,
   PlainInput,
   sampleParticipants,
+  Screen,
   StoreUI,
   Text,
   Upload,
@@ -463,4 +465,25 @@ sampleParticipants('sobol', 10, {
   openness: { distribution: 'normal', mean: 3, sd: 1, correlations: { openness: 0.4 } },
 });
 
-export { asJsx, bonusRead, experiment, reads, readsNames, sampledTraits, slideKey };
+// --- screens ---
+Screen.trial('face', {
+  content: <img src='face.png' alt='' />,
+  response: { choices: { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' } }, timeLimitMs: 3000 },
+  displayDurationMs: 500,
+});
+Screen.trial('fixation', { content: '+', displayDurationMs: 500 });
+Screen.trial({ response: { buttons: ['Yes', 'No'] } });
+Screen.trial({
+  content: ({ respond }) => <Canvas draw={(ctx, width, height) => ctx.fillRect(0, 0, width, height)} onClick={(x, y) => respond({ x, y })} />,
+});
+// @ts-expect-error a screen needs a way to end
+Screen.trial({ content: 'Nothing ends this screen' });
+// @ts-expect-error a choice is given by a key, a button, or both
+Screen.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
+// An answer through respond is the simulator's to give, typed like the default's
+Screen.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
+  respond: () => ({ value: { response: 'typed', reactionTimeMs: 2000 } }),
+});
+const screenAnswer = ({ get }: TimelineContext) => get(Screen, 'face').response === 'happy';
+
+export { asJsx, bonusRead, experiment, reads, readsNames, sampledTraits, screenAnswer, slideKey };

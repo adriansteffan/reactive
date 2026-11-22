@@ -13,11 +13,9 @@ import {
 import { createTimelineContext } from '../core/timeline';
 import { CompiledTimelineContext } from '../runner/contexts';
 import { uniform } from '../utils/distributions';
-import { isFullscreen } from '../utils/fullscreen';
+import { type CanvasSize, type Draw, prepareCanvas } from '../utils/canvas';
 import { responseKey } from '../utils/keys';
-
-/** Pixels, a share of the screen (`'80%'`), or a ratio to the other side (`'16:9'`). */
-type CanvasSize = number | `${number}%` | `${number}:${number}`;
+import { halfFrameMs } from '../utils/time';
 
 type CanvasBlockProps = {
   /** The slides, with ifBlock, whileBlock and updateStore for control flow. */
@@ -25,46 +23,10 @@ type CanvasBlockProps = {
   width?: CanvasSize;
   height?: CanvasSize;
   /** Sets colors and fonts before each slide is drawn. */
-  styleCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
+  styleCanvas?: Draw;
   /** Runs once, after the canvas is set up. */
-  initCanvas?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
+  initCanvas?: Draw;
 } & BaseComponentProps<SlideData[]>;
-
-/**
- * The canvas's size in CSS pixels on a screen of the given size. A number is pixels, and a percentage
- * is a share of the screen. A ratio such as `'16:9'` is width to height: it sets one side from the
- * other, or without the other, makes the largest canvas of that shape that fits the screen. Without
- * any, the canvas is the largest square that fits.
- */
-export function canvasSize(
-  width: CanvasSize | undefined,
-  height: CanvasSize | undefined,
-  screenWidth: number,
-  screenHeight: number,
-) {
-  const pixels = (size: CanvasSize | undefined, screen: number) =>
-    typeof size === 'number' ? size : size?.endsWith('%') ? (screen * Number.parseFloat(size)) / 100 : undefined;
-  const ratio = (size: CanvasSize | undefined) => {
-    if (typeof size !== 'string' || !size.includes(':')) return undefined;
-    const [w, h] = size.split(':').map(Number);
-    return w / h;
-  };
-  let w = pixels(width, screenWidth);
-  let h = pixels(height, screenHeight);
-  const shape = ratio(width) ?? ratio(height);
-  if (shape === undefined) {
-    w ??= h ?? Math.min(screenWidth, screenHeight);
-    h ??= w;
-  } else if (w !== undefined) {
-    h = w / shape;
-  } else if (h !== undefined) {
-    w = h * shape;
-  } else {
-    w = Math.min(screenWidth, screenHeight * shape);
-    h = w / shape;
-  }
-  return { width: Math.round(w), height: Math.round(h) };
-}
 
 function CanvasBlock({
   timeline,
@@ -84,25 +46,12 @@ function CanvasBlock({
   callbacks.current = { next, updateStore, styleCanvas, initCanvas };
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    const fullscreen = isFullscreen();
-    const size = canvasSize(
-      width,
-      height,
-      fullscreen ? window.screen.width : window.innerWidth,
-      fullscreen ? window.screen.height : window.innerHeight,
-    );
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(size.width * dpr);
-    canvas.height = Math.round(size.height * dpr);
-    canvas.style.width = `${size.width}px`;
-    canvas.style.height = `${size.height}px`;
-    ctx.scale(dpr, dpr);
+    const prepared = canvasRef.current && prepareCanvas(canvasRef.current, width, height);
+    if (!prepared) return;
+    const { ctx, size } = prepared;
 
     // A mistake in drawing code leaves the canvas incomplete instead of stopping the experiment
-    const paint = (drawing: ((ctx: CanvasRenderingContext2D, width: number, height: number) => void) | undefined) => {
+    const paint = (drawing: Draw | undefined) => {
       try {
         drawing?.(ctx, size.width, size.height);
       } catch (error) {
@@ -115,8 +64,7 @@ function CanvasBlock({
     };
     paint(callbacks.current.initCanvas);
 
-    const rate = store.__screenRefreshRate;
-    const halfFrame = typeof rate === 'number' && rate >= 20 && rate <= 300 ? 500 / rate : 0;
+    const halfFrame = halfFrameMs(store.__screenRefreshRate);
     const compiled = compileSlides(timeline);
     const context = createTimelineContext(data, store, trials);
     let run = startSlides(compiled, context);

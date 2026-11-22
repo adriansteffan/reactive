@@ -25,10 +25,13 @@ export type AnyComponent = (props: any) => ReactNode;
 type PropsOf<C> = C extends (props: infer P) => any ? P : never;
 
 /** The props a trial passes to its component: everything except what the runner provides. */
-export type OwnProps<C> = DistributiveOmit<PropsOf<C>, keyof BaseComponentProps>;
+export type OwnProps<C> = WithoutRunnerProps<PropsOf<C>>;
 
-// Omits from each variant of a union of props, which keep their own fields
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+// Each variant of a union of props keeps its own fields. A mapped type, which error messages print
+// as the fields themselves
+type WithoutRunnerProps<P> = P extends unknown
+  ? { [K in keyof P as K extends keyof BaseComponentProps ? never : K]: P[K] }
+  : never;
 
 /** The response a component records with `next`. */
 export type ResponseOf<C> =
@@ -119,8 +122,9 @@ export type RuntimeComponent = AnyComponent & { reactive: ComponentInfo };
 
 type HasRequired<T> = {} extends T ? false : true;
 
-// Props are an object, so that a name is never taken for them, even by a component without props of its own
-type TrialProps<C> = ContextArg<OwnProps<C> & object>;
+// Props are an object, so that a name is never taken for them, even by a component without props of
+// its own. Keyed on the component's props, which error messages name, as in TrialProps<ScreenProps>
+type TrialProps<P> = ContextArg<WithoutRunnerProps<P> & object>;
 
 // TypeScript reports the error of the last overload, so a name that reaches it, being taken or
 // missing the props after it, is turned into a message about the name
@@ -128,17 +132,17 @@ type PropsOrName<C, P> = [P] extends [string]
   ? P extends ReservedTrialName
     ? TrialName<P>
     : `The trial '${P & string}' needs its props after its name`
-  : TrialProps<C>;
+  : TrialProps<PropsOf<C>>;
 
 type TrialFunction<C, D, H extends string> =
   HasRequired<OwnProps<C>> extends true
     ? {
-        <const N extends string>(name: TrialName<N>, props: TrialProps<C>): Trial<C, D, true, H>;
-        <const P = TrialProps<C>>(props: PropsOrName<C, P>): Trial<C, D, false, H>;
+        <const N extends string>(name: TrialName<N>, props: TrialProps<PropsOf<C>>): Trial<C, D, true, H>;
+        <const P = TrialProps<PropsOf<C>>>(props: PropsOrName<C, P>): Trial<C, D, false, H>;
       }
     : {
-        <const N extends string>(name: TrialName<N>, props?: TrialProps<C>): Trial<C, D, true, H>;
-        <const P = TrialProps<C>>(props?: PropsOrName<C, P>): Trial<C, D, false, H>;
+        <const N extends string>(name: TrialName<N>, props?: TrialProps<PropsOf<C>>): Trial<C, D, true, H>;
+        <const P = TrialProps<PropsOf<C>>>(props?: PropsOrName<C, P>): Trial<C, D, false, H>;
       };
 
 /** A component defined with `defineComponent`, with default simulators `D` and params `H`. */

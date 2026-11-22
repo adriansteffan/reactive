@@ -7,8 +7,10 @@ import { simulateParticipant } from '../src/core/simulation';
 import { type TimelineContext, type Trial, compileExperimentTimeline, createTimelineContext, ifBlock, ifGoto, marker, type Timeline, updateStore, whileBlock } from '../src/core/timeline';
 import { defineComponent } from '../src/core/component';
 import { buildUploadFiles, type FileUpload, markRecordingUploaded } from '../src/core/files';
-import CanvasBlock, { canvasSize } from '../src/components/canvasblock';
+import CanvasBlock from '../src/components/canvasblock';
+import { canvasSize } from '../src/utils/canvas';
 import Text from '../src/components/text';
+import Screen from '../src/components/screen';
 import type { ResponseKey } from '../src/utils/keys';
 import type { SlideData } from '../src/core/slides';
 import { RandomDotKinematogram } from '../src/components/randomdotkinematogram';
@@ -674,6 +676,45 @@ describe('components', () => {
       [{ key: 'button', reactionTimeMs: 300 }, 300],
       [{}, 1000],
     ]);
+  });
+
+  test('a Screen records the named answer and the key that gave it', async () => {
+    const choices = { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' } } as const;
+    const rows = await run(Array.from({ length: 20 }, () => Screen.trial({ content: 'face', response: { choices } })));
+    for (const { responseData, durationMs } of rows) {
+      expect(['happy', 'sad']).toContain(responseData.response);
+      expect(responseData.key).toBe(choices[responseData.response as 'happy' | 'sad'].key);
+      expect(durationMs).toBe(responseData.reactionTimeMs);
+    }
+  });
+
+  test('a Screen ends at its time limit, or after its display duration, without an answer in time', async () => {
+    const late = () => ({ value: { response: 'f', key: 'f', reactionTimeMs: 2500 } });
+    const rows = await run([
+      Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000 } }).simulators({ respond: late }),
+      Screen.trial({ content: '+', displayDurationMs: 500 }),
+    ]);
+    expect(rows.map((row) => [row.responseData, row.durationMs])).toEqual([
+      [{ response: null, key: null, reactionTimeMs: null }, 2000],
+      [{ response: null, key: null, reactionTimeMs: null }, 500],
+    ]);
+  });
+
+  test("a Screen whose content answers needs a simulator, which gives the content's answer", async () => {
+    // Content that would answer through respond, which the simulation does not render
+    const content = () => null;
+    await expect(run([Screen.trial({ content })])).rejects.toThrow('needs a simulator of its own');
+    const rows = await run([
+      Screen.trial({ content }).simulators({ respond: () => ({ value: { response: 0.62, reactionTimeMs: 3100 } }) }),
+    ]);
+    expect(rows[0].responseData).toEqual({ response: 0.62, key: null, reactionTimeMs: 3100 });
+  });
+
+  test('a Screen whose answers share a key or button stops the run when the experiment loads', async () => {
+    await expect(
+      run([Screen.trial({ response: { choices: { happy: { key: 'f' }, sad: { key: 'F' } } } })]),
+    ).rejects.toThrow("share the key 'f'");
+    await expect(run([Screen.trial({ response: { keys: [] } })])).rejects.toThrow('would never end');
   });
 
   test("a replacement builds on the default simulator, keeping the participant it returns", async () => {

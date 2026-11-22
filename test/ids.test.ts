@@ -25,8 +25,9 @@ describe('uuidv4', () => {
     }
     for (let bit = 0; bit < 128; bit++) {
       if (fixedBits.has(bit)) continue;
-      // Four standard errors of a binomial proportion around 0.5
-      expect(Math.abs(ones[bit] / ids.length - 0.5)).toBeLessThan(4 * Math.sqrt(0.25 / ids.length));
+      // Six standard errors of a binomial proportion around 0.5, which chance alone exceeds for one
+      // of the 122 bits about once in four million runs; a stuck bit is hundreds away
+      expect(Math.abs(ones[bit] / ids.length - 0.5)).toBeLessThan(6 * Math.sqrt(0.25 / ids.length));
     }
   });
 });

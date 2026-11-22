@@ -1,4 +1,5 @@
 export { default as Text } from './text';
+export { default as Screen, Canvas, type ScreenChoice, type ScreenControls, type ScreenData, type ScreenResponse } from './screen';
 export { default as PlainInput } from './plaininput';
 export { default as ProlificEnding } from './prolificending';
 export { default as MicrophoneCheck } from './microphonecheck';

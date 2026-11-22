@@ -3,14 +3,13 @@ import { type BaseComponentProps, defineComponent } from '../core/component';
 import { t, useTheme } from '../runner/theme';
 import { type CanvasSize, type Draw, prepareCanvas } from '../utils/canvas';
 import { uniform } from '../utils/distributions';
-import { type ResponseKey, responseKey } from '../utils/keys';
+import { keyAnswer, type ResponseKey, responseKey } from '../utils/keys';
 import { halfFrameMs } from '../utils/time';
 
 /** An answer the participant gives by a key, a button, or both. */
 export type ScreenChoice = { key: ResponseKey; button?: string } | { key?: ResponseKey; button: string };
 
-/** The answers a screen takes, and how long they count. */
-export interface ScreenResponse {
+interface ScreenResponseFields {
   /** Keys that answer, each recorded as itself, letters in either case; `true` for any key. */
   keys?: readonly ResponseKey[] | true;
   /** Buttons that answer, each recorded as its text. */
@@ -19,19 +18,34 @@ export interface ScreenResponse {
   choices?: Record<string, ScreenChoice>;
   /** How long after the screen appears an answer counts. The screen ends then, if no answer has ended it. */
   timeLimitMs?: number;
+  /** Whether the first answer ends the screen. Defaults to `true`; otherwise the screen ends at its time limit. */
+  endsScreen?: boolean;
+  /** Records every answer until the time limit, as `responses`, and keeps the screen on until then. */
+  recordAll?: boolean;
 }
+
+/** The answers a screen takes, how long they count, and whether the first ends the screen. */
+// Recording every answer keeps the screen on, so it cannot also end at the first
+export type ScreenResponse = ScreenResponseFields & ({ recordAll?: false } | { recordAll: true; endsScreen?: false });
 
 /** What a content function receives: `respond` ends the screen with an answer of the content's own. */
 export interface ScreenControls {
   respond: (response: unknown) => void;
 }
 
-/** The answer, the key that gave it, and how long after the screen appeared it came; all null without an answer. */
-export interface ScreenData {
+/** An answer, the key that gave it, and how long after the screen appeared it came. */
+export type ScreenAnswer = { response: unknown; key: string | null; reactionTimeMs: number };
+
+/**
+ * The first answer, the key that gave it, and how long after the screen appeared it came, all null
+ * without an answer; with `recordAll`, every answer as `responses`.
+ */
+export type ScreenData = {
   response: unknown;
   key: string | null;
   reactionTimeMs: number | null;
-}
+  responses?: ScreenAnswer[];
+};
 
 type ScreenFields = {
   /** What the screen shows: React, or a function of `{ respond }` for content that answers by itself. */
@@ -39,25 +53,27 @@ type ScreenFields = {
   response?: ScreenResponse;
   /**
    * How long the content stays visible. Unless the response has a time limit, the screen ends then.
-   * Without one, the screen needs another way to end: keys, buttons or choices, a time limit, or
-   * content that responds.
+   * Without one, the screen needs another way to end: a time limit, or keys, buttons, choices or
+   * content that respond, whose first answer ends it.
    */
   displayDurationMs?: number;
   className?: string;
   containerClass?: string;
 };
 
+// An answer ends the screen, unless endsScreen is false or the screen records every answer
+type EndsAtAnswer = { endsScreen?: true; recordAll?: false };
+
 // A screen needs a way to end: an answer, a time limit, a display duration, or content that responds.
 // TypeScript explains a mismatch against the last of these, so a screen without an end reads as
 // missing its displayDurationMs, whose documentation lists the other ways.
 type ScreenEnd =
-  | { content: (controls: ScreenControls) => React.ReactNode }
+  | { content: (controls: ScreenControls) => React.ReactNode; response?: EndsAtAnswer }
   | {
       response:
         | { timeLimitMs: number }
-        | { keys: readonly ResponseKey[] | true }
-        | { buttons: readonly string[] }
-        | { choices: Record<string, ScreenChoice> };
+        | (EndsAtAnswer &
+            ({ keys: readonly ResponseKey[] | true } | { buttons: readonly string[] } | { choices: Record<string, ScreenChoice> }));
     }
   | { displayDurationMs: number };
 
@@ -75,15 +91,10 @@ function answersOf(response: ScreenResponse | undefined): Answer[] {
   ];
 }
 
-// The answer a key press gives: that of the answer whose key it is, or with `keys: true`, the key
-// itself. Undefined for a key that does not answer.
-function keyAnswer(response: ScreenResponse | undefined, pressed: string): { response: string; key: string } | undefined {
-  for (const answer of answersOf(response)) {
-    const key = answer.key === undefined ? undefined : responseKey([answer.key], pressed);
-    if (key !== undefined) return { response: answer.response, key };
-  }
-  const key = responseKey(response?.keys === true, pressed);
-  return key === undefined ? undefined : { response: key, key };
+// What a screen records from its answers: the first, and with recordAll, every one
+function recordOf(answers: ScreenAnswer[], recordAll: boolean): ScreenData {
+  const first = answers[0] ?? { response: null, key: null, reactionTimeMs: null };
+  return recordAll ? { ...first, responses: answers } : { ...first };
 }
 
 // A simulated answer as the browser would record it. The simulator's key says how the answer was
@@ -125,6 +136,9 @@ function Screen({ content, response, displayDurationMs, className = '', containe
   // A layout effect starts the clock before the browser paints the screen, like a CanvasBlock's draw
   useLayoutEffect(() => {
     const timeoutMs = response?.timeLimitMs ?? displayDurationMs ?? Number.POSITIVE_INFINITY;
+    const recordAll = response?.recordAll === true;
+    const endsAtAnswer = response?.endsScreen !== false && !recordAll;
+    const answers: ScreenAnswer[] = [];
     const halfFrame = halfFrameMs(refreshRate);
     // The frame that paints the screen, and the next one, with which it appears
     let paintedAt: number | undefined;
@@ -132,14 +146,17 @@ function Screen({ content, response, displayDurationMs, className = '', containe
     let done = false;
     let frameId = 0;
 
-    const end = (data: ScreenData) => {
+    const end = () => {
       done = true;
       cancelAnimationFrame(frameId);
-      next(data);
+      next(recordOf(answers, recordAll));
     };
     answerRef.current = (value, key, timeStamp) => {
       const reactionTimeMs = Math.round(Math.max(0, timeStamp - (onset ?? timeStamp)));
-      if (!done && reactionTimeMs < timeoutMs) end({ response: value, key, reactionTimeMs });
+      // Only the first answer counts, unless the screen records every answer
+      if (done || reactionTimeMs >= timeoutMs || (answers.length > 0 && !recordAll)) return;
+      answers.push({ response: value, key, reactionTimeMs });
+      if (endsAtAnswer) end();
     };
 
     const frame = (timestamp: number) => {
@@ -152,7 +169,7 @@ function Screen({ content, response, displayDurationMs, className = '', containe
         // Half a frame more ends the screen on the frame nearest its time
         const elapsed = timestamp - paintedAt + halfFrame;
         if (elapsed >= timeoutMs) {
-          end({ response: null, key: null, reactionTimeMs: null });
+          end();
           return;
         }
         if (contentRef.current && elapsed >= (displayDurationMs ?? Number.POSITIVE_INFINITY)) {
@@ -277,14 +294,13 @@ export default defineComponent({
   check: ({ props }) => {
     if (props === undefined) return undefined;
     const answers = answersOf(props.response);
+    const endsAtAnswer = props.response?.endsScreen !== false && props.response?.recordAll !== true;
     const ends =
-      answers.length > 0 ||
-      props.response?.keys === true ||
+      (endsAtAnswer && (answers.length > 0 || props.response?.keys === true || typeof props.content === 'function')) ||
       props.response?.timeLimitMs !== undefined ||
-      props.displayDurationMs !== undefined ||
-      typeof props.content === 'function';
+      props.displayDurationMs !== undefined;
     if (!ends) {
-      return 'A Screen would never end. Give it a displayDurationMs, or a response with keys, buttons, choices or a timeLimitMs.';
+      return 'A Screen would never end. Give it a displayDurationMs, or a response with a timeLimitMs, or with keys, buttons or choices whose first answer ends it.';
     }
     // Keys count in any case, so two that differ only in case are the same key
     const givenBy = new Map<string, string>();
@@ -300,29 +316,44 @@ export default defineComponent({
     }
     return undefined;
   },
+  // A screen that records every answer has a CSV row for each, or one without an answer
+  csv: {
+    screen: (row) => {
+      const { responses, ...first } = row.recorded;
+      return responses && responses.length > 0 ? responses : first;
+    },
+  },
   simulate: ({ props, simulators, participant }) => {
     const timeoutMs = props.response?.timeLimitMs ?? props.displayDurationMs ?? Number.POSITIVE_INFINITY;
-    const result = simulators.respond({ props, participant });
-    const { response, key, reactionTimeMs } = result.value;
-    // The same rules as in the browser: an answer counts within the screen's time
-    if (response !== null && reactionTimeMs !== null && reactionTimeMs < timeoutMs) {
-      return {
-        recorded: { ...recordAnswer(props, response, key), reactionTimeMs },
-        participant: result.participant,
-        durationMs: reactionTimeMs,
-      };
-    }
-    if (timeoutMs === Number.POSITIVE_INFINITY) {
+    const recordAll = props.response?.recordAll === true;
+    const endsAtAnswer = props.response?.endsScreen !== false && !recordAll;
+    const answers: ScreenAnswer[] = [];
+    // One answer after another, under the browser's rules: an answer counts within the screen's
+    // time, and with recordAll, each after the one before
+    do {
+      const result = simulators.respond({ props, participant, answers });
+      participant = result.participant ?? participant;
+      const { response, key, reactionTimeMs } = result.value;
+      if (response === null || reactionTimeMs === null || reactionTimeMs >= timeoutMs) break;
+      const previous = answers.at(-1);
+      if (previous && reactionTimeMs <= previous.reactionTimeMs) {
+        throw new Error(
+          `A simulated participant answered a Screen at ${reactionTimeMs} ms, which is not after the answer before at ${previous.reactionTimeMs} ms.`,
+        );
+      }
+      answers.push({ ...recordAnswer(props, response, key), reactionTimeMs });
+    } while (recordAll);
+
+    const durationMs = endsAtAnswer && answers.length > 0 ? answers[0].reactionTimeMs : timeoutMs;
+    if (durationMs === Number.POSITIVE_INFINITY) {
       throw new Error('A simulated participant gave no answer to a Screen that only an answer ends.');
     }
-    return {
-      recorded: { response: null, key: null, reactionTimeMs: null },
-      participant: result.participant,
-      durationMs: timeoutMs,
-    };
+    return { recorded: recordOf(answers, recordAll), participant, durationMs };
   },
   defaultSimulators: {
-    respond: ({ props }): ScreenDecision => {
+    // One answer: a screen that records every answer gets no second
+    respond: ({ props, answers: given }): ScreenDecision => {
+      if (given.length > 0) return { value: { response: null, reactionTimeMs: null } };
       const answers = answersOf(props.response);
       if (answers.length > 0) {
         const answer = answers[Math.floor(uniform(0, answers.length))];

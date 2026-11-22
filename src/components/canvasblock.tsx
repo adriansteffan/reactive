@@ -4,6 +4,7 @@ import {
   compileSlides,
   endSlide,
   type Slide,
+  type SlideAnswer,
   type SlideData,
   type SlideSimulatorResult,
   type SlideTimeline,
@@ -12,8 +13,8 @@ import {
 } from '../core/slides';
 import { createTimelineContext } from '../core/timeline';
 import { uniform } from '../utils/distributions';
-import { type CanvasSize, type Draw, prepareCanvas } from '../utils/canvas';
-import { responseKey } from '../utils/keys';
+import { type CanvasSize, canvasSize, type Draw, prepareCanvas } from '../utils/canvas';
+import { keyAnswer } from '../utils/keys';
 import { halfFrameMs } from '../utils/time';
 
 type CanvasBlockProps = {
@@ -44,8 +45,9 @@ function CanvasBlock({
   callbacks.current = { next, updateStore, styleCanvas, initCanvas };
 
   useEffect(() => {
-    const prepared = canvasRef.current && prepareCanvas(canvasRef.current, width, height);
-    if (!prepared) return;
+    const canvas = canvasRef.current;
+    const prepared = canvas && prepareCanvas(canvas, width, height);
+    if (!canvas || !prepared) return;
     const { ctx, size } = prepared;
 
     // A mistake in drawing code leaves the canvas incomplete instead of stopping the experiment
@@ -70,10 +72,10 @@ function CanvasBlock({
     // The slide on screen: the frame that drew it, the frame it appeared with, and its response
     let drawnAt = 0;
     let onset: number | undefined;
-    let response: { key: string; reactionTimeMs: number } | undefined;
+    let answer: SlideAnswer | undefined;
     let hidden = false;
-    // Keys pressed since the last frame, which the next frame judges
-    let pressed: { key: string; timeStamp: number }[] = [];
+    // Key presses and clicks since the last frame, which the next frame judges
+    let inputs: ({ key: string; timeStamp: number } | { x: number; y: number; timeStamp: number })[] = [];
     let frameId = 0;
 
     // Draws the next slide, or ends the block once there is none
@@ -90,7 +92,7 @@ function CanvasBlock({
       paint(slide.draw);
       drawnAt = timestamp;
       onset = undefined;
-      response = undefined;
+      answer = undefined;
       hidden = false;
       frameId = requestAnimationFrame(frame);
     };
@@ -100,28 +102,29 @@ function CanvasBlock({
       const timeoutMs = slideTimeoutMs(slide);
       // What a frame draws appears with the next frame
       onset ??= timestamp;
-      for (const press of pressed) {
-        // Key events are timestamped on the frames' clock; a key pressed before the slide appeared does not count
-        const reactionTimeMs = press.timeStamp - onset;
-        const key = responseKey(slide.response?.keys, press.key);
-        if (response || reactionTimeMs < 0 || reactionTimeMs >= timeoutMs || key === undefined) continue;
-        response = { key, reactionTimeMs: Math.round(reactionTimeMs) };
+      for (const input of inputs) {
+        // Inputs are timestamped on the frames' clock; one from before the slide appeared does not count
+        const reactionTimeMs = input.timeStamp - onset;
+        if (answer || reactionTimeMs < 0 || reactionTimeMs >= timeoutMs) continue;
+        const given =
+          'key' in input ? keyAnswer(slide.response, input.key) : slide.response?.click ? { x: input.x, y: input.y } : undefined;
+        if (!given) continue;
+        answer = { ...given, reactionTimeMs: Math.round(reactionTimeMs) };
         if (slide.response?.hidesDrawing) {
           clear();
           hidden = true;
         }
       }
-      pressed = [];
+      inputs = [];
 
       // Half a frame more ends the slide on the frame nearest its time
       const elapsed = timestamp - drawnAt + halfFrame;
-      if ((response && slide.response?.endsSlide !== false) || elapsed >= timeoutMs) {
+      if ((answer && slide.response?.endsSlide !== false) || elapsed >= timeoutMs) {
         run = endSlide(compiled, context, run, {
           startMs: Math.round(onset),
           // It disappears with the next frame, as long after this one as it appeared after the frame that drew it
           endMs: Math.round(timestamp + onset - drawnAt),
-          key: response?.key ?? null,
-          reactionTimeMs: response?.reactionTimeMs ?? null,
+          answer,
         });
         show(timestamp);
         return;
@@ -135,12 +138,19 @@ function CanvasBlock({
 
     const onKeyDown = (event: KeyboardEvent) => {
       // A held key repeats, which is not another response
-      if (!event.repeat) pressed.push({ key: event.key, timeStamp: event.timeStamp });
+      if (!event.repeat) inputs.push({ key: event.key, timeStamp: event.timeStamp });
+    };
+    // In CSS pixels from the canvas's corner, the coordinates that drawing uses
+    const onPointerDown = (event: PointerEvent) => {
+      const bounds = canvas.getBoundingClientRect();
+      inputs.push({ x: event.clientX - bounds.left, y: event.clientY - bounds.top, timeStamp: event.timeStamp });
     };
     window.addEventListener('keydown', onKeyDown);
+    canvas.addEventListener('pointerdown', onPointerDown);
     frameId = requestAnimationFrame(show);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
+      canvas.removeEventListener('pointerdown', onPointerDown);
       cancelAnimationFrame(frameId);
     };
   }, [timeline, width, height, data, store]);
@@ -168,38 +178,44 @@ export default defineComponent({
       const result = simulators.respondToSlide({ props, participant, slide });
       participant = result.participant ?? participant;
 
-      // The same rules as in the browser: a key counts within the slide's time, and ends it unless the slide says otherwise
+      // The same rules as in the browser: a key or click counts within the slide's time, and ends it
+      // unless the slide says otherwise
       const timeoutMs = slideTimeoutMs(slide);
-      const { key: pressed, reactionTimeMs } = result.value;
-      const key = pressed === null ? undefined : responseKey(slide.response?.keys, pressed);
-      const response =
-        key !== undefined && reactionTimeMs !== null && reactionTimeMs < timeoutMs ? { key, reactionTimeMs } : undefined;
-      const durationMs = response && slide.response?.endsSlide !== false ? response.reactionTimeMs : timeoutMs;
+      const { key, x, y, reactionTimeMs } = result.value;
+      const given =
+        key != null
+          ? keyAnswer(slide.response, key)
+          : x !== undefined && y !== undefined && slide.response?.click
+            ? { x, y }
+            : undefined;
+      const answer = given && reactionTimeMs !== null && reactionTimeMs < timeoutMs ? { ...given, reactionTimeMs } : undefined;
+      const durationMs = answer && slide.response?.endsSlide !== false ? answer.reactionTimeMs : timeoutMs;
       if (durationMs === Number.POSITIVE_INFINITY) {
         throw new Error('A simulated participant gave no response to a slide that only a response ends.');
       }
 
-      run = endSlide(compiled, context, run, {
-        startMs: time,
-        endMs: time + durationMs,
-        key: response?.key ?? null,
-        reactionTimeMs: response?.reactionTimeMs ?? null,
-      });
+      run = endSlide(compiled, context, run, { startMs: time, endMs: time + durationMs, answer });
       time += durationMs;
     }
 
     return { recorded: run.slides, participant, storeUpdates: run.store, durationMs: time };
   },
   defaultSimulators: {
-    respondToSlide: ({ slide }): SlideSimulatorResult => {
-      const keys = (slide as Slide).response?.keys;
-      if (keys === true) {
-        return { value: { key: ' ', reactionTimeMs: uniform(200, 800) } };
+    // One of the slide's ways to respond, at random: a listed key, any key, a choice's key, or a click
+    respondToSlide: ({ props, slide }): SlideSimulatorResult => {
+      const response = (slide as Slide).response;
+      const keys = response?.keys === true ? [' '] : (response?.keys ?? []);
+      const options: { key?: string; x?: number; y?: number }[] = [
+        ...keys.map((key) => ({ key })),
+        ...Object.values(response?.choices ?? {}).map(({ key }) => ({ key })),
+      ];
+      if (response?.click) {
+        // A point on the canvas as it would be sized on a 1920 by 1080 screen
+        const size = canvasSize(props.width, props.height, 1920, 1080);
+        options.push({ x: uniform(0, size.width), y: uniform(0, size.height) });
       }
-      if (keys && keys.length > 0) {
-        return { value: { key: keys[Math.floor(uniform(0, keys.length))], reactionTimeMs: uniform(200, 800) } };
-      }
-      return { value: { key: null, reactionTimeMs: null } };
+      if (options.length === 0) return { value: { key: null, reactionTimeMs: null } };
+      return { value: { ...options[Math.floor(uniform(0, options.length))], reactionTimeMs: uniform(200, 800) } };
     },
   },
 });

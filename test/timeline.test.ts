@@ -12,7 +12,7 @@ import { canvasSize } from '../src/utils/canvas';
 import Text from '../src/components/text';
 import Screen from '../src/components/screen';
 import type { ResponseKey } from '../src/utils/keys';
-import type { SlideData } from '../src/core/slides';
+import type { SlideData, SlideSimulatorResult } from '../src/core/slides';
 import { RandomDotKinematogram } from '../src/components/randomdotkinematogram';
 
 // The store key the CanvasBlock tests count with
@@ -765,6 +765,53 @@ describe('components', () => {
     expect(rows[0].recorded).toEqual({ response: 0.62, key: null, reactionTimeMs: 3100 });
   });
 
+  test('a Screen that an answer does not end records it and stays on until its time limit', async () => {
+    const rows = await run([
+      Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000, endsScreen: false } }).simulators({
+        respond: () => ({ value: { response: 'f', reactionTimeMs: 500 } }),
+      }),
+    ]);
+    expect([rows[0].recorded, rows[0].durationMs]).toEqual([{ response: 'f', key: 'f', reactionTimeMs: 500 }, 2000]);
+  });
+
+  test('a Screen that records every answer lists them, and has a CSV row for each', async () => {
+    // Taps every 700 ms, so the third comes after the time limit and does not count
+    const tapping = Screen.trial({ response: { keys: [' '], timeLimitMs: 2000, recordAll: true } }).simulators({
+      respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: (answers.length + 1) * 700 } }),
+    });
+    const silent = Screen.trial({ response: { keys: [' '], timeLimitMs: 1000, recordAll: true } }).simulators({
+      respond: () => ({ value: { response: null, reactionTimeMs: null } }),
+    });
+    const timeline = [tapping, silent];
+    const data = await simulateParticipant(defineExperiment({ timeline }), {});
+    expect([data.trials[0].recorded, data.trials[0].durationMs]).toEqual([
+      {
+        response: ' ',
+        key: ' ',
+        reactionTimeMs: 700,
+        responses: [
+          { response: ' ', key: ' ', reactionTimeMs: 700 },
+          { response: ' ', key: ' ', reactionTimeMs: 1400 },
+        ],
+      },
+      2000,
+    ]);
+    expect(data.trials[1].recorded).toEqual({ response: null, key: null, reactionTimeMs: null, responses: [] });
+
+    const csv = filesOf(timeline, data).find((file) => file.filename.startsWith('screen.s.'))!.content.split('\n');
+    expect(csv.map((line) => line.split(',').slice(0, 1).concat(line.split(',').slice(-3)))).toEqual([
+      ['trial_trialNumber', 'response', 'key', 'reactionTimeMs'],
+      ['1', ' ', ' ', '700'],
+      ['1', ' ', ' ', '1400'],
+      ['2', '', '', ''],
+    ]);
+
+    const outOfOrder = Screen.trial({ response: { keys: [' '], timeLimitMs: 2000, recordAll: true } }).simulators({
+      respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: answers.length === 0 ? 900 : 400 } }),
+    });
+    await expect(run([outOfOrder])).rejects.toThrow('at 400 ms, which is not after the answer before at 900 ms');
+  });
+
   test('a Screen whose answers share a key or button stops the run when the experiment loads', async () => {
     await expect(
       run([Screen.trial({ response: { choices: { happy: { key: 'f' }, sad: { key: 'F' } } } })]),
@@ -844,6 +891,47 @@ describe('components', () => {
       { slideNumber: 5, startMs: 1800, endMs: 2200, durationMs: 400, key: 'f', reactionTimeMs: 100 },
     ]);
     expect(rows[0].durationMs).toBe(2200);
+  });
+
+  test('a slide with choices records the choice its key gives, and one that takes clicks where it landed', async () => {
+    const decisions: SlideSimulatorResult['value'][] = [
+      { key: 'F', reactionTimeMs: 300 },
+      { key: 'x', reactionTimeMs: 300 },
+      { x: 120, y: 45, reactionTimeMs: 600 },
+      { key: 'f', reactionTimeMs: 200 },
+    ];
+    const choices = { happy: { key: 'f' }, sad: { key: 'j' } } as const;
+    const rows = await run([
+      CanvasBlock.trial({
+        timeline: [
+          { draw: () => {}, response: { choices } },
+          { draw: () => {}, response: { choices, timeLimitMs: 1000 } },
+          { draw: () => {}, response: { click: true } },
+          { draw: () => {}, response: { click: true, timeLimitMs: 1000 } },
+        ],
+      }).simulators({ respondToSlide: () => ({ value: decisions.shift() ?? { key: null, reactionTimeMs: null } }) }),
+    ]);
+    const answers = rows[0].recorded.map(({ slideNumber: _n, startMs: _s, endMs: _e, durationMs: _d, ...answer }: SlideData) => answer);
+    expect(answers).toEqual([
+      { response: 'happy', key: 'f', reactionTimeMs: 300 },
+      // A key that is not a choice's does not count, and the slide ends at its time limit
+      { response: null, key: null, reactionTimeMs: null },
+      { key: null, x: 120, y: 45, reactionTimeMs: 600 },
+      // A key does not answer a slide that takes clicks
+      { key: null, x: null, y: null, reactionTimeMs: null },
+    ]);
+  });
+
+  test("the default simulator clicks within the canvas", async () => {
+    const rows = await run([
+      CanvasBlock.trial({ width: 400, height: 300, timeline: Array.from({ length: 20 }, () => ({ draw: () => {}, response: { click: true } as const })) }),
+    ]);
+    for (const slide of rows[0].recorded as SlideData[]) {
+      expect(slide.x).toBeGreaterThanOrEqual(0);
+      expect(slide.x).toBeLessThanOrEqual(400);
+      expect(slide.y).toBeGreaterThanOrEqual(0);
+      expect(slide.y).toBeLessThanOrEqual(300);
+    }
   });
 
   test('a slide that can never end stops the experiment', async () => {

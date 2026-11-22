@@ -14,7 +14,6 @@ WORKDIR /app
 COPY --from=build /app/dist-server ./
 COPY --from=build /app/public ./public
 
-ENV NODE_ENV=production
 EXPOSE 8001
 
 CMD ["bun", "server.js"]

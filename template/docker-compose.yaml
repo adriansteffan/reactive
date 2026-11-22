@@ -9,6 +9,5 @@ services:
       - ./data:/app/data
     restart: unless-stopped
     environment:
-      - NODE_ENV=production
       - PORT=8001
 

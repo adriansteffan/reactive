@@ -28,3 +28,19 @@ export function responseKey(keys: readonly string[] | boolean | undefined, press
   if (!keys) return undefined;
   return keys.find((key) => key.toLowerCase() === pressed.toLowerCase());
 }
+
+/**
+ * The answer a key press gives: the name of the choice whose key it is, or a listed key, or with
+ * `keys: true` any key, as itself. Undefined for a key that does not answer.
+ */
+export function keyAnswer(
+  answers: { keys?: readonly string[] | true; choices?: Record<string, { key?: string }> } | undefined,
+  pressed: string,
+): { response: string; key: string } | undefined {
+  for (const [name, choice] of Object.entries(answers?.choices ?? {})) {
+    const key = choice.key === undefined ? undefined : responseKey([choice.key], pressed);
+    if (key !== undefined) return { response: name, key };
+  }
+  const key = responseKey(answers?.keys ?? false, pressed);
+  return key === undefined ? undefined : { response: key, key };
+}

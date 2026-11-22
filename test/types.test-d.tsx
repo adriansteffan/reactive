@@ -303,6 +303,11 @@ CanvasBlock.trial({
     { draw: () => {}, displayDurationMs: 500, response: { keys: true, endsSlide: false, hidesDrawing: true } },
     // @ts-expect-error what a response does needs the keys it takes
     { draw: () => {}, displayDurationMs: 500, response: { timeLimitMs: 2000 } },
+    { draw: () => {}, response: { choices: { happy: { key: 'f' }, sad: { key: 'j' } }, timeLimitMs: 2000 } },
+    { draw: () => {}, response: { click: true } },
+    // @ts-expect-error a slide's choices are given by keys, since a canvas has no buttons
+    { draw: () => {}, response: { choices: { happy: { button: 'Happy' } } } },
+    ({ slides }) => ({ draw: () => {}, displayDurationMs: (slides.at(-1)?.x ?? 0) + (slides.at(-1)?.response === 'happy' ? 1 : 0) }),
   ],
   width: '80%',
   height: '16:9',
@@ -475,6 +480,16 @@ Screen.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
 Screen.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
   respond: () => ({ value: { response: 'typed', reactionTimeMs: 2000 } }),
 });
+// Answers that do not end a screen need its time limit, and recording every answer cannot end it
+Screen.trial({ response: { choices: { yes: { key: 'f' } }, timeLimitMs: 2000, endsScreen: false } });
+Screen.trial({ response: { keys: [' '], timeLimitMs: 30000, recordAll: true } });
+// @ts-expect-error a screen that its answers do not end needs a time limit
+Screen.trial({ response: { keys: ['f'], endsScreen: false } });
+// @ts-expect-error so does one that records every answer
+Screen.trial({ response: { keys: ['f'], recordAll: true } });
+// @ts-expect-error recording every answer keeps the screen on
+Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000, recordAll: true, endsScreen: true } });
+const tapCount = ({ data }: TimelineContext) => Screen.getLatest(data, 'taps').recorded.responses?.length ?? 0;
 const screenAnswer = ({ data }: TimelineContext) => Screen.getLatest(data, 'face').recorded.response === 'happy';
 
-export { asJsx, bonusRead, experiment, reads, sampledTraits, screenAnswer, slideKey };
+export { asJsx, bonusRead, experiment, reads, sampledTraits, screenAnswer, slideKey, tapCount };

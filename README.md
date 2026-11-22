@@ -202,8 +202,12 @@ Its row records the `response`, the `key` that gave it, empty for a button, and 
 | `keys` | Keys recorded as themselves, or `true` for any key |
 | `buttons` | Buttons recorded as their text |
 | `timeLimitMs` | How long after the screen appears an answer counts; the screen ends then |
+| `endsScreen` | Whether the first answer ends the screen; `true` by default, and otherwise the screen ends at its time limit |
+| `recordAll` | Records every answer until the time limit, not only the first, and keeps the screen on until then |
 
 `displayDurationMs` hides the content after that time, while answers count until the time limit. Without a time limit, the screen ends when the content disappears. A screen needs a way to end, an answer, a time limit or a display duration, which the types check.
+
+With `endsScreen: false`, every trial lasts until its time limit, whenever the answer came, as fixed-duration designs need. With `recordAll`, a screen records each answer in `responses`, in order, such as a press for every target in a stream; `response`, `key` and `reactionTimeMs` still hold the first. In the screen CSV, such a screen has a row for each answer, or one empty row without any. Both need a time limit, and the types reject `recordAll` together with `endsScreen: true`.
 
 Named choices record what an answer means, so a counterbalanced key mapping stays in the experiment and out of the analysis:
 
@@ -239,7 +243,12 @@ The simulation cannot guess such answers, so a screen whose content answers need
 .simulators({ respond: () => ({ value: { response: { x: 300, y: 200 }, reactionTimeMs: 900 } }) })
 ```
 
-A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ response: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the screen does not take, or a key that gives another answer, stops the simulation with an error.
+A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ response: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the screen does not take, or a key that gives another answer, stops the simulation with an error. For a screen that records every answer, `respond` is asked again after each, with the `answers` so far, until it gives none or one after the time limit; each answer has to come after the one before:
+
+```tsx
+// a tap every 700 ms
+.simulators({ respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: (answers.length + 1) * 700 } }) })
+```
 
 Times work as for slides (below): a reaction time runs from the frame with which the screen appeared to the moment the browser timestamped the key press or click, and a key pressed before the screen appeared does not count. The screen appears once the images in its content have loaded, so their loading time is not part of a reaction time or a display duration; an image that fails to load shows as broken. Background images in CSS and videos are not waited for. Rendering a page can take varying time, though, so fast sequences, such as a fixation cross, a 50 ms stimulus and a mask, belong in a CanvasBlock.
 
@@ -279,19 +288,21 @@ CanvasBlock.trial('main', {
 | `draw(ctx, width, height)` | Draws the slide on a canvas cleared to white, with black as the fill color |
 | `displayDurationMs` | How long the drawing stays visible |
 | `response.keys` | The keys that count as a response, or `true` for any key (see below) |
-| `response.timeLimitMs` | How long after the slide appears a key counts as a response |
+| `response.choices` | Responses recorded by their names, each given by its `key`, as on a Screen |
+| `response.click` | Takes a click on the canvas as a response |
+| `response.timeLimitMs` | How long after the slide appears a response counts |
 | `response.endsSlide` | Whether the first response ends the slide; `true` by default |
 | `response.hidesDrawing` | Clears the drawing at the first response |
 | `ignoreData` | Records no row for the slide |
 | `metadata` | Extra values for the slide's row |
 
-A slide with a `response` ends at the first response, unless `endsSlide` is `false`. Otherwise it ends when the response's time limit runs out, or, without one, when its display duration does; the drawing can disappear earlier while keys still count. A slide needs one of these ways to end, which the types check; an empty list of keys, which they cannot see, stops the experiment during development and simulation. TypeScript explains a slide's mistakes best where it is declared as a `Slide`, like `fixation` above, rather than written inside the timeline.
+A slide with a `response` ends at the first response, unless `endsSlide` is `false`. Otherwise it ends when the response's time limit runs out, or, without one, when its display duration does; the drawing can disappear earlier while keys still count. A slide needs one of these ways to end, which the types check; an empty list of keys or choices, which they cannot see, stops the experiment during development and simulation. TypeScript explains a slide's mistakes best where it is declared as a `Slide`, like `fixation` above, rather than written inside the timeline.
 
 Keys are named as the browser names them in `KeyboardEvent.key`: a letter, a digit or symbol, `' '` for the space bar, or a named key such as `'Enter'` or `'ArrowLeft'`, which editors suggest. Any other name the browser gives works as well, such as `'ö'` on a German keyboard. Keys count in any case, so caps lock does not matter and `'enter'` is `'Enter'`, and the slide's row records the key as the list names it. Text's and the RandomDotKinematogram's `allowedResponseKeys` work the same way.
 
 A slide can also be a function of the timeline context, which runs once, when the slide starts. Inside a CanvasBlock, the context's `slides` holds the rows of the block's slides so far, while `data` holds the experiment's trials, as everywhere else. `updateStore` changes the store for the rest of the block, and the block's changes reach the experiment's store when it ends.
 
-Each slide records a row with its `slideNumber`, which counts the slides the participant saw from 1, including those that record nothing; `startMs`, `endMs` and `durationMs`; and the `key` pressed and its `reactionTimeMs`, or `null` without a response. In the canvas CSV, every slide is a row: its metadata is in `meta_` columns (`meta_word`), and the block's own metadata in `slideblock_meta_` columns (`slideblock_meta_condition`).
+Each slide records a row with its `slideNumber`, which counts the slides the participant saw from 1, including those that record nothing; `startMs`, `endMs` and `durationMs`; and the `key` pressed and its `reactionTimeMs`, or `null` without a response. A slide with `choices` also records the `response`, the name of the choice the key gave, so that keys counterbalanced across participants are recorded by what they mean. A slide that takes clicks records where the click landed as `x` and `y`, in the coordinates `draw` uses, and its `key` is `null`. Clicks count by the same rules as keys: from the frame with which the slide appeared, judged at the next frame. In the canvas CSV, every slide is a row: its metadata is in `meta_` columns (`meta_word`), and the block's own metadata in `slideblock_meta_` columns (`slideblock_meta_condition`).
 
 Times are taken from the frames the browser shows. A slide appears with the first frame after the one that draws it, and `startMs` is that frame's time; `endMs` is when the next frame takes it down. A reaction time runs from `startMs` to the moment the browser timestamped the key press, so the time the page needs to handle the key is not part of it, and a held key's repeats do not count. Durations are counted in frames: a slide is taken down on the frame nearest its duration when the screen's refresh rate is known, from `.collectRefreshRate()` on an earlier trial, and otherwise on the first frame at or after it.
 
@@ -618,10 +629,10 @@ createParticipants: () => {
 | Component | Decision functions | Its `value` | Default behavior |
 |---|---|---|---|
 | Text | `respond` | `{ key, reactionTimeMs }` | Click button, random reaction time |
-| Screen | `respond` | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | Random answer from `choices`, `keys` and `buttons`, random RT; a screen whose content answers needs its own |
+| Screen | `respond`, also given the `answers` so far | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT; a screen whose content answers needs its own |
 | PlainInput | `respond` | the text entered | Returns `'simulated_input'` |
 | Quest | `answerQuestion`, also given `question` | `{ answer, durationMs }` | Random valid answer per question type |
-| CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }` | Random key from the slide's `response.keys`, random RT; it counts under the same rules as a real key press |
+| CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }`, or `{ x, y, reactionTimeMs }` for a click | Random key from the slide's `keys` and `choices`, or a random point on a slide that takes clicks, random RT; it counts under the same rules as a real response |
 | Tutorial | `respondToSlide`, also given `slideIndex` | `{ data, durationMs }` | Advances through slides, no interaction data |
 | RandomDotKinematogram | `respond` | `{ key, reactionTimeMs }` | Random key from `allowedResponseKeys`, random RT (may timeout) |
 | Upload | *(none)* | | Builds CSVs and POSTs to backend |

@@ -275,6 +275,6 @@ export default defineComponent({
   csv: 'storeui',
   simulate: ({ props, store }) => {
     const values = buildFieldValues(props.fields || [], store);
-    return { responseData: values, storeUpdates: values };
+    return { recorded: values, storeUpdates: values };
   },
 });

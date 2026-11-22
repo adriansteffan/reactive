@@ -42,7 +42,7 @@ function collectRefreshRate(callback: (refreshRate: number) => void) {
 type RunEvent =
   | {
       type: 'respond';
-      responseData: unknown;
+      recorded: unknown;
       storeUpdates: Record<string, any>;
       startMs: number;
       endMs: number;
@@ -138,13 +138,13 @@ function Runner({ experiment, devDisabled }: { experiment: Experiment<any>; devD
   }, [trialNumber]);
 
   const next = useCallback(
-    (responseData?: unknown): void => {
+    (recorded?: unknown): void => {
       const start = trialStartRef.current;
       // A trial ends once; a later call, such as from a timer its component left running, is ignored
       if (start.trialNumber !== trialNumber) return;
       const storeUpdates = storeUpdatesRef.current;
       storeUpdatesRef.current = {};
-      dispatch({ type: 'respond', responseData, storeUpdates, startMs: start.ms, endMs: now() });
+      dispatch({ type: 'respond', recorded, storeUpdates, startMs: start.ms, endMs: now() });
       // The next trial starts as this one ends, also when its component ends it as soon as it appears
       trialStartRef.current = { trialNumber: trialNumber + 1, ms: now() };
     },

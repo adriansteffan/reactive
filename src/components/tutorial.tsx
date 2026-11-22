@@ -242,7 +242,7 @@ export const Tutorial = defineComponent({
       slideData[i] = result.value.data;
       totalDuration += result.value.durationMs;
     }
-    return { responseData: { slides: slideData }, participant, durationMs: totalDuration };
+    return { recorded: { slides: slideData }, participant, durationMs: totalDuration };
   },
   defaultSimulators: {
     respondToSlide: () => ({ value: { data: {}, durationMs: 500 } }),

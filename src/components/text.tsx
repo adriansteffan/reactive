@@ -114,16 +114,16 @@ export default defineComponent({
   simulate: ({ props, simulators, participant }) => {
     const { durationMs } = props;
     if (durationMs !== undefined && !props.buttonText && !props.allowedResponseKeys) {
-      return { responseData: {}, durationMs };
+      return { recorded: {}, durationMs };
     }
     const result = simulators.respond({ props, participant });
     const reactionTimeMs = result.value.reactionTimeMs ?? 0;
     // A timed screen that the participant does not end in time ends after its duration
     if (durationMs !== undefined && reactionTimeMs >= durationMs) {
-      return { responseData: {}, participant: result.participant, durationMs };
+      return { recorded: {}, participant: result.participant, durationMs };
     }
     return {
-      responseData: result.value,
+      recorded: result.value,
       participant: result.participant,
       durationMs: reactionTimeMs,
     };

@@ -32,7 +32,7 @@ export default defineExperiment({
     Text.trial('welcome', { content: <p>Welcome!</p>, buttonText: 'Start' }),
     PlainInput.trial('nickname', { content: <p>What is your nickname?</p> }),
     Text.trial('thanks', ({ data }) => ({
-      content: <p>Thank you, {PlainInput.getLatest(data, 'nickname').responseData.value}!</p>,
+      content: <p>Thank you, {PlainInput.getLatest(data, 'nickname').recorded.value}!</p>,
     })),
     Upload.trial('upload'),
   ],
@@ -93,7 +93,7 @@ Text.trial('instructions').metadata(isPractice ? { practice: true } : undefined)
 
 | Method | Description |
 |---|---|
-| `.metadata(values)` | Extra values for this trial's rows, kept apart from its response and merged into those set before (see [Metadata](#metadata)) |
+| `.metadata(values)` | Extra values for this trial's rows, kept apart from what it recorded and merged into those set before (see [Metadata](#metadata)) |
 | `.csv(files)` | Renames the CSV files of this trial's rows, or keeps them out with `null` (see [Per-trial CSV files](#per-trial-csv-files)) |
 | `.session(enabled)` | Puts this trial's columns in the session CSV, or keeps them out with `false`, whatever its component does (see [Session columns](#session-columns)) |
 | `.simulators(simulators)` | Replaces some of the component's simulators (see [Simulation](#simulation)) |
@@ -107,14 +107,14 @@ Times are in milliseconds everywhere, in props as in the recorded data, and thei
 Props, metadata, conditions and store updates can be functions of the timeline context (`TimelineContext`), which they receive when the trial runs. Its `data` holds everything recorded so far, which every component reads with `getAll` and `getLatest`, typed by the component:
 
 ```tsx
-Text.trial(({ data }) => ({ content: <p>Hello {PlainInput.getLatest(data, 'nickname').responseData.value}</p> }));
+Text.trial(({ data }) => ({ content: <p>Hello {PlainInput.getLatest(data, 'nickname').recorded.value}</p> }));
 
 // Repeat the practice until 8 of the last 10 answers are correct
 whileBlock(({ data }) => Screen.getAll(data, 'practice').slice(-10)
-  .filter((row) => row.responseData.response === row.metadata?.correct).length < 8, [practice]),
+  .filter((row) => row.recorded.response === row.metadata?.correct).length < 8, [practice]),
 ```
 
-`getAll(data)` returns the rows of the component's trials, in the order they ran, and `getAll(data, 'practice')` those of its trial named `practice`, as often as it ran; unnamed trials, such as those made in a loop, are found by their `metadata`. `getLatest(data, 'nickname')` returns the latest row of a named trial, and `getLatest(data)` that of the component's most recent trial, such as feedback after each trial of a loop needs. Both stop if no such trial has run yet; for a trial that may have been skipped, `getAll(data, 'nickname').at(-1)` is `undefined` until it has run. A row holds the trial's `responseData`, its `metadata`, and its `trialNumber`, `startMs`, `endMs` and `durationMs`. A name that is not the component's in the timeline stops the experiment during development and simulation; for real participants it is logged instead. Both work wherever `data` is: in these callbacks, in your components' `data` prop, in simulate functions, and in the raw data a study uploads.
+`getAll(data)` returns the rows of the component's trials, in the order they ran, and `getAll(data, 'practice')` those of its trial named `practice`, as often as it ran; unnamed trials, such as those made in a loop, are found by their `metadata`. `getLatest(data, 'nickname')` returns the latest row of a named trial, and `getLatest(data)` that of the component's most recent trial, such as feedback after each trial of a loop needs. Both stop if no such trial has run yet; for a trial that may have been skipped, `getAll(data, 'nickname').at(-1)` is `undefined` until it has run. A row holds the trial's `recorded`, its `metadata`, and its `trialNumber`, `startMs`, `endMs` and `durationMs`. A name that is not the component's in the timeline stops the experiment during development and simulation; for real participants it is logged instead. Both work wherever `data` is: in these callbacks, in your components' `data` prop, in simulate functions, and in the raw data a study uploads.
 
 `data.trials` lists all rows, in the order the participant saw them, so `data.trials.at(-1)` is the last one and `data.trials.length` counts them. `data.session` holds what the session recorded when it started: every param with its value and declaration, the build seed, the user agent, and the timeline's named trials. The timeline context also holds the `store`, and inside a CanvasBlock, `slides` (see [Timed slides](#timed-slides)).
 
@@ -136,7 +136,7 @@ timeline: [
 This covers choices that are fixed before the participant starts. Choices that depend on their answers use blocks, which are decided when the participant reaches them:
 
 ```tsx
-const clickedSlowly = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customtrial').responseData.totalTimeMs > 3000;
+const clickedSlowly = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customtrial').recorded.totalTimeMs > 3000;
 
 ifBlock(clickedSlowly, [Text.trial({ content: <p>Take your time.</p> })]).else([
   Text.trial({ content: <p>That was quick!</p> }),
@@ -144,7 +144,7 @@ ifBlock(clickedSlowly, [Text.trial({ content: <p>Take your time.</p> })]).else([
 whileBlock(({ store }) => (store.attempts ?? 0) < 3, [practiceRound]),
 updateStore(({ store }) => ({ attempts: (store.attempts ?? 0) + 1 })),
 marker('retry'),
-ifGoto(({ data }) => !Quiz.getLatest(data, 'quiz').responseData.passed, 'retry'),
+ifGoto(({ data }) => !Quiz.getLatest(data, 'quiz').recorded.passed, 'retry'),
 ```
 
 A condition written as a named function, like `clickedSlowly`, can be reused in several blocks and props without storing a flag. `updateStore` is for values that carry forward, such as a bonus.
@@ -366,7 +366,7 @@ export default defineComponent({
 });
 ```
 
-`BaseComponentProps<R>` gives the component `next`, which records its response of type `R` and moves on (only a response that allows `undefined` can be left out), along with `data`, `store`, `updateStore` and `name`, the trial's name. Only `name` and `component` are required. The name identifies the component in the data, since function names do not survive minification. A defined component is still an ordinary React component.
+`BaseComponentProps<R>` gives the component `next`, which records what the trial measured, of type `R`, and moves on (only a type that allows `undefined` can be left out), along with `data`, `store`, `updateStore` and `name`, the trial's name. Only `name` and `component` are required. The name identifies the component in the data, since function names do not survive minification. A defined component is still an ordinary React component.
 
 Write the component as a named function, as above, rather than inline in `defineComponent`: hot reloading then keeps the state of a trial that is on screen when its file changes.
 
@@ -539,7 +539,7 @@ export default defineComponent({
   // Simulate function: uses shared trial logic + decision functions
   simulate: ({ props, simulators, participant }) => {
     const result = simulators.decide({ props, participant });
-    return { responseData: { choice: result.value }, participant: result.participant };
+    return { recorded: { choice: result.value }, participant: result.participant };
   },
   // Default simulators: one per decision point
   defaultSimulators: {
@@ -552,7 +552,7 @@ A simulate function receives the trial's `props`, the `participant` and the `sim
 
 A component that records nothing, such as a screen of instructions, can use `simulate: noopSimulate`, which moves on at once.
 
-The simulate function orchestrates the trial logic. The decision functions are the parts where a human would interact — these are what users override to model different participant behaviors. Its `responseData` is checked against the response type the component records with `next`. A component without `simulate` works normally, but a simulation stops at its trials with an error.
+The simulate function orchestrates the trial logic. The decision functions are the parts where a human would interact — these are what users override to model different participant behaviors. What it returns as `recorded` is checked against the type the component records with `next`. A component without `simulate` works normally, but a simulation stops at its trials with an error.
 
 ### Reproducible simulations
 
@@ -704,12 +704,12 @@ The session CSV holds a single row per participant. A component with `session: t
 defineComponent({
   name: 'SportsGame',
   component: SportsGame,
-  session: (item) => ({ finalScore: item.responseData.score }), // game_finalScore for a trial named 'game'
-  csv: { sports_actions: (item) => flattenActions(item.responseData) },
+  session: (item) => ({ finalScore: item.recorded.score }), // game_finalScore for a trial named 'game'
+  csv: { sports_actions: (item) => flattenActions(item.recorded) },
 });
 ```
 
-A trial's `.session(true)` puts its columns in the session CSV although its component does not, and `.session(false)` keeps them out. A response that is a list has no fields to spread into columns, so it needs a function: the types reject `true` for it, and a list that reaches the session CSV from a component that does not declare its response stops the experiment during development and simulation.
+A trial's `.session(true)` puts its columns in the session CSV although its component does not, and `.session(false)` keeps them out. Something recorded as a list has no fields to spread into columns, so it needs a function: the types reject `true` for it, and a list that reaches the session CSV from a component that does not declare its response stops the experiment during development and simulation.
 
 ### Adding session-level data
 
@@ -721,13 +721,13 @@ Upload.trial('upload', { sessionData: { experimentVersion: 2 } }),
 
 // Dynamic (computed from the store or earlier results)
 Upload.trial('upload', ({ store, data }) => ({
-  sessionData: { bonus: store.bonus, choice: Story.getLatest(data, 'story').responseData.choice },
+  sessionData: { bonus: store.bonus, choice: Story.getLatest(data, 'story').recorded.choice },
 })),
 ```
 
 ### Custom flatteners
 
-Without a flattener, each trial is one row, with its response's fields as columns, and a response that is a list is one row per item, like CanvasBlock's slides. To give a trial rows of another shape, map the file to a function that returns its row, or a list of rows. The function reads the trial's row with the component's response, so TypeScript checks what it reads:
+Without a flattener, each trial is one row, with the fields it recorded as columns, and a trial that recorded a list is one row per item, like CanvasBlock's slides. To give a trial rows of another shape, map the file to a function that returns its row, or a list of rows. The function reads the trial's row with the component's response, so TypeScript checks what it reads:
 
 ```tsx
 defineComponent({
@@ -735,7 +735,7 @@ defineComponent({
   component: MyGame,
   csv: {
     games: (item) =>
-      item.responseData.moves.map((move) => ({
+      item.recorded.moves.map((move) => ({
         moveType: move.type,
         score: move.score,
       })),
@@ -756,9 +756,9 @@ defineComponent({
   name: 'SportsGame',
   component: SportsGame,
   csv: {
-    sports_actions: (item) => flattenActions(item.responseData),
-    sports_players: (item) => flattenPlayers(item.responseData),
-    sports_matches: (item) => flattenMatches(item.responseData),
+    sports_actions: (item) => flattenActions(item.recorded),
+    sports_players: (item) => flattenPlayers(item.recorded),
+    sports_matches: (item) => flattenMatches(item.recorded),
   },
 });
 ```
@@ -784,7 +784,7 @@ Add metadata to a trial to include extra columns in every CSV row it produces:
 RandomDotKinematogram.trial('rdk1', { coherence: 0.5 }).metadata({ difficulty: 'hard', block: 2 }),
 ```
 
-In the data, metadata sits under the row's `metadata`, apart from the trial's own fields and its response, so their names can never collide. In the CSVs, its columns are prefixed with `meta_` (`meta_difficulty`), and for session-level trials also with the trial name (`rdk1_meta_difficulty`). A CanvasBlock's metadata is in `slideblock_meta_` columns instead, next to its slides' `meta_` columns (see [Timed slides](#timed-slides)). An object value becomes a single column holding its JSON. Metadata can also be a function of the timeline context.
+In the data, metadata sits under the row's `metadata`, apart from the trial's own fields and what it `recorded`, so their names can never collide. In the CSVs, its columns are prefixed with `meta_` (`meta_difficulty`), and for session-level trials also with the trial name (`rdk1_meta_difficulty`). A CanvasBlock's metadata is in `slideblock_meta_` columns instead, next to its slides' `meta_` columns (see [Timed slides](#timed-slides)). An object value becomes a single column holding its JSON. Metadata can also be a function of the timeline context.
 
 
 ## Utilities

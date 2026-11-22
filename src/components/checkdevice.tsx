@@ -156,6 +156,6 @@ export default defineComponent({
       operatingSystem: 'Simulated', hasWebAudio: true, hasFullscreen: true,
       hasWebcam: true, hasMicrophone: true,
     };
-    return { responseData: deviceInfo };
+    return { recorded: deviceInfo };
   },
 });

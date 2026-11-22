@@ -6,7 +6,7 @@ import { createExperimentData, type ExperimentData } from './rows';
 import { createTimelineContext } from './timeline';
 
 /** A simulation for components without a response, such as entering fullscreen. */
-export const noopSimulate = () => ({ responseData: {} as any });
+export const noopSimulate = () => ({ recorded: {} as any });
 
 /**
  * Runs one simulated participant through the experiment. Its `params` set the experiment's
@@ -64,7 +64,7 @@ export async function simulateParticipant(
     const startMs = currentTime;
     currentTime += result.durationMs ?? 0;
     state = respond(compiled, state, {
-      responseData: result.responseData,
+      recorded: result.recorded,
       storeUpdates: result.storeUpdates,
       startMs,
       endMs: currentTime,

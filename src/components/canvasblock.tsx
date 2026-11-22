@@ -156,7 +156,7 @@ export default defineComponent({
   name: 'CanvasBlock',
   component: CanvasBlock,
   // Every slide's row has metadata, if only empty, so the block's own always goes to slideblock_meta_ columns
-  csv: { canvas: (item) => item.responseData.map((row) => ({ metadata: {}, ...row })) },
+  csv: { canvas: (item) => item.recorded.map((row) => ({ metadata: {}, ...row })) },
   simulate: ({ props, simulators, participant, data, store }) => {
     const compiled = compileSlides(props.timeline);
     const context = { data, store, slides: [] };
@@ -188,7 +188,7 @@ export default defineComponent({
       time += durationMs;
     }
 
-    return { responseData: run.slides, participant, storeUpdates: run.store, durationMs: time };
+    return { recorded: run.slides, participant, storeUpdates: run.store, durationMs: time };
   },
   defaultSimulators: {
     respondToSlide: ({ slide }): SlideSimulatorResult => {

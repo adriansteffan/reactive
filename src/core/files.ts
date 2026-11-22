@@ -18,7 +18,7 @@ export type UploadFile = FileUpload & { _alreadyUploaded?: boolean };
 export type CsvRow = Record<string, unknown>;
 
 /** A trial's row, with its component's response. */
-export type TrialRow<R = any> = Omit<TrialData, 'responseData'> & { responseData: R };
+export type TrialRow<R = any> = Omit<TrialData, 'recorded'> & { recorded: R };
 
 /** Turns a trial's row into the row it stands for in a CSV file, or a list of rows. */
 export type Flatten<R = any> = (item: TrialRow<R>) => CsvRow | CsvRow[];
@@ -144,7 +144,7 @@ function autoBuildCSVs(
     // Add metadata, namespaced by trial name
     for (const [key, value] of Object.entries(item.metadata ?? {})) row[`${prefix}_${columnPrefixes.meta}${key}`] = value;
     // Add the response's fields, or those the component's session function returns, namespaced by trial name
-    const fields = typeof columns === 'function' ? columns(item) : item.responseData;
+    const fields = typeof columns === 'function' ? columns(item) : item.recorded;
     if (fields === undefined || fields === null) continue;
     if (typeof fields !== 'object' || Array.isArray(fields)) {
       report(
@@ -164,7 +164,7 @@ function autoBuildCSVs(
       for (const key of trialColumns) base[columnPrefixes.trial + key] = item[key];
       // A flattener's rows, and the items of a response that is a list, are rows of their own, which
       // can carry metadata of their own, as CanvasBlock's slides do; any other response is one row
-      const output = flatten ? flatten(item) : item.responseData;
+      const output = flatten ? flatten(item) : item.recorded;
       const flatRows: { fields: Record<string, any>; metadata?: Record<string, any> }[] =
         flatten || Array.isArray(output)
           ? [output].flat().map((row) => {
@@ -227,16 +227,16 @@ function extractAudioRecordings(trials: TrialData[]): { files: UploadFile[]; tri
   };
 
   const rows = trials.map((item) => {
-    const rd = item.responseData;
+    const rd = item.recorded;
     if (!rd || typeof rd !== 'object') return item;
 
     const label = item.name || item.type;
-    // Direct responseData is an audio recording (VoiceRecording component)
-    let responseData = extract(rd, label, item.trialNumber);
+    // What the trial recorded is itself an audio recording (VoiceRecording component)
+    let recorded = extract(rd, label, item.trialNumber);
 
-    // Nested in responseData (Quest voicerecorder questions)
-    if (responseData === rd && !Array.isArray(rd)) {
-      responseData = Object.fromEntries(
+    // or holds recordings among its fields (Quest voicerecorder questions)
+    if (recorded === rd && !Array.isArray(rd)) {
+      recorded = Object.fromEntries(
         Object.entries(rd).map(([key, value]) => [
           key,
           value && typeof value === 'object' ? extract(value, `${label}_${key}`, item.trialNumber) : value,
@@ -244,7 +244,7 @@ function extractAudioRecordings(trials: TrialData[]): { files: UploadFile[]; tri
       );
     }
 
-    return { ...item, responseData };
+    return { ...item, recorded };
   });
 
   return { files, trials: rows };

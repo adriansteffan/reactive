@@ -220,7 +220,7 @@ export function createRunState(compiled: CompiledTimeline, data: ExperimentData,
 export function respond(
   compiled: CompiledTimeline,
   state: RunState,
-  trial: { responseData: unknown; storeUpdates?: Record<string, any>; startMs: number; endMs: number },
+  trial: { recorded: unknown; storeUpdates?: Record<string, any>; startMs: number; endMs: number },
 ): RunState {
   const content = trialAt(compiled, state.pointer);
   if (!content) return state;
@@ -231,7 +231,7 @@ export function respond(
       trialNumber: state.data.trials.length + 1,
       startMs: trial.startMs,
       endMs: trial.endMs,
-      responseData: trial.responseData,
+      recorded: trial.recorded,
     },
     createTimelineContext(state.data, store),
   );

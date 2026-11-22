@@ -307,7 +307,7 @@ export default defineComponent({
     // The same rules as in the browser: an answer counts within the screen's time
     if (response !== null && reactionTimeMs !== null && reactionTimeMs < timeoutMs) {
       return {
-        responseData: { ...recordAnswer(props, response, key), reactionTimeMs },
+        recorded: { ...recordAnswer(props, response, key), reactionTimeMs },
         participant: result.participant,
         durationMs: reactionTimeMs,
       };
@@ -316,7 +316,7 @@ export default defineComponent({
       throw new Error('A simulated participant gave no answer to a Screen that only an answer ends.');
     }
     return {
-      responseData: { response: null, key: null, reactionTimeMs: null },
+      recorded: { response: null, key: null, reactionTimeMs: null },
       participant: result.participant,
       durationMs: timeoutMs,
     };

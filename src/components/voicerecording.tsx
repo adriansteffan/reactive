@@ -183,7 +183,7 @@ export default defineComponent({
     // Exact duration via ffprobe, fall back to estimate from file size
     const recordingDurationMs = (await probeAudioDurationMs(data64)) ?? Math.round(data64.length / 4);
     return {
-      responseData: {
+      recorded: {
         type: 'audiorecording',
         data64,
         timestamp: new Date().toISOString(),

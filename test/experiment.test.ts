@@ -28,7 +28,7 @@ const Answer = defineComponent({
   name: 'ParamAnswer',
   component: (_props: BaseComponentProps<{ value: unknown }> & { value?: unknown }) => null,
   params: { speed: { default: 1 } },
-  simulate: ({ props }) => ({ responseData: { value: props.value } }),
+  simulate: ({ props }) => ({ recorded: { value: props.value } }),
 });
 
 const group = { values: ['vn', 'scenario'], default: 'vn' } as const;
@@ -121,7 +121,7 @@ describe('params', () => {
     const first = await simulateParticipant(experiment, {});
     const second = await simulateParticipant(experiment, {});
     expect(calls).toBe(2);
-    expect([first.trials[0].responseData.value, second.trials[0].responseData.value]).toEqual(['a', 'b']);
+    expect([first.trials[0].recorded.value, second.trials[0].recorded.value]).toEqual(['a', 'b']);
     expect(first.session.params.group.value).toBe('a');
   });
 });

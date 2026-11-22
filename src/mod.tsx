@@ -12,7 +12,7 @@ export { now } from './utils/time';
 export { defineComponent } from './core/component';
 export { ifBlock, ifGoto, marker, updateStore, whileBlock } from './core/timeline';
 export type { TimelineContext, Timeline, Trial } from './core/timeline';
-export type { DefinedComponent, OwnProps, ParticipantState, ResponseOf, SimulateFunction, SimulateResult, Simulator, SimulatorResult } from './core/component';
+export type { DefinedComponent, OwnProps, ParticipantState, RecordedOf, SimulateFunction, SimulateResult, Simulator, SimulatorResult } from './core/component';
 export type { ExperimentStore } from './core/store';
 export { defineExperiment } from './core/experiment';
 export { useParams } from './runner/contexts';

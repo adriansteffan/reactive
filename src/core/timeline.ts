@@ -7,7 +7,7 @@ import {
   isBlock,
 } from './bytecode';
 import type {
-  ResponseOf,
+  RecordedOf,
   RuntimeComponent,
   SimulatorOverrides,
   SimulatorReplacement,
@@ -84,7 +84,7 @@ export interface Trial<C = any, D = any, H extends string = string> {
    * Puts this trial's columns in the session CSV, or with `false` keeps them out, whatever its
    * component does. A response that is a list has no columns there.
    */
-  session(enabled: (ResponseOf<C> extends readonly unknown[] ? false : boolean) | undefined): Trial<C, D, H>;
+  session(enabled: (RecordedOf<C> extends readonly unknown[] ? false : boolean) | undefined): Trial<C, D, H>;
   /** Measures the screen's refresh rate while this trial runs and stores it for later canvas trials. */
   collectRefreshRate(enabled?: boolean): Trial<C, D, H>;
   /** Hides the component's params from the settings screen: all of them, or the ones named. */

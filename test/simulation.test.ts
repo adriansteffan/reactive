@@ -16,7 +16,7 @@ const Rated = defineComponent({
   simulate: async ({ props, simulators, participant }) => {
     await new Promise((resolve) => setTimeout(resolve, Math.random() * 5));
     return {
-      responseData: { rating: simulators.rate({ props, participant }).value + props.item },
+      recorded: { rating: simulators.rate({ props, participant }).value + props.item },
       durationMs: uniform(100, 500),
     };
   },
@@ -95,7 +95,7 @@ test("a component's simulation reaches the experiment's server through getBacken
     component: (_props: BaseComponentProps<{ partner: string }>) => null,
     simulate: async () => {
       const response = await fetch(`${getBackendUrl()}/partner`);
-      return { responseData: { partner: await response.text() } };
+      return { recorded: { partner: await response.text() } };
     },
   });
   const rows: string[] = [];

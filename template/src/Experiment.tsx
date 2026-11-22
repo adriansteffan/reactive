@@ -57,7 +57,7 @@ const CustomTrial = defineComponent({
       totalTimeMs += result.value;
     }
     return {
-      responseData: { totalTimeMs, clicks: props.maxCount },
+      recorded: { totalTimeMs, clicks: props.maxCount },
       participant,
       durationMs: totalTimeMs,
     };
@@ -112,7 +112,7 @@ export default defineExperiment({
     Text.trial('finaltext', ({ data }) => ({
       content: (
         <>
-          Thank you for participating in our study, {PlainInput.getLatest(data, 'nickname').responseData.value}. You can now
+          Thank you for participating in our study, {PlainInput.getLatest(data, 'nickname').recorded.value}. You can now
           close the browser window.
         </>
       ),

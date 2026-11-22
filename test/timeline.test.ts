@@ -35,7 +35,7 @@ const Answer = defineComponent({
   name: 'Answer',
   component: (_props: BaseComponentProps<{ value: number }> & { value?: number; label?: string }) => null,
   csv: 'answers',
-  simulate: ({ props }) => ({ responseData: { value: props.value ?? 0 } }),
+  simulate: ({ props }) => ({ recorded: { value: props.value ?? 0 } }),
 });
 
 async function run(timeline: Timeline, participant = {}) {
@@ -110,7 +110,7 @@ describe('compiling', () => {
         updateStore(({ store }) => ({ count: (store.count ?? 0) + 1 })),
       ]),
     ]);
-    expect(rows.map((row) => row.responseData.value)).toEqual([0, 1, 2]);
+    expect(rows.map((row) => row.recorded.value)).toEqual([0, 1, 2]);
   });
 
   test('ifGoto jumps to its marker', async () => {
@@ -269,24 +269,24 @@ describe('reading results', () => {
       nickname,
       Answer.trial({ value: 3 }),
       Answer.trial('copy', ({ data }) => ({
-        value: Answer.getLatest(data, 'nickname').responseData.value + Answer.getAll(data).length,
+        value: Answer.getLatest(data, 'nickname').recorded.value + Answer.getAll(data).length,
       })),
     ]);
-    expect(rows[2].responseData.value).toBe(9);
+    expect(rows[2].recorded.value).toBe(9);
   });
 
   test('a skipped trial: getLatest stops, getAll is empty', async () => {
     const skipped = Answer.trial('skipped', { value: 1 });
     const optional = await run([
       ifBlock(() => false, [skipped]),
-      Answer.trial('after', ({ data }) => ({ value: Answer.getAll(data, 'skipped').at(-1)?.responseData.value ?? -1 })),
+      Answer.trial('after', ({ data }) => ({ value: Answer.getAll(data, 'skipped').at(-1)?.recorded.value ?? -1 })),
     ]);
-    expect(optional[0].responseData.value).toBe(-1);
+    expect(optional[0].recorded.value).toBe(-1);
 
     await expect(
       run([
         ifBlock(() => false, [skipped]),
-        Answer.trial('after', ({ data }) => ({ value: Answer.getLatest(data, 'skipped').responseData.value })),
+        Answer.trial('after', ({ data }) => ({ value: Answer.getLatest(data, 'skipped').recorded.value })),
       ]),
     ).rejects.toThrow("'skipped' has not run yet");
   });
@@ -299,20 +299,20 @@ describe('reading results', () => {
         updateStore(({ store }) => ({ count: (store.count ?? 0) + 1 })),
       ]),
       Answer.trial('last', ({ data }) => ({
-        value: Answer.getLatest(data, 'looped').responseData.value + Answer.getAll(data, 'looped').length,
+        value: Answer.getLatest(data, 'looped').recorded.value + Answer.getAll(data, 'looped').length,
       })),
     ]);
-    expect(rows.at(-1)?.responseData.value).toBe(23);
+    expect(rows.at(-1)?.recorded.value).toBe(23);
   });
 
   test('getLatest without a name reads the most recent trial of the component, also unnamed ones', async () => {
     const rows = await run([
       Answer.trial('first', { value: 1 }),
       Answer.trial({ value: 2 }),
-      Answer.trial('after', ({ data }) => ({ value: Answer.getLatest(data).responseData.value })),
+      Answer.trial('after', ({ data }) => ({ value: Answer.getLatest(data).recorded.value })),
     ]);
-    expect(rows.at(-1)?.responseData.value).toBe(2);
-    await expect(run([Text.trial(({ data }) => ({ content: String(Answer.getLatest(data).responseData.value) }))])).rejects.toThrow(
+    expect(rows.at(-1)?.recorded.value).toBe(2);
+    await expect(run([Text.trial(({ data }) => ({ content: String(Answer.getLatest(data).recorded.value) }))])).rejects.toThrow(
       'No Answer trial has run yet',
     );
   });
@@ -396,7 +396,7 @@ describe('components', () => {
     const Plain = defineComponent({
       name: 'PlainThing',
       component: (_props: BaseComponentProps<{ ok: boolean }>) => null,
-      simulate: () => ({ responseData: { ok: true } }),
+      simulate: () => ({ recorded: { ok: true } }),
     });
     const timeline = [Plain.trial('one')];
     const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
@@ -411,7 +411,7 @@ describe('components', () => {
     const data = await simulateParticipant(defineExperiment({ timeline }), {});
     expect(data.trials[0]).toMatchObject({
       name: 'a',
-      responseData: { value: 7 },
+      recorded: { value: 7 },
       metadata: { name: 'block A', value: 'from metadata' },
     });
 
@@ -442,7 +442,7 @@ describe('components', () => {
       name: 'Odd',
       component: (_props: BaseComponentProps<Record<string, number>>) => null,
       simulate: () => ({
-        responseData: { meta_value: 1, trial_name: 2, response_x: 3, url_y: 4, plain: 5 },
+        recorded: { meta_value: 1, trial_name: 2, response_x: 3, url_y: 4, plain: 5 },
       }),
     });
     const timeline = [
@@ -471,10 +471,10 @@ describe('components', () => {
       name: 'Game',
       component: (_props: BaseComponentProps<{ moves: number[]; players: string[] }>) => null,
       csv: {
-        moves: (row) => row.responseData.moves.map((move: number) => ({ move })),
-        players: (row) => row.responseData.players.map((player: string) => ({ player })),
+        moves: (row) => row.recorded.moves.map((move: number) => ({ move })),
+        players: (row) => row.recorded.players.map((player: string) => ({ player })),
       },
-      simulate: () => ({ responseData: { moves: [1, 2], players: ['a'] } }),
+      simulate: () => ({ recorded: { moves: [1, 2], players: ['a'] } }),
     });
     const timeline = [Game.trial('g')];
     const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
@@ -487,12 +487,12 @@ describe('components', () => {
     const List = defineComponent({
       name: 'List',
       component: (_props: BaseComponentProps<{ x: number }[]>) => null,
-      simulate: () => ({ responseData: [{ x: 1 }, { x: 2 }] }),
+      simulate: () => ({ recorded: [{ x: 1 }, { x: 2 }] }),
     });
     const Numbers = defineComponent({
       name: 'Numbers',
       component: (_props: BaseComponentProps<number[]>) => null,
-      simulate: () => ({ responseData: [4, 5] }),
+      simulate: () => ({ recorded: [4, 5] }),
     });
     const numbers = [Numbers.trial('n')];
     const numberLines = filesOf(numbers, await simulateParticipant(defineExperiment({ timeline: numbers }), {}))
@@ -512,9 +512,9 @@ describe('components', () => {
     const Game = defineComponent({
       name: 'Game',
       component: (_props: BaseComponentProps<{ moves: number[] }>) => null,
-      csv: { moves: (row) => row.responseData.moves.map((move: number) => ({ move })), log: true },
+      csv: { moves: (row) => row.recorded.moves.map((move: number) => ({ move })), log: true },
       session: true,
-      simulate: () => ({ responseData: { moves: [1, 2] } }),
+      simulate: () => ({ recorded: { moves: [1, 2] } }),
     });
     const timeline = [Game.trial('practice').csv({ moves: 'practice_moves', log: null })];
     const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
@@ -529,9 +529,9 @@ describe('components', () => {
     const Game = defineComponent({
       name: 'Game',
       component: (_props: BaseComponentProps<{ moves: number[] }>) => null,
-      csv: { summary: (item) => ({ last: item.responseData.moves.at(-1) }) },
-      session: (item) => ({ total: item.responseData.moves.length }),
-      simulate: () => ({ responseData: { moves: [1, 2] } }),
+      csv: { summary: (item) => ({ last: item.recorded.moves.at(-1) }) },
+      session: (item) => ({ total: item.recorded.moves.length }),
+      simulate: () => ({ recorded: { moves: [1, 2] } }),
     });
     const timeline = [Game.trial('g')];
     const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
@@ -547,7 +547,7 @@ describe('components', () => {
       name: 'Untyped',
       component: (_props: BaseComponentProps) => null,
       session: true,
-      simulate: () => ({ responseData: [{ x: 1 }] }),
+      simulate: () => ({ recorded: [{ x: 1 }] }),
     });
     const timeline = [Untyped.trial('l')];
     const data = await simulateParticipant(defineExperiment({ timeline }), {});
@@ -559,7 +559,7 @@ describe('components', () => {
       name: 'Input',
       component: (_props: BaseComponentProps<{ value: number }>) => null,
       session: true,
-      simulate: () => ({ responseData: { value: 1 } }),
+      simulate: () => ({ recorded: { value: 1 } }),
     });
     const timeline = [Input.trial('a'), Input.trial('b').session(false).csv('inputs')];
     const files = filesOf(timeline, await simulateParticipant(defineExperiment({ timeline }), {}));
@@ -596,7 +596,7 @@ describe('components', () => {
       name: 'Input',
       component: (_props: BaseComponentProps<{ value: number }>) => null,
       session: true,
-      simulate: () => ({ responseData: { value: 1 } }),
+      simulate: () => ({ recorded: { value: 1 } }),
     });
     const timeline = [Input.trial(), Input.trial('age'), Input.trial(), Input.trial().session(false), Input.trial()];
     const rows = await run(timeline);
@@ -611,7 +611,7 @@ describe('components', () => {
 
   test('recordings are named after their trial, and sent again unless the server has the same content', () => {
     const recording = (trialNumber: number, name: string, recorded: Record<string, string>) =>
-      ({ trialNumber, type: 'VoiceRecording', name, responseData: { type: 'audiorecording', ...recorded } }) as TrialData;
+      ({ trialNumber, type: 'VoiceRecording', name, recorded: { type: 'audiorecording', ...recorded } }) as TrialData;
     markRecordingUploaded('audio_kept_2.webm', 'AAAA');
     markRecordingUploaded('audio_redone_3.webm', 'old');
     const files = buildUploadFiles({
@@ -643,7 +643,7 @@ describe('components', () => {
       simulate: ({ props, simulators, participant, data }) => {
         const result = simulators.see({ props, participant });
         return {
-          responseData: { seen: result.participant?.seen, earlierRows: data.trials.length },
+          recorded: { seen: result.participant?.seen, earlierRows: data.trials.length },
           participant: result.participant,
         };
       },
@@ -651,7 +651,7 @@ describe('components', () => {
     const rows = await run([Counter.trial('first'), Answer.trial('between'), Counter.trial('second')], {
       seen: 0,
     });
-    expect(rows[2].responseData).toEqual({ seen: 2, earlierRows: 2 });
+    expect(rows[2].recorded).toEqual({ seen: 2, earlierRows: 2 });
   });
 
   test('generateFiles receives the session, the data and the store', () => {
@@ -682,14 +682,14 @@ describe('components', () => {
             updateStore(({ store }) => ({ shown: (store.shown ?? 0) + 1 })),
           ]),
           ifBlock(({ slides }) => slides.length === 2, [slide('j')]).else([slide('x')]),
-          ({ data, slides }) => ({ ...slide('k'), metadata: { before: Answer.getLatest(data, 'before').responseData.value, seen: slides.length } }),
+          ({ data, slides }) => ({ ...slide('k'), metadata: { before: Answer.getLatest(data, 'before').recorded.value, seen: slides.length } }),
         ],
       }),
       Answer.trial('after', ({ store }) => ({ value: store.shown })),
     ]);
-    expect(rows[1].responseData.map((row: SlideData) => row.key)).toEqual(['f', 'f', 'j', 'k']);
-    expect(rows[1].responseData[3].metadata).toEqual({ before: 3, seen: 3 });
-    expect(rows[2].responseData.value).toBe(2);
+    expect(rows[1].recorded.map((row: SlideData) => row.key)).toEqual(['f', 'f', 'j', 'k']);
+    expect(rows[1].recorded[3].metadata).toEqual({ before: 3, seen: 3 });
+    expect(rows[2].recorded.value).toBe(2);
   });
 
   test("a timed Text screen ends after its duration, unless its button ends it first", async () => {
@@ -699,7 +699,7 @@ describe('components', () => {
       Text.trial({ durationMs: 1000, buttonText: 'Skip' }).simulators({ respond: clickAfter(300) }),
       Text.trial({ durationMs: 1000, buttonText: 'Skip' }).simulators({ respond: clickAfter(1500) }),
     ]);
-    expect(rows.map((row) => [row.responseData, row.durationMs])).toEqual([
+    expect(rows.map((row) => [row.recorded, row.durationMs])).toEqual([
       [{}, 1000],
       [{ key: 'button', reactionTimeMs: 300 }, 300],
       [{}, 1000],
@@ -709,10 +709,10 @@ describe('components', () => {
   test('a Screen records the named answer and the key that gave it', async () => {
     const choices = { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' } } as const;
     const rows = await run(Array.from({ length: 20 }, () => Screen.trial({ content: 'face', response: { choices } })));
-    for (const { responseData, durationMs } of rows) {
-      expect(['happy', 'sad']).toContain(responseData.response);
-      expect(responseData.key).toBe(choices[responseData.response as 'happy' | 'sad'].key);
-      expect(durationMs).toBe(responseData.reactionTimeMs);
+    for (const { recorded, durationMs } of rows) {
+      expect(['happy', 'sad']).toContain(recorded.response);
+      expect(recorded.key).toBe(choices[recorded.response as 'happy' | 'sad'].key);
+      expect(durationMs).toBe(recorded.reactionTimeMs);
     }
   });
 
@@ -722,7 +722,7 @@ describe('components', () => {
       Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000 } }).simulators({ respond: late }),
       Screen.trial({ content: '+', displayDurationMs: 500 }),
     ]);
-    expect(rows.map((row) => [row.responseData, row.durationMs])).toEqual([
+    expect(rows.map((row) => [row.recorded, row.durationMs])).toEqual([
       [{ response: null, key: null, reactionTimeMs: null }, 2000],
       [{ response: null, key: null, reactionTimeMs: null }, 500],
     ]);
@@ -738,7 +738,7 @@ describe('components', () => {
       answering({ response: 'skip' }),
       answering({ response: 'X' }),
     ]);
-    expect(rows.map((row) => row.responseData)).toEqual([
+    expect(rows.map((row) => row.recorded)).toEqual([
       { response: 'happy', key: 'f', reactionTimeMs: 500 },
       { response: 'happy', key: null, reactionTimeMs: 500 },
       { response: 'skip', key: null, reactionTimeMs: 500 },
@@ -762,7 +762,7 @@ describe('components', () => {
     const rows = await run([
       Screen.trial({ content }).simulators({ respond: () => ({ value: { response: 0.62, reactionTimeMs: 3100 } }) }),
     ]);
-    expect(rows[0].responseData).toEqual({ response: 0.62, key: null, reactionTimeMs: 3100 });
+    expect(rows[0].recorded).toEqual({ response: 0.62, key: null, reactionTimeMs: 3100 });
   });
 
   test('a Screen whose answers share a key or button stops the run when the experiment loads', async () => {
@@ -778,7 +778,7 @@ describe('components', () => {
       component: (_props: BaseComponentProps<{ taps: number; tappedBefore: boolean }>) => null,
       simulate: ({ props, simulators, participant }) => {
         const result = simulators.tap({ props, participant });
-        return { responseData: { taps: result.value, tappedBefore: participant.tapped === true }, participant: result.participant };
+        return { recorded: { taps: result.value, tappedBefore: participant.tapped === true }, participant: result.participant };
       },
       defaultSimulators: {
         tap: ({ participant }) => ({ value: 2, participant: { ...participant, tapped: true } }),
@@ -793,7 +793,7 @@ describe('components', () => {
       }),
       Tap.trial(),
     ]);
-    expect(rows.map((row) => row.responseData)).toEqual([
+    expect(rows.map((row) => row.recorded)).toEqual([
       { taps: 20, tappedBefore: false },
       { taps: 2, tappedBefore: true },
     ]);
@@ -837,7 +837,7 @@ describe('components', () => {
         },
       }),
     ]);
-    expect(rows[0].responseData).toEqual([
+    expect(rows[0].recorded).toEqual([
       { slideNumber: 2, startMs: 500, endMs: 800, durationMs: 300, key: 'f', reactionTimeMs: 300 },
       { slideNumber: 3, startMs: 800, endMs: 1400, durationMs: 600, key: 'f', reactionTimeMs: 600 },
       { slideNumber: 4, startMs: 1400, endMs: 1800, durationMs: 400, key: null, reactionTimeMs: null },
@@ -886,7 +886,7 @@ describe('components', () => {
     );
     seedDistributions(1);
     const data = await simulateParticipant(defineExperiment({ timeline: trials }), {});
-    const responses = new Set(data.trials.map((row) => row.responseData.key));
+    const responses = new Set(data.trials.map((row) => row.recorded.key));
     // A participant who runs out of time responds with null
     expect([...responses].filter((response) => response !== null).sort()).toEqual([' ', 'f']);
   });

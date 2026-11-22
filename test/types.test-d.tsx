@@ -48,8 +48,8 @@ const CustomTrial = defineComponent({
     // @ts-expect-error a simulator needs the props and the participant
     simulators.click({ participant });
     const bonus: number | undefined = store.bonus;
-    const name: string = PlainInput.getLatest(data, 'nickname').responseData.value;
-    return { responseData: { totalTime: r.value * n + (bonus ?? 0) + name.length, clicks: n } };
+    const name: string = PlainInput.getLatest(data, 'nickname').recorded.value;
+    return { recorded: { totalTime: r.value * n + (bonus ?? 0) + name.length, clicks: n } };
   },
 });
 
@@ -61,8 +61,8 @@ defineComponent({
     next({ totalTime: 1, clicks: 1 });
     return null;
   },
-  // @ts-expect-error responseData does not match the component's response
-  simulate: () => ({ responseData: { totalTime: 'x' } }),
+  // @ts-expect-error a simulation records what the component records
+  simulate: () => ({ recorded: { totalTime: 'x' } }),
 });
 
 // simulate may come before defaultSimulators
@@ -72,7 +72,7 @@ defineComponent({
   simulate: ({ props, simulators, participant }) => {
     // @ts-expect-error simulator that does not exist
     simulators.tap({ props, participant });
-    return { responseData: { totalTime: simulators.click({ props, participant }).value, clicks: 1 } };
+    return { recorded: { totalTime: simulators.click({ props, participant }).value, clicks: 1 } };
   },
   defaultSimulators: {
     click: ({ props }) => {
@@ -178,7 +178,7 @@ const asJsx = <Warmup next={() => {}} data={noData} store={{}} updateStore={() =
 // --- chained methods ---
 const base = CustomTrial.trial({ maxCount: 5 });
 base.metadata({ block: 1 }).collectRefreshRate().csv(null);
-CustomTrial.trial(({ data }) => ({ maxCount: PlainInput.getLatest(data, 'nickname').responseData.value.length }));
+CustomTrial.trial(({ data }) => ({ maxCount: PlainInput.getLatest(data, 'nickname').recorded.value.length }));
 base.simulators({ click: ({ participant }) => ({ value: participant.speed }) });
 // @ts-expect-error simulator the component does not have
 base.simulators({ tap: () => ({ value: 1 }) });
@@ -229,21 +229,21 @@ ParamReader.trial().hideParams(['mode']).hideParams(true);
 ParamReader.trial().hideParams(['moed']);
 
 const reads = ({ data }: TimelineContext) => {
-  const a: string = PlainInput.getLatest(data, 'nickname').responseData.value;
-  const b: number = CustomTrial.getLatest(data, 'customtrial').responseData.totalTime;
-  const c: number[] = CustomTrial.getAll(data).map((row) => row.responseData.clicks);
-  const d: number | undefined = CustomTrial.getAll(data, 'customtrial').at(-1)?.responseData.totalTime;
+  const a: string = PlainInput.getLatest(data, 'nickname').recorded.value;
+  const b: number = CustomTrial.getLatest(data, 'customtrial').recorded.totalTime;
+  const c: number[] = CustomTrial.getAll(data).map((row) => row.recorded.clicks);
+  const d: number | undefined = CustomTrial.getAll(data, 'customtrial').at(-1)?.recorded.totalTime;
   // @ts-expect-error a trial that may not have run may be undefined
-  const e: number = CustomTrial.getAll(data, 'customtrial').at(-1).responseData.totalTime;
+  const e: number = CustomTrial.getAll(data, 'customtrial').at(-1).recorded.totalTime;
   // @ts-expect-error field that does not exist
-  CustomTrial.getLatest(data, 'customtrial').responseData.duration;
-  const ready: boolean = Warmup.getLatest(data, 'warmup').responseData.ready;
+  CustomTrial.getLatest(data, 'customtrial').recorded.duration;
+  const ready: boolean = Warmup.getLatest(data, 'warmup').recorded.ready;
   const metadata: Record<string, any> | undefined = Warmup.getLatest(data, 'warmup').metadata;
   return [a, b, c, d, e, ready, metadata];
 };
 
 // --- store ---
-updateStore(({ data }) => ({ bonus: CustomTrial.getLatest(data, 'customtrial').responseData.totalTime > 3000 ? 0.25 : 0.5 }));
+updateStore(({ data }) => ({ bonus: CustomTrial.getLatest(data, 'customtrial').recorded.totalTime > 3000 ? 0.25 : 0.5 }));
 // @ts-expect-error misspelled store key
 updateStore(() => ({ bonsu: 1 }));
 // @ts-expect-error wrong store value type
@@ -256,7 +256,7 @@ const bonusRead = ({ store }: TimelineContext) => {
 };
 
 // --- timeline and params ---
-const slow = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customtrial').responseData.totalTime > 3000;
+const slow = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customtrial').recorded.totalTime > 3000;
 
 const experiment = defineExperiment({
   params: {
@@ -289,7 +289,7 @@ const experiment = defineExperiment({
 CanvasBlock.trial({
   timeline: [
     { draw: (ctx) => ctx.fillText('+', 0, 0), displayDurationMs: 500 },
-    ({ slides, data }) => ({ draw: () => {}, displayDurationMs: slides.length * CustomTrial.getLatest(data, 'customtrial').responseData.clicks }),
+    ({ slides, data }) => ({ draw: () => {}, displayDurationMs: slides.length * CustomTrial.getLatest(data, 'customtrial').recorded.clicks }),
     ifBlock(({ slides }) => slides.at(-1)?.key === 'f', [{ draw: () => {}, displayDurationMs: 100 }]).else([]),
     updateStore(({ slides }) => ({ bonus: slides.length })),
     // @ts-expect-error a slide draws itself
@@ -389,31 +389,31 @@ const movesComponent = (_props: BaseComponentProps<{ moves: number[] }>) => null
 defineComponent({
   name: 'Files',
   component: movesComponent,
-  csv: { moves: (row) => row.responseData.moves.map((move) => ({ move })), summary: (row) => ({ n: row.responseData.moves.length }) },
+  csv: { moves: (row) => row.recorded.moves.map((move) => ({ move })), summary: (row) => ({ n: row.recorded.moves.length }) },
   session: true,
 });
 defineComponent({
   name: 'SessionColumns',
   component: movesComponent,
-  session: (row) => ({ total: row.responseData.moves.length }),
+  session: (row) => ({ total: row.recorded.moves.length }),
 });
 defineComponent({
   name: 'NotRows',
   component: movesComponent,
   // @ts-expect-error a file's function returns rows, not the values in them
-  csv: { moves: (row) => row.responseData.moves },
+  csv: { moves: (row) => row.recorded.moves },
 });
 defineComponent({
   name: 'Typo',
   component: movesComponent,
   // @ts-expect-error the rows have the component's response
-  csv: { moves: (row) => row.responseData.moevs.map((move: number) => ({ move })) },
+  csv: { moves: (row) => row.recorded.moevs.map((move: number) => ({ move })) },
 });
 defineComponent({
   name: 'SessionRows',
   component: movesComponent,
   // @ts-expect-error the session CSV holds a single row per participant
-  session: (row) => row.responseData.moves.map((move) => ({ move })),
+  session: (row) => row.recorded.moves.map((move) => ({ move })),
 });
 const listComponent = (_props: BaseComponentProps<{ x: number }[]>) => null;
 defineComponent({
@@ -425,7 +425,7 @@ defineComponent({
 const ListCount = defineComponent({
   name: 'ListCount',
   component: listComponent,
-  session: (row) => ({ n: row.responseData.length }),
+  session: (row) => ({ n: row.recorded.length }),
 });
 ListCount.trial().session(false);
 PlainInput.trial().session(false).csv('inputs');
@@ -475,6 +475,6 @@ Screen.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
 Screen.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
   respond: () => ({ value: { response: 'typed', reactionTimeMs: 2000 } }),
 });
-const screenAnswer = ({ data }: TimelineContext) => Screen.getLatest(data, 'face').responseData.response === 'happy';
+const screenAnswer = ({ data }: TimelineContext) => Screen.getLatest(data, 'face').recorded.response === 'happy';
 
 export { asJsx, bonusRead, experiment, reads, sampledTraits, screenAnswer, slideKey };

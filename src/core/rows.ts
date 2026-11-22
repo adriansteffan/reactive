@@ -4,7 +4,7 @@ import { report } from './development';
 import { type ParamType, paramType } from './params';
 import { type TimelineContext, resolve, type TrialContent } from './timeline';
 
-/** One recorded row: a trial's response, its timing, and what identifies it. */
+/** One row of the data: what a trial recorded, its timing, and what identifies it. */
 export interface TrialData {
   /** The order in which the participant saw the trial, from 1. */
   trialNumber: number;
@@ -15,7 +15,7 @@ export interface TrialData {
   csv?: TrialCsv;
   /** Set with `.session()`: whether the row has columns in the session CSV, unlike its component's. */
   session?: boolean;
-  responseData: any;
+  recorded: any;
   /** Set with `.metadata()`. */
   metadata?: Record<string, any>;
   startMs: number;
@@ -26,7 +26,7 @@ export interface TrialData {
 /** The row a trial records when it ends, the same whether a participant or a simulation ran it. */
 export function createTrialRow(
   content: TrialContent,
-  trial: { trialNumber: number; startMs: number; endMs: number; responseData: unknown },
+  trial: { trialNumber: number; startMs: number; endMs: number; recorded: unknown },
   context: TimelineContext,
 ): TrialData {
   const metadata = resolve(content.metadata, context);
@@ -39,7 +39,7 @@ export function createTrialRow(
     name: content.name ?? '',
     ...(content.csv !== undefined ? { csv: content.csv } : {}),
     ...(content.session !== undefined ? { session: content.session } : {}),
-    responseData: trial.responseData,
+    recorded: trial.recorded,
     ...(metadata !== undefined ? { metadata } : {}),
   };
 }

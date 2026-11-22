@@ -108,7 +108,7 @@ export default defineComponent({
   component: Quest,
   session: true,
   simulate: ({ props, simulators, participant }) => {
-    const responseData: Record<string, any> = {};
+    const recorded: Record<string, any> = {};
     let totalDuration = 0;
     const pages = props.surveyJson?.pages || [{ elements: props.surveyJson?.elements || [] }];
     for (const page of pages) {
@@ -116,11 +116,11 @@ export default defineComponent({
         if (!el.name) continue;
         const result = simulators.answerQuestion({ props, participant, question: el });
         participant = result.participant ?? participant;
-        responseData[el.name] = result.value.answer;
+        recorded[el.name] = result.value.answer;
         totalDuration += result.value.durationMs;
       }
     }
-    return { responseData, participant, durationMs: totalDuration };
+    return { recorded, participant, durationMs: totalDuration };
   },
   defaultSimulators: {
     answerQuestion: ({ question }) => {

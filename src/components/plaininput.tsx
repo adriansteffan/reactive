@@ -92,7 +92,7 @@ export default defineComponent({
     const result = simulators.respond({ props, participant });
     const typingDuration = String(result.value).length * uniform(50, 150);
     return {
-      responseData: { value: result.value },
+      recorded: { value: result.value },
       participant: result.participant,
       durationMs: typingDuration,
     };

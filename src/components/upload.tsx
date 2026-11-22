@@ -251,6 +251,6 @@ export default defineComponent({
       console.error(`Simulation upload failed: ${res.status} ${res.statusText}`);
     }
 
-    return { responseData: { files } };
+    return { recorded: { files } };
   },
 });

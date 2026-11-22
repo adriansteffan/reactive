@@ -9,9 +9,9 @@ import { type TimelineContext, type ContextArg, makeTrial, type Trial, type Tria
 
 export type ParticipantState = Record<string, any>;
 
-/** Props the runner passes to every component. `R` is the type of the response the component records with `next`. */
+/** Props the runner passes to every component. `R` is the type of what the component records with `next`. */
 export interface BaseComponentProps<R = unknown> {
-  /** Ends the trial with its response, which can only be left out if the response allows `undefined`. */
+  /** Ends the trial with what it recorded, which can only be left out if its type allows `undefined`. */
   next: undefined extends R ? (data?: R) => void : (data: R) => void;
   /** Everything recorded so far: the session, and the rows of the trials that have ended. */
   data: ExperimentData;
@@ -34,8 +34,8 @@ type WithoutRunnerProps<P> = P extends unknown
   ? { [K in keyof P as K extends keyof BaseComponentProps ? never : K]: P[K] }
   : never;
 
-/** The response a component records with `next`. */
-export type ResponseOf<C> =
+/** What a component records with `next`. */
+export type RecordedOf<C> =
   PropsOf<C> extends { next: (data: infer R, ...rest: any[]) => void } ? R : unknown;
 
 /** What a simulator receives: the trial's props, the participant, and whatever else the component's simulation passes along. */
@@ -67,7 +67,7 @@ type Replacement<C, F> = F extends (...args: any[]) => infer R
 export type SimulatorOverrides<C, D> = { [K in keyof D]?: Replacement<C, D[K]> };
 
 export type SimulateResult<R = unknown> = {
-  responseData: R;
+  recorded: R;
   /** Without it, the participant stays as it was. */
   participant?: ParticipantState;
   durationMs?: number;
@@ -87,7 +87,7 @@ export type SimulateInput<C = any, S extends string = string> = TimelineContext 
 
 export type SimulateFunction<C = any, S extends string = string> = (
   input: SimulateInput<C, S>,
-) => SimulateResult<ResponseOf<C>> | Promise<SimulateResult<ResponseOf<C>>>;
+) => SimulateResult<RecordedOf<C>> | Promise<SimulateResult<RecordedOf<C>>>;
 
 /** What a component's `check` sees of one of its trials when the experiment loads. */
 export interface TrialCheck<C = any, P = {}> {
@@ -151,9 +151,9 @@ export type DefinedComponent<C extends AnyComponent = AnyComponent, D = any, H e
   reactive: ComponentInfo;
   trial: TrialFunction<C, D, H>;
   /** The recorded rows of this component's trials, or of its trial named `name`, in the order they ran. */
-  getAll: (data: ExperimentData, name?: string) => TrialRow<ResponseOf<C>>[];
+  getAll: (data: ExperimentData, name?: string) => TrialRow<RecordedOf<C>>[];
   /** The latest recorded row of this component's trials, or of its trial named `name`. Stops if none has run yet. */
-  getLatest: (data: ExperimentData, name?: string) => TrialRow<ResponseOf<C>>;
+  getLatest: (data: ExperimentData, name?: string) => TrialRow<RecordedOf<C>>;
 };
 
 export function defineComponent<
@@ -170,12 +170,12 @@ export function defineComponent<
    * Defaults to the name in lowercase, unless the component sets `session`; `null` keeps them out of
    * the CSVs. A map gives files the function that turns a row into the file's rows, or `true`.
    */
-  csv?: ComponentCsv<ResponseOf<C>>;
+  csv?: ComponentCsv<RecordedOf<C>>;
   /**
    * Puts its trials' columns in the session CSV, the single row per participant: `true` for the
    * response's fields, or a function that returns them.
    */
-  session?: SessionColumns<ResponseOf<C>>;
+  session?: SessionColumns<RecordedOf<C>>;
   /** Params it reads with `useParams`, which the settings screen lists whenever it is in the timeline. */
   params?: CheckedParams<P>;
   defaultSimulators?: Record<S, Simulator<C>> & D;
@@ -224,7 +224,7 @@ export function defineComponent<
         trialName === undefined
           ? `No ${name} trial has run yet. For trials that may not have run, ${name}.getAll(data).at(-1) is undefined until one has.`
           : `The ${name} trial '${trialName}' has not run yet. For a trial that may not have run, ${name}.getAll(data, '${trialName}').at(-1) is undefined until it has.`,
-      )) as TrialRow<ResponseOf<C>>;
+      )) as TrialRow<RecordedOf<C>>;
   defined.trial = ((first?: unknown, second?: unknown) => {
     const named = typeof first === 'string';
     const props = (named ? second : first) as ContextArg<Record<string, any>> | undefined;

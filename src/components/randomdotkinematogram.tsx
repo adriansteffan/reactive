@@ -865,7 +865,7 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
     const stats = canvasHandle.current?.getStats();
     const correct = isCorrect(key, rdkProps.correctResponse);
 
-    const responseData: RDKResponse = {
+    const recorded: RDKResponse = {
       ...RDK_DEFAULTS,
       ...rdkProps,
       key,
@@ -879,12 +879,12 @@ const RandomDotKinematogramComponent = (rawProps: RDKProps) => {
 
     const shown = feedbackFor(rdkProps.feedback, rt, correct);
     if (shown) {
-      responseData.feedbackShown = shown.content;
-      responseData.feedbackDurationMs = shown.durationMs;
+      recorded.feedbackShown = shown.content;
+      recorded.feedbackDurationMs = shown.durationMs;
       setFeedbackMsg(shown);
-      setTimeout(() => nextFn(responseData), shown.durationMs);
+      setTimeout(() => nextFn(recorded), shown.durationMs);
     } else {
-      nextFn(responseData);
+      nextFn(recorded);
     }
   }, []);
 
@@ -1007,7 +1007,7 @@ export const RandomDotKinematogram = defineComponent({
 
     let totalDuration = preTrialDuration + merged.fixationTimeMs + elapsed;
 
-    const responseData: RDKResponse = {
+    const recorded: RDKResponse = {
       ...merged,
       key,
       reactionTimeMs: rt,
@@ -1020,13 +1020,13 @@ export const RandomDotKinematogram = defineComponent({
 
     const shown = feedbackFor(merged.feedback, rt, correct);
     if (shown) {
-      responseData.feedbackShown = shown.content;
-      responseData.feedbackDurationMs = shown.durationMs;
+      recorded.feedbackShown = shown.content;
+      recorded.feedbackDurationMs = shown.durationMs;
       totalDuration += shown.durationMs;
     }
 
     return {
-      responseData,
+      recorded,
       participant: result.participant,
       durationMs: totalDuration,
     };

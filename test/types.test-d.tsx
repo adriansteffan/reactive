@@ -9,6 +9,7 @@ import {
   fullscreenBlock,
   ifBlock,
   PlainInput,
+  sampleParticipants,
   StoreUI,
   Text,
   Upload,
@@ -195,6 +196,17 @@ CanvasBlock.trial({ timeline: [] }).simulators({ respondToSlide: () => ({ value:
 CanvasBlock.trial({ timeline: [] }).simulators({ respondToSlide: () => ({ key: 'f', reactionTimeMs: 300 }) });
 // A replacement receives the participant, also where the default simulator takes nothing
 PlainInput.trial('typed').simulators({ respond: ({ participant }) => ({ value: String(participant.nickname) }) });
+// A replacement can build on the default simulator, whose result the types know
+PlainInput.trial('typed').simulators({
+  respond: (input, defaultSimulator) => {
+    const result = defaultSimulator(input);
+    // @ts-expect-error PlainInput's default answers with text
+    result.value.toFixed();
+    return { ...result, value: result.value.toUpperCase() };
+  },
+});
+// @ts-expect-error the default simulator takes the input it should run with
+PlainInput.trial('typed').simulators({ respond: (_input, defaultSimulator) => defaultSimulator() });
 // @ts-expect-error PlainInput's simulated answer is text
 PlainInput.trial('typed').simulators({ respond: () => ({ value: 5 }) });
 
@@ -435,4 +447,20 @@ defineExperiment({
 });
 defineExperiment({ timeline: [Text.trial()], simulation: { createParticipants: () => [{ id: 1 }] } });
 
-export { asJsx, bonusRead, experiment, reads, readsNames, slideKey };
+// --- sampled participants ---
+const sampled = sampleParticipants('sobol', 10, {
+  needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  openness: { distribution: 'normal', mean: 3, sd: 1, correlations: { needForCognition: 0.4 } },
+});
+const sampledTraits: { needForCognition: number; openness: number; index: number } = sampled[0];
+sampleParticipants('sobol', 10, {
+  needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  // @ts-expect-error a correlation names another trait
+  openness: { distribution: 'normal', mean: 3, sd: 1, correlations: { needForCogniton: 0.4 } },
+});
+sampleParticipants('sobol', 10, {
+  // @ts-expect-error a trait does not correlate with itself
+  openness: { distribution: 'normal', mean: 3, sd: 1, correlations: { openness: 0.4 } },
+});
+
+export { asJsx, bonusRead, experiment, reads, readsNames, sampledTraits, slideKey };

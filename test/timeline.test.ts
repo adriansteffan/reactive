@@ -676,6 +676,33 @@ describe('components', () => {
     ]);
   });
 
+  test("a replacement builds on the default simulator, keeping the participant it returns", async () => {
+    const Tap = defineComponent({
+      name: 'Tap',
+      component: (_props: BaseComponentProps<{ taps: number; tappedBefore: boolean }>) => null,
+      simulate: ({ props, simulators, participant }) => {
+        const result = simulators.tap({ props, participant });
+        return { responseData: { taps: result.value, tappedBefore: participant.tapped === true }, participant: result.participant };
+      },
+      defaultSimulators: {
+        tap: ({ participant }) => ({ value: 2, participant: { ...participant, tapped: true } }),
+      },
+    });
+    const rows = await run([
+      Tap.trial().simulators({
+        tap: (input, defaultSimulator) => {
+          const result = defaultSimulator(input);
+          return { ...result, value: result.value * 10 };
+        },
+      }),
+      Tap.trial(),
+    ]);
+    expect(rows.map((row) => row.responseData)).toEqual([
+      { taps: 20, tappedBefore: false },
+      { taps: 2, tappedBefore: true },
+    ]);
+  });
+
   test('the canvas takes its size from pixels, shares of the screen and ratios, and fits the screen', () => {
     const on = (width: Parameters<typeof canvasSize>[0], height: Parameters<typeof canvasSize>[1]) =>
       canvasSize(width, height, 1600, 900);

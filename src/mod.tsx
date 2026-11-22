@@ -32,7 +32,7 @@ export { useAudioDeviceId } from './runner/contexts';
 export { invokeLLM } from './utils/llm';
 export type { LLMConfig, LLMSchema } from './utils/llm';
 export type { Theme } from './runner/theme';
-export type { DimensionSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod } from './utils/distributions';
+export type { DimensionSpec, TraitSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod } from './utils/distributions';
 export { simulateDDMTrial, mapDDMChoice } from './utils/ddm';
 export type { DDMTrialParams, DDMTrialResult, ParameterDef, BoundaryDef, CollapseDef, PostStimStrategyDef, ContinueStrategy, CollapseStrategy, SnapshotStrategy } from './utils/ddm';
 export * from './components';

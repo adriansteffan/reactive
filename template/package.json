@@ -6,8 +6,8 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "dev": "bun --hot server.ts",
-    "start": "NODE_ENV=production bun server.ts",
+    "dev": "bun --hot server.ts --dev",
+    "start": "bun server.ts",
     "build": "bun build.ts",
     "simulate": "bun simulate.ts",
     "typecheck": "bun check",

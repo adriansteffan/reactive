@@ -47,10 +47,16 @@ export type SimulatorResult = { value?: any; participant?: ParticipantState };
 /** Decides one part of a simulated participant's behavior. */
 export type Simulator<C = any> = (input: SimulatorInput<C>) => SimulatorResult;
 
-// A replacement takes what a simulator of the component takes, returns what the simulator it
-// replaces returns, and may leave the participant as it was
+/** A trial's replacement for a default simulator, which it receives to build on. */
+export type SimulatorReplacement = (input: SimulatorInput, defaultSimulator: Simulator) => SimulatorResult;
+
+// A replacement takes what a simulator of the component takes, along with the default simulator,
+// returns what the default returns, and may leave the participant as it was
 type Replacement<C, F> = F extends (...args: any[]) => infer R
-  ? (input: SimulatorInput<C>) => Omit<R, 'participant'> & { participant?: ParticipantState }
+  ? (
+      input: SimulatorInput<C>,
+      defaultSimulator: (input: SimulatorInput<C>) => R,
+    ) => Omit<R, 'participant'> & { participant?: ParticipantState }
   : never;
 
 /** Replacements for some of the default simulators `D` of component `C`. */

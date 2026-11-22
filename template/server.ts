@@ -24,7 +24,8 @@ if (import.meta.main) {
       const file = Bun.file(path.join(publicFolder, new URL(req.url).pathname));
       return (await file.exists()) ? new Response(file) : new Response('Not Found', { status: 404 });
     },
-    development: process.env.NODE_ENV !== 'production',
+    // --dev adds hot reloading and readable errors; without it, the page is built for production
+    development: process.argv.includes('--dev'),
   });
 
   console.log(`Server running at ${server.url}`);

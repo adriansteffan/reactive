@@ -443,6 +443,20 @@ PlainInput.trial('name', { content: <p>What is your name?</p> }).simulators({
 
 The override is merged with the component's defaults — you only need to specify the decision functions you want to change. A replacement returns what the function it replaces returns, which the types check, and may leave out `participant` to keep the participant as it was. A CanvasBlock's `respondToSlide` also receives the `slide`, so one replacement can decide each slide's response.
 
+A replacement also receives the component's default simulator, to build on what it decides. It runs the default with the input passed to it:
+
+```tsx
+Text.trial('intro').simulators({
+  // The default response, only twice as slow
+  respond: (input, defaultSimulator) => {
+    const result = defaultSimulator(input);
+    return { ...result, value: { ...result.value, reactionTimeMs: result.value.reactionTimeMs * 2 } };
+  },
+}),
+```
+
+Spreading `result` keeps the participant the default returned. To run the default for a different participant, pass it one: `defaultSimulator({ ...input, participant: changed })`.
+
 ### Custom components
 
 Give your custom components a simulation in `defineComponent`:
@@ -800,6 +814,18 @@ const participants = sampleParticipants('sobol', 100, {
 ```
 
 The first argument is the sampling method: `'sobol'`, `'halton'`, or `'random'`.
+
+A trait can correlate with the others, which it names in its `correlations`:
+
+```tsx
+sampleParticipants('sobol', 100, {
+  needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+  openness: { distribution: 'normal', mean: 3.0, sd: 1.0, correlations: { needForCognition: 0.4 } },
+  age: { distribution: 'integer', min: 18, max: 65, correlations: { openness: -0.2 } },
+});
+```
+
+Each pair is given at one of its two traits, and pairs left out are uncorrelated. Normal traits get the correlation as given. Other distributions get a somewhat weaker one, since it applies to the normal scores they are made from: 0.5 between two uniform traits comes out at about 0.48, and coarse discrete traits lose more. Correlations that contradict each other, such as a and b at 0.9 and b and c at 0.9 but a and c at -0.9, stop with an error. Correlated samples stay as evenly spread as the Sobol and Halton sequences make them.
 
 ### Drift Diffusion Model (DDM)
 

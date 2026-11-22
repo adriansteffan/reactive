@@ -11,8 +11,8 @@ import type {
   DefinedComponent,
   ResponseOf,
   RuntimeComponent,
-  Simulator,
   SimulatorOverrides,
+  SimulatorReplacement,
 } from './component';
 import { isReservedTrialName, type ReservedTrialName, sessionPrefixes } from './columns';
 import { report } from './development';
@@ -96,7 +96,7 @@ interface TrialSpec {
   session?: boolean;
   collectRefreshRate?: boolean;
   hideParams?: readonly string[] | boolean;
-  simulators?: Record<string, Simulator>;
+  simulators?: Record<string, SimulatorReplacement>;
 }
 
 /** A trial name, or the reason the types reject it: its session CSV columns would take the library's. */
@@ -169,7 +169,7 @@ const trialMethods = {
   hideParams(this: Trial, hideParams: readonly string[] | boolean | undefined) {
     return hideParams === undefined ? this : withSpec(this, { hideParams });
   },
-  simulators(this: Trial, simulators: Record<string, Simulator> | undefined) {
+  simulators(this: Trial, simulators: Record<string, SimulatorReplacement> | undefined) {
     return simulators === undefined
       ? this
       : withSpec(this, { simulators: { ...this[TRIAL].simulators, ...simulators } });

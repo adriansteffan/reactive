@@ -201,6 +201,29 @@ function standardNormalQuantile(p: number): number {
   return q < 0 ? -x : x;
 }
 
+// Hart (1968), as given by West (2005), "Better approximations to cumulative normal functions",
+// Wilmott Magazine. Accurate to about 1e-15; in the tails, about 1e-9 of the probability at 1e-10.
+const HART = [
+  [
+    220.206867912376, 221.213596169931, 112.079291497871, 33.912866078383,
+    6.37396220353165, 0.700383064443688, 0.0352624965998911,
+  ],
+  [
+    440.413735824752, 793.826512519948, 637.333633378831, 296.564248779674,
+    86.7807322029461, 16.064177579207, 1.75566716318264, 0.0883883476483184,
+  ],
+];
+
+function standardNormalCdf(x: number): number {
+  const z = Math.abs(x);
+  const exponential = Math.exp((-z * z) / 2);
+  const tail =
+    z < 5 * Math.SQRT2
+      ? (exponential * polynomial(HART[0], z)) / polynomial(HART[1], z)
+      : exponential / (z + 1 / (z + 2 / (z + 3 / (z + 4 / (z + 0.65))))) / Math.sqrt(2 * Math.PI);
+  return x > 0 ? 1 - tail : tail;
+}
+
 // Smallest k with P(X <= k) >= p. The probability mass is summed in log space so that large
 // means don't underflow. In double precision the sum is accurate to about 1e-11 for means in
 // the thousands, so a p closer than that to a step of the distribution can land one off.
@@ -227,6 +250,24 @@ type PoissonSpec = { distribution: 'poisson'; mean: number };
 type IntegerSpec = { distribution: 'integer'; min: number; max: number };
 type DiscreteSpec = { distribution: 'discrete'; outcomes: Array<{ value: number; weight: number }> };
 type DimensionSpec = UniformSpec | NormalSpec | PoissonSpec | IntegerSpec | DiscreteSpec;
+
+/** A trait of the sampled participants: its distribution, and how it correlates with the other traits. */
+type TraitSpec = DimensionSpec & {
+  /**
+   * Correlations with other traits, by their names, each pair given at one of its two traits. A
+   * normal trait gets the correlation as given, other distributions a somewhat weaker one.
+   */
+  correlations?: Record<string, number>;
+};
+
+// Traits as declared, whose correlations can only name the other traits
+type CheckedTraits<T> = {
+  [K in keyof T]: T[K] extends { correlations: infer C }
+    ? Omit<T[K], 'correlations'> & {
+        correlations: { [O in keyof C]: O extends Exclude<keyof T, K> ? number : `'${O & string}' is not another trait` };
+      }
+    : T[K];
+};
 
 // Inverse CDFs return +-Infinity at exactly 0 or 1, so clamp to open interval (0, 1).
 function clampUnit(value: number): number {
@@ -352,59 +393,113 @@ function radicalInverse(index: number, base: number): number {
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73];
 const HALTON_MAX_EFFECTIVE_DIMS = 6;
 
+// Both sequences start at their second point, since the first is zero in every dimension
+function sobolUnitPoints(count: number, dimensions: number): number[][] {
+  return generateSobol(count + 1, dimensions).slice(1);
+}
+
+function haltonUnitPoints(count: number, dimensions: number): number[][] {
+  if (dimensions > HALTON_MAX_EFFECTIVE_DIMS) {
+    console.warn(`Halton sequence quality degrades above ${HALTON_MAX_EFFECTIVE_DIMS} dimensions. Consider using sobol() instead.`);
+  }
+  const bases = PRIMES.slice(0, dimensions);
+  return Array.from({ length: count }, (_, i) => bases.map((base) => radicalInverse(i + 1, base)));
+}
+
 function sobol(count: number, specs: DimensionSpec[]): number[][] {
-  // Generate count+1 and skip the first point (always zero in every dimension)
-  const unitPoints = generateSobol(count + 1, specs.length).slice(1);
-  return transformPoints(unitPoints, specs);
+  return transformPoints(sobolUnitPoints(count, specs.length), specs);
 }
 
 function halton(count: number, specs: DimensionSpec[]): number[][] {
-  if (specs.length > HALTON_MAX_EFFECTIVE_DIMS) {
-    console.warn(`Halton sequence quality degrades above ${HALTON_MAX_EFFECTIVE_DIMS} dimensions. Consider using sobol() instead.`);
+  return transformPoints(haltonUnitPoints(count, specs.length), specs);
+}
+
+// The lower triangular L with L·Lᵀ = matrix, or undefined when the matrix is not positive definite
+function cholesky(matrix: number[][]): number[][] | undefined {
+  const factor = matrix.map((row) => row.map(() => 0));
+  for (let i = 0; i < matrix.length; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = matrix[i][j];
+      for (let k = 0; k < j; k++) sum -= factor[i][k] * factor[j][k];
+      if (i === j) {
+        if (sum <= 0) return undefined;
+        factor[i][i] = Math.sqrt(sum);
+      } else {
+        factor[i][j] = sum / factor[j][j];
+      }
+    }
   }
-  const bases = PRIMES.slice(0, specs.length);
-  // Start at index 1, since the first point is zero in every dimension
-  const unitPoints = Array.from({ length: count }, (_, i) => bases.map((base) => radicalInverse(i + 1, base)));
-  return transformPoints(unitPoints, specs);
+  return factor;
+}
+
+// The Cholesky factor of the traits' correlation matrix, or undefined when no traits correlate
+function correlationFactor(keys: string[], traits: Record<string, TraitSpec>): number[][] | undefined {
+  const matrix: number[][] = keys.map((_, i) => keys.map((_, j) => (i === j ? 1 : 0)));
+  let correlated = false;
+  keys.forEach((key, i) => {
+    for (const [other, correlation] of Object.entries(traits[key].correlations ?? {})) {
+      const j = keys.indexOf(other);
+      if (matrix[i][j] !== 0) {
+        throw new Error(`The correlation of '${key}' and '${other}' is given at both traits; give it at one of them.`);
+      }
+      if (!(correlation > -1 && correlation < 1)) {
+        throw new Error(`The correlation of '${key}' and '${other}' is ${correlation}, but it has to be greater than -1 and less than 1.`);
+      }
+      matrix[i][j] = correlation;
+      matrix[j][i] = correlation;
+      correlated = true;
+    }
+  });
+  if (!correlated) return undefined;
+  const factor = cholesky(matrix);
+  if (!factor) {
+    throw new Error(
+      "The traits' correlations contradict each other, so no population can have them all, as with a and b at 0.9 and b and c at 0.9, but a and c at -0.9.",
+    );
+  }
+  return factor;
+}
+
+// A Gaussian copula: each point's unit values become normal scores, which the factor mixes, and
+// back. The mixing is one-to-one, so the points stay as evenly spread as the sequence made them.
+function correlate(points: number[][], factor: number[][]): number[][] {
+  return points.map((point) => {
+    const scores = point.map((unitValue) => standardNormalQuantile(clampUnit(unitValue)));
+    return factor.map((row) => standardNormalCdf(row.reduce((sum, weight, k) => sum + weight * scores[k], 0)));
+  });
 }
 
 type SamplingMethod = 'sobol' | 'halton' | 'random';
 
-function sampleParticipants<T extends Record<string, DimensionSpec>>(
+function sampleParticipants<T extends Record<string, TraitSpec>>(
   method: SamplingMethod,
   count: number,
-  specs: T,
+  specs: CheckedTraits<T>,
 ): Array<{ [K in keyof T]: number } & { index: number }> {
-  const keys = Object.keys(specs) as (keyof T & string)[];
-  const dimSpecs = keys.map((k) => specs[k]);
+  const traits = specs as Record<string, TraitSpec>;
+  const keys = Object.keys(traits);
 
-  let points: number[][];
+  let unitPoints: number[][];
   switch (method) {
     case 'sobol':
-      points = sobol(count, dimSpecs);
+      unitPoints = sobolUnitPoints(count, keys.length);
       break;
     case 'halton':
-      points = halton(count, dimSpecs);
+      unitPoints = haltonUnitPoints(count, keys.length);
       break;
     case 'random':
-      points = randomPoints(count, dimSpecs);
+      unitPoints = Array.from({ length: count }, () => keys.map(() => uniform(0, 1)));
       break;
   }
 
-  return Array.from({ length: count }, (_, i) => {
-    return { index: i, ...Object.fromEntries(keys.map((k, d) => [k, points[i][d]])) } as { [K in keyof T]: number } & { index: number };
-  });
+  const factor = correlationFactor(keys, traits);
+  const points = transformPoints(factor ? correlate(unitPoints, factor) : unitPoints, keys.map((key) => traits[key]));
+  return points.map((point, index) => ({ index, ...Object.fromEntries(keys.map((key, d) => [key, point[d]])) })) as Array<
+    { [K in keyof T]: number } & { index: number }
+  >;
 }
-
-function randomPoints(count: number, specs: DimensionSpec[]): number[][] {
-  const transforms = specs.map(resolveTransform);
-  return Array.from({ length: count }, () =>
-    transforms.map((t) => t(uniform(0, 1))),
-  );
-}
-
 
 export { normal, poisson, uniform, seedDistributions, withSeed, withStream, countDraws, sobol, halton, sampleParticipants };
 // Exported for the tests, not part of the public API
-export { mt19937, standardNormalQuantile, poissonQuantile };
-export type { DimensionSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod };
+export { mt19937, standardNormalQuantile, standardNormalCdf, poissonQuantile };
+export type { DimensionSpec, TraitSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod };

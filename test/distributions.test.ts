@@ -10,6 +10,7 @@ import {
   sampleParticipants,
   mt19937,
   standardNormalQuantile,
+  standardNormalCdf,
   poissonQuantile,
 } from '../src/utils/distributions';
 
@@ -196,7 +197,82 @@ describe('sampleParticipants', () => {
     expect(result[1].rt).toBeCloseTo(650, 10);
     expect(result[2].rt).toBeCloseTo(350, 10);
   });
+
+  it('samples without correlations from the sequence as it is', () => {
+    const traits = sampleParticipants('sobol', 50, {
+      x: { distribution: 'uniform', min: 0, max: 1 },
+      y: { distribution: 'normal', mean: 0, sd: 1 },
+    });
+    const points = sobol(50, [
+      { distribution: 'uniform', min: 0, max: 1 },
+      { distribution: 'normal', mean: 0, sd: 1 },
+    ]);
+    expect(traits.map((p) => [p.x, p.y])).toEqual(points);
+  });
+
+  for (const method of ['sobol', 'halton', 'random'] as const) {
+    it(`correlates normal traits as given, keeping their means and spread (${method})`, () => {
+      seedDistributions(7);
+      const participants = sampleParticipants(method, 2000, {
+        a: { distribution: 'normal', mean: 10, sd: 2 },
+        b: { distribution: 'normal', mean: -5, sd: 0.5, correlations: { a: 0.6 } },
+        c: { distribution: 'normal', mean: 0, sd: 1, correlations: { a: -0.3 } },
+      });
+      const column = (key: 'a' | 'b' | 'c') => participants.map((p) => p[key]);
+      expect(mean(column('a'))).toBeCloseTo(10, 1);
+      expect(sd(column('b'))).toBeCloseTo(0.5, 1);
+      expect(Math.abs(pearson(column('a'), column('b')) - 0.6)).toBeLessThan(0.04);
+      expect(Math.abs(pearson(column('a'), column('c')) + 0.3)).toBeLessThan(0.04);
+      expect(Math.abs(pearson(column('b'), column('c')))).toBeLessThan(0.3);
+    });
+  }
+
+  it('keeps other distributions within their range when they correlate', () => {
+    const participants = sampleParticipants('sobol', 500, {
+      age: { distribution: 'integer', min: 18, max: 65 },
+      speed: { distribution: 'uniform', min: 0.5, max: 1.5, correlations: { age: -0.5 } },
+      errors: { distribution: 'poisson', mean: 3, correlations: { age: 0.4 } },
+    });
+    for (const p of participants) {
+      expect(Number.isInteger(p.age) && p.age >= 18 && p.age <= 65).toBe(true);
+      expect(p.speed).toBeGreaterThanOrEqual(0.5);
+      expect(p.speed).toBeLessThanOrEqual(1.5);
+      expect(Number.isInteger(p.errors) && p.errors >= 0).toBe(true);
+    }
+    // Weaker than given, as the README says, but in the same direction
+    const correlation = pearson(participants.map((p) => p.age), participants.map((p) => p.speed));
+    expect(correlation).toBeLessThan(-0.4);
+    expect(correlation).toBeGreaterThan(-0.5);
+  });
+
+  it('rejects correlations that cannot hold', () => {
+    const normal = { distribution: 'normal', mean: 0, sd: 1 } as const;
+    expect(() => sampleParticipants('sobol', 10, { a: normal, b: { ...normal, correlations: { a: 1 } } })).toThrow(
+      'greater than -1 and less than 1',
+    );
+    expect(() =>
+      sampleParticipants('sobol', 10, {
+        a: { ...normal, correlations: { b: 0.3 } },
+        b: { ...normal, correlations: { a: 0.3 } },
+      }),
+    ).toThrow('given at both traits');
+    expect(() =>
+      sampleParticipants('sobol', 10, {
+        a: normal,
+        b: { ...normal, correlations: { a: 0.9 } },
+        c: { ...normal, correlations: { a: -0.9, b: 0.9 } },
+      }),
+    ).toThrow('contradict each other');
+  });
 });
+
+const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+const sd = (values: number[]) => Math.sqrt(mean(values.map((value) => (value - mean(values)) ** 2)));
+function pearson(x: number[], y: number[]): number {
+  const mx = mean(x);
+  const my = mean(y);
+  return mean(x.map((value, i) => (value - mx) * (y[i] - my))) / (sd(x) * sd(y));
+}
 
 describe('seedDistributions', () => {
   it('makes pseudorandom samplers reproducible', () => {
@@ -360,6 +436,22 @@ describe('poisson sampler', () => {
   it('returns NaN for a negative mean and 0 for a mean of 0', () => {
     expect(poisson(-1)).toBeNaN();
     expect(poisson(0)).toBe(0);
+  });
+});
+
+describe('standardNormalCdf', () => {
+  it('matches known values', () => {
+    // Reference values from R's pnorm
+    const known: [number, number][] = [[0, 0.5], [-1, 0.15865525393145707], [-1.96, 0.024997895148220435], [-3, 0.0013498980316300946], [2, 0.9772498680518208]];
+    for (const [x, p] of known) expect(Math.abs(standardNormalCdf(x) - p) / p).toBeLessThan(1e-13);
+  });
+
+  it('inverts the quantile function down to the probabilities that sampling uses', () => {
+    for (let exponent = -10; exponent <= -1; exponent += 0.01) {
+      const p = 10 ** exponent;
+      expect(Math.abs(standardNormalCdf(standardNormalQuantile(p)) - p) / p).toBeLessThan(2e-9);
+      expect(Math.abs(standardNormalCdf(standardNormalQuantile(1 - p)) - (1 - p))).toBeLessThan(1e-15);
+    }
   });
 });
 

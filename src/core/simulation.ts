@@ -1,6 +1,6 @@
 import { countDraws, seedDistributions, withStream } from '../utils/distributions';
 import { setBackendUrl } from './backend';
-import type { ParticipantState } from './component';
+import type { ParticipantState, SimulatorInput } from './component';
 import { createRunState, type Experiment, respond, startRun, trialAt } from './experiment';
 import { createExperimentData, type ExperimentData } from './rows';
 import { createTimelineContext } from './timeline';
@@ -37,12 +37,19 @@ export async function simulateParticipant(
         `The ${name} trial '${content.name ?? 'unnamed'}' cannot be simulated, since ${name} has no simulation. Add a simulate function to its defineComponent call.`,
       );
     }
+    // A replacement receives the default it replaces; one set to undefined removes the simulator
+    const replacements = Object.fromEntries(
+      Object.entries(content.simulators ?? {}).map(([key, replacement]) => [
+        key,
+        replacement && ((input: SimulatorInput) => replacement(input, defaultSimulators?.[key])),
+      ]),
+    );
     const result = await simulate({
       ...createTimelineContext(state.data, state.store, compiled.trials),
       props: state.props,
       participant: current,
       initialParticipant,
-      simulators: { ...defaultSimulators, ...content.simulators },
+      simulators: { ...defaultSimulators, ...replacements },
       components: compiled.components,
     });
     current = result.participant ?? current;

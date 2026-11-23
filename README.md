@@ -1051,7 +1051,7 @@ Experiments can be packaged as Android or iOS apps with [Capacitor](https://capa
 bunx @adriansteffan/reactive native
 ```
 
-This installs the Capacitor packages, creates `capacitor.config.ts` and imports `@adriansteffan/reactive/native` in `src/main.tsx`. It makes sense to develop with the web version and only switch to the device emulators for device-specific features and testing before packaging. `getPlatform()` returns `'native'` in the apps and `'web'` in the browser.
+This installs the Capacitor packages, creates `capacitor.config.json` and imports `@adriansteffan/reactive/native` in `src/main.tsx`. It makes sense to develop with the web version and only switch to the device emulators for device-specific features and testing before packaging. `getPlatform()` returns `'native'` in the apps and `'web'` in the browser.
 
 ### Android
 

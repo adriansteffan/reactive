@@ -74,7 +74,6 @@ export default defineExperiment({
   params: {
     clicks: { default: 5, description: 'How often the participant needs to click the button' },
   },
-  config: { showProgressBar: true },
   simulation: {
     seed: 42,
     createParticipants: () =>

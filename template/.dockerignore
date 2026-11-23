@@ -6,5 +6,4 @@ data/
 data_download/
 android
 ios
-dist-server
 .env.local

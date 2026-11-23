@@ -1,4 +1,4 @@
-// Bundles the experiment for production: dist/ for Capacitor, dist-server/ for the Docker image
+// Bundles the experiment for production: dist/client for Capacitor, dist/server for deployments
 import fs from 'fs';
 import tailwind from 'bun-plugin-tailwind';
 import publicDir from '@adriansteffan/reactive/bun-plugin';
@@ -11,10 +11,9 @@ const options = {
 };
 
 fs.rmSync('dist', { recursive: true, force: true });
-fs.rmSync('dist-server', { recursive: true, force: true });
 
-await Bun.build({ ...options, entrypoints: ['./index.html'], outdir: 'dist' });
-fs.cpSync('public', 'dist', { recursive: true });
+await Bun.build({ ...options, entrypoints: ['./index.html'], outdir: 'dist/client' });
+fs.cpSync('public', 'dist/client', { recursive: true });
 
 // The server bundle includes the frontend, so the image needs no node_modules
-await Bun.build({ ...options, entrypoints: ['./server.ts'], target: 'bun', outdir: 'dist-server' });
+await Bun.build({ ...options, entrypoints: ['./server.ts'], target: 'bun', outdir: 'dist/server' });

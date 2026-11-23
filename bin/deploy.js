@@ -23,7 +23,7 @@ if (build.status !== 0) process.exit(build.status ?? 1);
 
 // The server's files at the top level, and public/ next to them
 const files = {};
-for (const [dir, prefix] of [['dist-server', ''], ['public', 'public/']]) {
+for (const [dir, prefix] of [['dist/server', ''], ['public', 'public/']]) {
   for (const file of readdirSync(dir, { recursive: true })) {
     const source = join(dir, file);
     if (statSync(source).isFile()) files[prefix + file.split(sep).join('/')] = readFileSync(source);
@@ -42,7 +42,7 @@ if (response.ok || response.status === 409 || response.status === 500) {
   if (project.studyDeploy?.server !== server || project.studyDeploy?.name !== name) {
     project.studyDeploy = { server, name };
     writeFileSync('package.json', `${JSON.stringify(project, null, 2)}\n`);
-    console.log('Saved the server and subdomain in package.json. Commit it, so that GitHub can deploy there too.');
+    console.log('Saved the server and subdomain in package.json.');
   }
 }
 if (!response.ok) process.exit(1);

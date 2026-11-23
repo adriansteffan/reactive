@@ -33,29 +33,22 @@ const nativePlugins = ['@capacitor/core', '@capacitor/filesystem', '@capacitor/s
 run(['add', ...nativePlugins, `@capacitor/android@${capacitorVersion}`, `@capacitor/ios@${capacitorVersion}`]);
 run(['add', '--dev', `@capacitor/cli@${capacitorVersion}`]);
 
-const configPath = join(projectPath, 'capacitor.config.ts');
-if (!existsSync(configPath)) {
-  const appId = `com.${project.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.app`;
-  writeFileSync(
-    configPath,
-    `import type { CapacitorConfig } from '@capacitor/cli';
-
-const config: CapacitorConfig = {
-  appId: '${appId}',
-  appName: '${project.name}',
-  webDir: 'dist',
-  server: {
-    hostname: 'localhost',
-    androidScheme: 'https',
-    cleartext: true,
-    allowNavigation: ['*'],
-  },
-};
-
-export default config;
-`,
-  );
-  console.log('Created capacitor.config.ts');
+const configPath = join(projectPath, 'capacitor.config.json');
+// A project may have its config in TypeScript instead
+if (!existsSync(configPath) && !existsSync(join(projectPath, 'capacitor.config.ts'))) {
+  const config = {
+    appId: `com.${project.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.app`,
+    appName: project.name,
+    webDir: 'dist/client',
+    server: {
+      hostname: 'localhost',
+      androidScheme: 'https',
+      cleartext: true,
+      allowNavigation: ['*'],
+    },
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  console.log('Created capacitor.config.json');
 }
 
 const mainPath = join(projectPath, 'src', 'main.tsx');

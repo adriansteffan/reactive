@@ -61,7 +61,7 @@ bun run deploy
 
 This builds the study with the settings in `.env.production` and uploads it. The first time, it asks for
 
-- the server's address and the subdomain the study should get (up to 32 lowercase letters, digits and dashes), and saves both in `package.json` under `studyDeploy`. Commit them, so that GitHub can deploy there too.
+- the server's address and the subdomain the study should get (up to 32 lowercase letters, digits and dashes), and saves both in `package.json` under `studyDeploy`.
 - your token for the server, and saves it in `~/.config/study-deploy/tokens.json` on your computer, for all your studies
 
 The study is then served at `https://<subdomain>.<domain>`. Only the user who deployed it first can deploy it again, so collaborators cannot use their own tokens for it. To change the subdomain, edit it in `package.json` and deploy again. The study also stays online under the old one.

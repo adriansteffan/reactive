@@ -98,7 +98,7 @@ To get started:
 }
 
 const command = process.argv[2];
-if (['native', 'add', 'deploy', 'download', 'undeploy', 'ghsetup'].includes(command)) {
+if (['native', 'add', 'deploy', 'download', 'delete-data', 'undeploy', 'ghsetup'].includes(command)) {
   rl.close();
   await import(`./${command}.js`);
 } else {

@@ -30,14 +30,12 @@ for (const [dir, prefix] of [['dist/server', ''], ['public', 'public/']]) {
   }
 }
 
-// Bun reads .env when the server starts, which is how variables without the PUBLIC_ prefix reach it
 if (existsSync('.env.production')) files['.env'] = readFileSync('.env.production');
 else console.log('There is no .env.production, so the study is deployed without any settings or keys.');
 
 const response = await request(server, `/deploy/${name}`, token, { method: 'POST', body: zipSync(files) });
 console.log((await response.text()).trim());
 
-// Saved once the server has accepted them. 409 and 500 are about the study, not where it is deployed.
 if (response.ok || response.status === 409 || response.status === 500) {
   if (project.studyDeploy?.server !== server || project.studyDeploy?.name !== name) {
     project.studyDeploy = { server, name };

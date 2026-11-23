@@ -74,6 +74,14 @@ bun run download
 
 It is saved in `data_download/`, apart from the sessions you ran on your computer. Running it again adds new data and overwrites the files downloaded before.
 
+Delete the data on the server, for example after piloting, with
+
+```
+bun run delete-data
+```
+
+This asks for confirmation, deletes all of it and restarts the study, which interrupts anyone taking part. Download the data first if you still need it. The files in `data_download/` stay, so move them elsewhere before the next download, which would otherwise add the new data to them.
+
 Take the study offline with
 
 ```

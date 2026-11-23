@@ -10,7 +10,6 @@ if (!token) {
 }
 
 function setSecret(name, value) {
-  // Passed on standard input, because other users of the computer can see arguments
   const result = spawnSync('gh', ['secret', 'set', name], { input: value, stdio: ['pipe', 'inherit', 'inherit'] });
   if (result.error) console.error('This needs the GitHub CLI, see https://cli.github.com.');
   if (result.status !== 0) process.exit(1);

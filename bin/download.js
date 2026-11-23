@@ -9,7 +9,7 @@ import { deployedStudy, getToken, request } from './study-deploy.js';
 const { server, name } = deployedStudy();
 const response = await request(server, `/data/${name}`, await getToken(server));
 if (!response.ok) {
-  console.error((await response.text()).trim());
+  console.error((await response.text()).trim() || `The server answered with status ${response.status}`);
   process.exit(1);
 }
 

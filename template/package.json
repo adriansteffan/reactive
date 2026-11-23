@@ -12,6 +12,7 @@
     "build:production": "NODE_ENV=production bun build.ts",
     "deploy": "reactive deploy",
     "download": "reactive download",
+    "delete-data": "reactive delete-data",
     "undeploy": "reactive undeploy",
     "ghsetup": "reactive ghsetup",
     "simulate": "bun simulate.ts",

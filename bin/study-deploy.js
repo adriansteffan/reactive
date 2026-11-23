@@ -4,7 +4,6 @@ import { homedir } from 'os';
 import { dirname, join } from 'path';
 import { createInterface } from 'readline/promises';
 
-// Kept per server, so that a changed address in package.json cannot make a command send a token elsewhere
 const tokensPath = join(homedir(), '.config', 'study-deploy', 'tokens.json');
 export const tokens = existsSync(tokensPath) ? JSON.parse(readFileSync(tokensPath, 'utf8')) : {};
 
@@ -16,7 +15,6 @@ export function readProject() {
   return JSON.parse(readFileSync('package.json', 'utf8'));
 }
 
-/** Where the study is deployed, from package.json. */
 export function deployedStudy() {
   const { studyDeploy } = readProject();
   if (!studyDeploy) {
@@ -41,7 +39,6 @@ export async function getToken(server) {
   return process.env.DEPLOY_TOKEN || tokens[server] || (await ask(`Your token for ${server}: `, 'Set DEPLOY_TOKEN.'));
 }
 
-/** Sends a request and saves its token, or forgets the token if the server rejected it, so that the next command asks again. */
 export async function request(server, path, token, options) {
   let response;
   try {

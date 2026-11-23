@@ -10,7 +10,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const version = createRequire(import.meta.url)(join(__dirname, '../package.json')).version;
-console.log(version)
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -47,6 +46,7 @@ function copyDir(src, dest, ignoreEntries = []) {
 }
 
 async function main() {
+  console.log(version);
   try {
     
     const projectName = await question('Please enter your project name: ');
@@ -97,12 +97,10 @@ To get started:
   }
 }
 
-if (process.argv[2] === 'native') {
+const command = process.argv[2];
+if (['native', 'add', 'deploy', 'download', 'undeploy', 'ghsetup'].includes(command)) {
   rl.close();
-  await import('./native.js');
-} else if (process.argv[2] === 'add') {
-  rl.close();
-  await import('./add.js');
+  await import(`./${command}.js`);
 } else {
   main();
 }

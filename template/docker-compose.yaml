@@ -8,6 +8,9 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    env_file:
+      - path: .env.production
+        required: false
     environment:
       - PORT=8001
 

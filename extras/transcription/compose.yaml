@@ -4,7 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile.cpu
     volumes:
-      - ../data:/data
+      - ../data:/data/data
+      - ../data_download:/data/data_download
       - model-cache:/root/.cache/huggingface
     environment:
       - DATA_DIR=/data
@@ -14,7 +15,8 @@ services:
       context: .
       dockerfile: Dockerfile.gpu
     volumes:
-      - ../data:/data
+      - ../data:/data/data
+      - ../data_download:/data/data_download
       - model-cache:/root/.cache/huggingface
     environment:
       - DATA_DIR=/data

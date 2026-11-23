@@ -2,9 +2,13 @@ node_modules
 dist
 dist-server
 data
+data_download
 android
 ios
 .reactive-cache
+.env
+.env.*
+!.env.example
 *.local
 *.log
 .DS_Store

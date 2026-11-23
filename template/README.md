@@ -15,8 +15,11 @@ bun install
 - `src/Experiment.tsx`: the experiment
 - `public/`: static files, served from the site root (`public/images/cat.png` is available at `/images/cat.png`)
 - `server.ts`: serves the experiment and the route that saves uploaded data, which comes from the library (`uploadRoutes`); add your own routes to `api`, which components reach at `getBackendUrl()` (also in simulations)
-- `.env`: committed settings. Only `PUBLIC_` variables reach the experiment, and every one it reads must be defined here. Secrets such as API keys go in `.env.local`, which is not committed.
+- `.env.production`: the settings for the deployed study, such as the Prolific completion code
+- `.env.development`: the settings for running the study on your computer, read by `bun run dev`, `start`, `build` and `simulate`
+- `.env.example`: the settings to copy into these two files, which git ignores. Variables starting with `PUBLIC_` are compiled into the experiment, where every participant could read them. All others, such as API keys, only reach your routes in `server.ts`. Both are read as `process.env.NAME`, which is `undefined` if it is not set. Avoid `.env` and `.env.local` for them, since Bun reads those on your computer and in deployments alike.
 - `data/`: uploaded data
+- `data_download/`: data downloaded from a study-deploy server
 
 ## Target: Web (Online Experiment)
 
@@ -34,7 +37,7 @@ Open [http://localhost:8001](http://localhost:8001). The page updates as you edi
 
 ### Deployment
 
-You will need a server with [Docker](https://docs.docker.com/engine/install/). In the root directory, start the app with
+You will need a server with [Docker](https://docs.docker.com/engine/install/) and Docker Compose 2.24 or newer. In the root directory, start the app with
 
 ```
 docker compose up -d --build
@@ -42,11 +45,50 @@ docker compose up -d --build
 
 and stop it with `docker compose down`. To update, run `git pull` and start it again with the same command.
 
-The settings page and the `?dev=true` panel are available in the deployed study too. To turn one off, set `PUBLIC_DISABLE_SETTINGS` or `PUBLIC_DISABLE_DEV` to `TRUE` in `.env`.
+The settings page and the `?dev=true` panel are available in the deployed study too. To turn one off, set `PUBLIC_DISABLE_SETTINGS` or `PUBLIC_DISABLE_DEV` to `TRUE` in `.env.production`.
 
-The app listens on port 8001 (see `docker-compose.yaml`). Expose it with a reverse proxy (Apache Virtualhosts or Nginx Server Blocks); [this guide](https://gist.github.com/adriansteffan/48c9bda7237a8a7fcc5bb6987c8e1790) explains how for our setup. The `PUBLIC_` variables are baked in when the image is built, so rebuild after changing `.env`.
+The app listens on port 8001 (see `docker-compose.yaml`). Expose it with a reverse proxy (Apache Virtualhosts or Nginx Server Blocks); [this guide](https://gist.github.com/adriansteffan/48c9bda7237a8a7fcc5bb6987c8e1790) explains how for our setup. Since `.env.production` is not committed, copy it into the clone on the server yourself, and start the app with the same command again whenever it changes.
 
 Uploaded data is stored in `data/` in the root directory of the cloned repo.
+
+### Deploying to a study-deploy server
+
+If you have access to a [study-deploy](https://github.com/adriansteffan/study-deploy) server, deploy the study with
+
+```
+bun run deploy
+```
+
+This builds the study with the settings in `.env.production` and uploads it. The first time, it asks for
+
+- the server's address and the subdomain the study should get (up to 32 lowercase letters, digits and dashes), and saves both in `package.json` under `studyDeploy`. Commit them, so that GitHub can deploy there too.
+- your token for the server, and saves it in `~/.config/study-deploy/tokens.json` on your computer, for all your studies
+
+The study is then served at `https://<subdomain>.<domain>`. Only the user who deployed it first can deploy it again, so collaborators cannot use their own tokens for it. To change the subdomain, edit it in `package.json` and deploy again. The study also stays online under the old one.
+
+Download the data with
+
+```
+bun run download
+```
+
+It is saved in `data_download/`, apart from the sessions you ran on your computer. Running it again adds new data and overwrites the files downloaded before.
+
+Take the study offline with
+
+```
+bun run undeploy
+```
+
+This also deletes its data on the server, so download it first. It asks for confirmation, and only deletes the study under the subdomain in `package.json`.
+
+GitHub can also deploy on every push to `main`, using `.github/workflows/deploy.yml`. Deploy from your computer once and commit `package.json`. Then, with the [GitHub CLI](https://cli.github.com) installed and logged in, run
+
+```
+bun run ghsetup
+```
+
+This saves your token and the contents of `.env.production` as the repository's secrets `DEPLOY_TOKEN` and `DOTENV`. Run it again whenever you change `.env.production`, since the next push would otherwise deploy the old values. Anyone with write access to the repository can read the secrets, so only do this where you trust every collaborator.
 
 
 ## Simulation
@@ -118,7 +160,7 @@ bun run transcribe -- --overwrite       # re-transcribe even if transcriptions.c
 bun run transcribe -- --model small     # use a different model
 ```
 
-Output: `transcriptions.<sessionId>.csv` in each session's data directory, wherever it is under `data/`, with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
+Output: `transcriptions.<sessionId>.csv` in each session's data directory, wherever it is under `data/` or `data_download/`, with `filename,text` columns. The model is cached in a Docker volume, so it only downloads once.
 
 
 ## Extra components

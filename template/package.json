@@ -9,6 +9,11 @@
     "dev": "bun --hot server.ts --dev",
     "start": "bun server.ts",
     "build": "bun build.ts",
+    "build:production": "NODE_ENV=production bun build.ts",
+    "deploy": "reactive deploy",
+    "download": "reactive download",
+    "undeploy": "reactive undeploy",
+    "ghsetup": "reactive ghsetup",
     "simulate": "bun simulate.ts",
     "typecheck": "bun check",
     "lint": "biome lint --error-on-warnings"

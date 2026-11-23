@@ -3,6 +3,7 @@ dist
 .git
 *.log
 data/
+data_download/
 android
 ios
 dist-server

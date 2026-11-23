@@ -441,7 +441,7 @@ Edits to the experiment or to its components keep the participant where they are
 
 ### Turning features off
 
-The settings page and the dev panel are available wherever the experiment runs, including a deployed study, which is often run through the settings page. A study that should not offer one of them can turn it off in the project's `.env`:
+The settings page and the dev panel are available wherever the experiment runs, including a deployed study, which is often run through the settings page. A study that should not offer one of them can turn it off in the project's `.env.production`:
 
 ```
 PUBLIC_DISABLE_SETTINGS=TRUE
@@ -1040,7 +1040,7 @@ const parsed = JSON.parse(result);
 | `apiKey` | `string` | API key |
 | `baseUrl` | `string?` | Override the API endpoint |
 
-Keep API keys in `.env.local`, which Bun loads automatically and the project's `.gitignore` excludes. Add `.reactive-cache/` to your `.gitignore`.
+Keep API keys in `.env.development`, which Bun loads automatically on your computer and the project's `.gitignore` excludes. Add `.reactive-cache/` to your `.gitignore`.
 
 
 ## Android and iOS apps
@@ -1102,9 +1102,11 @@ bunx cap run android
 
 #### Packaging
 
-From the root directory, run
+From the root directory, build the app with the settings in `.env.production` and open it:
 
 ```
+bun run build:production
+bunx cap sync
 bunx cap open android
 ```
 
@@ -1151,9 +1153,11 @@ bunx cap run ios
 
 #### Packaging
 
-Packaging iOS apps is quite an undertaking, which is why the process is not overly streamlined/documented yet. The best way to get your experiment on an iOS device right now is to run
+Packaging iOS apps is quite an undertaking, which is why the process is not overly streamlined/documented yet. The best way to get your experiment on an iOS device right now is to build it with the settings in `.env.production` and run
 
 ```
+bun run build:production
+bunx cap sync
 bunx cap run ios
 ```
 

@@ -1,0 +1,25 @@
+# Deploys the study to a study-deploy server on every push to main, if the repository has the secret DEPLOY_TOKEN (see README.md).
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: |
+          if [ -z "$DEPLOY_TOKEN" ]; then echo "There is no DEPLOY_TOKEN secret, so nothing is deployed."; exit 0; fi
+          if [ -n "$DOTENV" ]; then echo "$DOTENV" > .env.production; fi
+          bun run deploy
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          DOTENV: ${{ secrets.DOTENV }}

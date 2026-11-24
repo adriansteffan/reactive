@@ -95,6 +95,15 @@
   font-weight: 400 900;
 }
 
+/* A screen's text, in the components layer so that Tailwind classes on its elements win */
+@layer components {
+  .reactive-article {
+    @apply prose prose-2xl text-xl leading-relaxed prose-a:underline prose-headings:font-besley prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-h2:text-3xl prose-p:mb-4 prose-strong:font-bold;
+    /* The typography plugin finds these elements by its own class, which is not on the article */
+    @apply *:first:mt-0 [&>:last-child:not(h1,p)]:mb-0;
+  }
+}
+
 .reactive-light-dot-bg {
   background-color: white;
   background-image: radial-gradient(#e5e7eb 1px, transparent 1px);

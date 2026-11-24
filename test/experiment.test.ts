@@ -216,6 +216,17 @@ describe('building', () => {
     });
   });
 
+  test('a hidden param is not shown, and the URL still sets it', () => {
+    const Hidden = defineComponent({
+      name: 'HiddenParam',
+      component: (_props: BaseComponentProps) => null,
+      params: { pace: { default: 1, hidden: true }, size: { default: 2 } },
+    });
+    expect([...componentParams(compileExperimentTimeline([Hidden.trial()])).shown]).toEqual(['size']);
+    const experiment = defineExperiment({ params: { level: { default: 1, hidden: true } }, timeline: [Hidden.trial()] });
+    expect(startRun(experiment, { url: { level: '3', pace: '4' } }).params).toMatchObject({ level: 3, pace: 4, size: 2 });
+  });
+
   test('the settings screen lists the settings of the selected trials, by component', () => {
     const experiment = defineExperiment({ timeline: [Answer.trial('a'), Upload.trial('upload')] });
     const groups = (url: Record<string, unknown>) =>

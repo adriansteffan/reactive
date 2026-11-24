@@ -264,7 +264,7 @@ const experiment = defineExperiment({
     hand: { values: ['left', 'right'], default: (values) => values[0], defaultDescription: 'the left one' },
     start: { default: () => Math.random() },
     vnOnly: { default: false },
-    trials: { default: 20 },
+    trials: { default: 20, hidden: true },
     weights: { default: [1, 2] },
   },
   timeline: ({ group, hand, start, vnOnly, trials, weights }) => {

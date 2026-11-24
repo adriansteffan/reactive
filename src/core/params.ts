@@ -1,14 +1,16 @@
 import { sample } from '../utils/array';
 import type { ReservedParamName } from './columns';
 
-interface ParamTexts {
+interface ParamDisplay {
   description?: string;
   /** Shown on the settings page in place of the default's value, such as how a function chooses it. */
   defaultDescription?: string;
+  /** Leaves the param off the settings page. A link can still set it. */
+  hidden?: boolean;
 }
 
 /** A param: an input of the experiment or a setting of a component, read from the URL. */
-export type ParamSpec = ParamTexts &
+export type ParamSpec = ParamDisplay &
   (
     | {
         /** The values the param can take. */
@@ -53,7 +55,7 @@ export type ParamValues<Params> = { [K in keyof Params]: ParamValue<Params[K]> }
 export type CheckedParams<V, D> = {
   [K in keyof V]: K extends ReservedParamName
     ? `The session CSV keeps '${K & string}' for a column of its own, so the param needs another name`
-    : { values?: readonly (V[K] & (string | number))[] } & ParamTexts;
+    : { values?: readonly (V[K] & (string | number))[] } & ParamDisplay;
 } & {
   [K in keyof D]: unknown extends V[K & keyof V]
     ? {

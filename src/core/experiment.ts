@@ -85,7 +85,7 @@ export function componentParams(compiled: CompiledTimeline) {
     for (const [name, spec] of Object.entries(component.reactive.params)) {
       specs[name] = spec;
       owners[name] ??= component.reactive.name;
-      const hidden = hideParams === true || (Array.isArray(hideParams) && hideParams.includes(name));
+      const hidden = spec.hidden || hideParams === true || (Array.isArray(hideParams) && hideParams.includes(name));
       if (!hidden) shown.add(name);
     }
   }

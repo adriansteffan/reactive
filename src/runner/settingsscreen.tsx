@@ -71,6 +71,11 @@ function describeDefault(spec: ParamSpec) {
 const fieldsOf = (params: Record<string, ParamSpec> = {}) =>
   Object.entries(params).map(([name, spec]) => describeParam(name, spec));
 
+const namesOf = (fields: ParamField[]) =>
+  new Intl.ListFormat('en').formatToParts(fields.map((field) => field.name)).map((part) =>
+    part.type === 'element' ? <code key={part.value}>{part.value}</code> : part.value,
+  );
+
 function Section({
   title,
   description,
@@ -86,7 +91,7 @@ function Section({
     <section className='mb-6 overflow-hidden rounded-xl border border-neutral-200 bg-white'>
       <div className='flex items-center justify-between gap-4 border-b border-neutral-200 px-6 py-5'>
         <div>
-          <h2 className='text-lg font-medium text-neutral-900'>{title}</h2>
+          <h2 className='font-besley text-lg font-medium text-neutral-900'>{title}</h2>
           {description && <p className='mt-1 text-sm text-neutral-500'>{description}</p>}
         </div>
         {action}
@@ -161,6 +166,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
   };
 
   const experimentFields = fieldsOf(experiment.params);
+  const shownFields = experimentFields.filter((field) => !field.spec.hidden);
 
   // Until these are set, every participant can get other trials, so none are shown
   const unsetFields =
@@ -168,6 +174,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
       ? experimentFields.filter((field) => field.defaultValue === undefined && !paramValues[field.name])
       : [];
   const trialsKnown = unsetFields.length === 0;
+  const unsetHidden = unsetFields.filter((field) => field.spec.hidden);
 
   const { General, ...ofComponents } = current.settings;
   const generalFields = fieldsOf(General);
@@ -309,7 +316,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
 
   return (
     <div className='max-w-4xl mx-auto p-6'>
-      <h1 className='text-3xl font-bold mb-4'>Configure a Run</h1>
+      <h1 className='font-besley text-2xl font-semibold mb-4'>Configure a Run</h1>
       <p className='text-neutral-600 mb-6'>
         Configure the experiment by setting parameter values below. Fields left empty will be
         assigned their default value. Once configured, you can copy the URL to run the experiment
@@ -317,10 +324,10 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
       </p>
 
       <Section title='Experiment Parameters' description="The experiment's own parameters.">
-        {experimentFields.length === 0 ? (
-          <p className='px-6 py-5 text-sm text-neutral-500'>This experiment declares no parameters.</p>
+        {shownFields.length === 0 ? (
+          <p className='px-6 py-5 text-sm text-neutral-500'>This experiment has no parameters to set.</p>
         ) : (
-          <ul className='divide-y divide-neutral-200'>{experimentFields.map(renderParamRow)}</ul>
+          <ul className='divide-y divide-neutral-200'>{shownFields.map(renderParamRow)}</ul>
         )}
       </Section>
 
@@ -388,11 +395,11 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
         <Section title='Trial Selection'>
           <div className='px-6 py-5 text-sm'>
             <p className='text-neutral-900'>
-              Set{' '}
-              {new Intl.ListFormat('en').formatToParts(unsetFields.map((field) => field.name)).map((part) =>
-                part.type === 'element' ? <code key={part.value}>{part.value}</code> : part.value,
-              )}{' '}
-              above to see the trials and their settings.
+              {unsetHidden.length > 0 ? (
+                <>The trials and their settings depend on {namesOf(unsetHidden)}, which this page hides.</>
+              ) : (
+                <>Set {namesOf(unsetFields)} above to see the trials and their settings.</>
+              )}
             </p>
             <p className='mt-1 text-neutral-500'>Both depend on values that are computed for each participant.</p>
           </div>

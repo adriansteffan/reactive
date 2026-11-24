@@ -70,7 +70,7 @@ function GuardPrompt({ cfg }: { cfg: FullscreenGuardConfig }) {
       <div className='fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-6 p-8 text-center'>
         {cfg.content ?? (
           <>
-            <h1 className='text-3xl font-bold'>Please return to fullscreen</h1>
+            <h1 className='font-besley text-3xl font-bold'>Please return to fullscreen</h1>
             <p>This experiment requires fullscreen mode. Click the button below to continue.</p>
           </>
         )}

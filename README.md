@@ -343,6 +343,7 @@ export default defineExperiment({
 * With `values`, the param is typed as one of them (`'vn' | 'scenario'`), and its default, or what a default function returns, must be one of them too. Without `values`, the param takes the type of its default.
 * Whatever sets a param, the URL, a simulated participant or a default function, a value of another type stops the experiment with an error: one outside `values`, text for a number, or anything but `true` or `false` for a switch. Only a default function without `values` declares no type, so its values are not checked.
 * The settings page shows the `description`, and what the default is: its value, or that it is drawn at random or computed for each participant. A `defaultDescription` takes the place of that, so it can say how a function chooses it, or what a value like `0` stands for.
+* `hidden: true` leaves a param off the settings page, such as one that only tests need. A link can still set it.
 * The resolved values are recorded in the data. Simulated participants can set them (see [Simulation](#simulation)).
 * `timeline` may use any JavaScript, such as `shuffle` or loops. Its random draws are seeded per participant, and the seed (`buildSeed`) is recorded, so the exact timeline a participant saw can be rebuilt later.
 * Params exist only inside `timeline`. Parts of the timeline in other files that need one become functions that take it, and components get it as a prop.
@@ -385,7 +386,7 @@ export default defineComponent({
 
 Write the component as a named function, as above, rather than inline in `defineComponent`: hot reloading then keeps the state of a trial that is on screen when its file changes.
 
-A component that measures times takes them with `now()`, the clock of the rows' `startMs` and `endMs`. To match the built-in screens, `useTheme()` returns the experiment's theme, and `t(theme)` its Tailwind classes, such as `t(useTheme()).button` for a button that ends a screen and `.article` for a screen's text.
+A component that measures times takes them with `now()`, the clock of the rows' `startMs` and `endMs`. To match the built-in screens, `useTheme()` returns the experiment's theme, and `t(theme)` its Tailwind classes, such as `t(useTheme()).button` for a button that ends a screen and `.article` for a screen's text. Headings in an `.article` are set in Besley, which other headings get with the class `font-besley`.
 
 A component can declare params of its own, in the same format as the experiment's. The settings page lists them whenever the component is in the timeline, the URL can set them, and the component reads their values with `useParams(params)`, typed like the experiment's. Upload's `upload` and `download` switches work this way:
 

@@ -68,6 +68,6 @@ export function t(theme: Theme) {
     /** The button that ends a screen, faded while it is disabled. */
     button: `${tokens.buttonBg} cursor-pointer px-8 py-3 border-2 ${tokens.buttonBorder} font-bold ${tokens.buttonText} text-lg rounded-xl ${tokens.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea} focus-visible:outline-2 ${tokens.focusOutline} disabled:opacity-50 disabled:pointer-events-none`,
     /** A screen's text. */
-    article: `prose prose-2xl ${tokens.prose} text-xl ${tokens.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${tokens.text} leading-relaxed`,
+    article: `prose prose-2xl ${tokens.prose} text-xl ${tokens.proseLink} prose-a:underline prose-headings:font-besley prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-h2:text-3xl prose-p:mb-4 prose-strong:font-bold ${tokens.text} leading-relaxed`,
   };
 }

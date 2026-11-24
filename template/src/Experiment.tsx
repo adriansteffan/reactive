@@ -21,7 +21,7 @@ function CustomTrialView({
 
   return (
     <>
-      <h1 className='text-4xl'>
+      <h1 className='font-besley text-4xl'>
         <strong>Custom Component</strong>
       </h1>
       <br />

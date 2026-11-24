@@ -4,6 +4,7 @@
   --font-*: initial;
   --font-sans: Atkinson Hyperlegible, sans-serif;
   --font-atkinson: Atkinson Hyperlegible, sans-serif;
+  --font-besley: Besley, serif;
 
   --animate-slide-down: slideDown 0.8s ease-out forwards;
   --animate-fade-in: fadeIn 0.5s ease-out forwards;
@@ -86,6 +87,12 @@
   src: url('./fonts/AtkinsonHyperlegible-BoldItalic.woff2') format('woff2');
   font-weight: 700;
   font-style: italic;
+}
+
+@font-face {
+  font-family: 'Besley';
+  src: url('./fonts/Besley.woff2') format('woff2');
+  font-weight: 400 900;
 }
 
 .reactive-light-dot-bg {

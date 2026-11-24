@@ -122,6 +122,11 @@ function uniform(min: number, max: number): number {
   return min + (max - min) * next();
 }
 
+/** A whole number from min to max, both included, each equally likely. */
+function uniformInt(min: number, max: number): number {
+  return min + Math.floor((max - min + 1) * next());
+}
+
 // Box-Muller transform; 1 - next() lies in (0, 1], so the logarithm stays finite
 function normal(mu: number, sigma: number): number {
   const radius = Math.sqrt(-2 * Math.log(1 - next()));
@@ -497,7 +502,7 @@ function sampleParticipants<C>(
   >;
 }
 
-export { normal, poisson, uniform, seedDistributions, withSeed, withStream, countDraws, sobol, halton, sampleParticipants };
+export { normal, poisson, uniform, uniformInt, seedDistributions, withSeed, withStream, countDraws, sobol, halton, sampleParticipants };
 // Exported for the tests, not part of the public API
 export { mt19937, standardNormalQuantile, standardNormalCdf, poissonQuantile };
 export type { DimensionSpec, TraitSpec, UniformSpec, NormalSpec, PoissonSpec, IntegerSpec, DiscreteSpec, SamplingMethod };

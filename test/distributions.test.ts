@@ -6,6 +6,7 @@ import {
   withStream,
   normal,
   uniform,
+  uniformInt,
   poisson,
   sampleParticipants,
   mt19937,
@@ -382,6 +383,30 @@ describe('uniform sampler', () => {
     const sorted = values.map((v) => (v + 2) / 8).sort((a, b) => a - b);
     const distance = Math.max(...sorted.map((v, i) => Math.max(Math.abs((i + 1) / n - v), Math.abs(v - i / n))));
     expect(distance).toBeLessThan(1.95 / Math.sqrt(n));
+  });
+});
+
+describe('uniformInt sampler', () => {
+  it('returns every whole number from min to max, both included, equally often', () => {
+    seedDistributions(1);
+    const counts = new Map<number, number>();
+    for (let i = 0; i < 60000; i++) {
+      const value = uniformInt(-2, 3);
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    expect([...counts.keys()].sort((a, b) => a - b)).toEqual([-2, -1, 0, 1, 2, 3]);
+    for (const count of counts.values()) expect(Math.abs(count - 10000)).toBeLessThan(400);
+  });
+
+  it('returns the only number between equal bounds', () => {
+    for (let i = 0; i < 100; i++) expect(uniformInt(50, 50)).toBe(50);
+  });
+
+  it('draws the numbers that rounding down uniform draws', () => {
+    seedDistributions(7);
+    const rounded = Array.from({ length: 1000 }, () => Math.floor(uniform(5, 31)));
+    seedDistributions(7);
+    expect(Array.from({ length: 1000 }, () => uniformInt(5, 30))).toEqual(rounded);
   });
 });
 

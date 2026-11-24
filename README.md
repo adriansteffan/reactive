@@ -838,6 +838,7 @@ Random number generators, useful for writing realistic simulations.
 | Function | Signature | Description |
 |---|---|---|
 | `uniform` | `uniform(a, b)` | Sample from a continuous uniform distribution over `[a, b)` |
+| `uniformInt` | `uniformInt(a, b)` | Sample a whole number from `a` to `b`, both included, each equally likely |
 | `normal` | `normal(mu, sigma)` | Sample from a normal (Gaussian) distribution with mean `mu` and standard deviation `sigma` |
 | `poisson` | `poisson(lambda)` | Sample from a Poisson distribution with rate `lambda` |
 

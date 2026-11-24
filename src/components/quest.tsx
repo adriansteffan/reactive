@@ -4,7 +4,7 @@ import { ReactQuestionFactory, Survey, SurveyQuestionElementBase } from 'survey-
 import { ContrastLight, ContrastDark } from 'survey-core/themes';
 import 'survey-core/survey-core.min.css';
 import { defineComponent } from '../core/component';
-import { uniform } from '../utils/distributions';
+import { uniform, uniformInt } from '../utils/distributions';
 import { useTheme, t } from '../runner/theme';
 import { Recorder } from './recorder';
 
@@ -126,11 +126,7 @@ export default defineComponent({
     answerQuestion: ({ question }) => {
       let value: any;
       switch (question.type) {
-        case 'rating': {
-          const min = question.rateMin ?? 1, max = question.rateMax ?? 5;
-          value = min + Math.floor(uniform(0, max - min + 1));
-          break;
-        }
+        case 'rating': value = uniformInt(question.rateMin ?? 1, question.rateMax ?? 5); break;
         case 'boolean': value = uniform(0, 1) > 0.5; break;
         case 'text': case 'comment': value = 'simulated_response'; break;
         case 'radiogroup': case 'dropdown': {
@@ -140,7 +136,7 @@ export default defineComponent({
         }
         case 'checkbox': {
           if (question.choices?.length) {
-            const n = 1 + Math.floor(uniform(0, question.choices.length));
+            const n = uniformInt(1, question.choices.length);
             value = [...question.choices]
               .sort(() => uniform(0, 1) - 0.5).slice(0, n)
               .map((c: any) => typeof c === 'object' ? c.value : c);

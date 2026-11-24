@@ -26,7 +26,7 @@ export type { RunSimulationConfig } from './core/simulation';
 export type { Flatten, TrialRow } from './core/files';
 export type { ResponseKey } from './utils/keys';
 export { prolificId, alphanumericId } from './utils/ids';
-export { normal, poisson, uniform, sobol, halton, sampleParticipants } from './utils/distributions';
+export { normal, poisson, uniform, uniformInt, sobol, halton, sampleParticipants } from './utils/distributions';
 export { useTheme, t } from './runner/theme';
 export { useAudioDeviceId } from './runner/contexts';
 export { invokeLLM } from './utils/llm';

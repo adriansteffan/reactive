@@ -531,7 +531,7 @@ Each built-in component (Text, Quest, CanvasBlock, Upload, etc.) has a **simulat
 
 For example, Quest's simulate function iterates through questions and calls `simulators.answerQuestion()` for each one. The default `answerQuestion` picks random valid answers. You can override it to model specific participant behavior.
 
-Simulators and simulate functions take a single object, so each one names only what it uses. A simulator receives `props` and `participant`, plus whatever the simulate function passes along (`question`, for `answerQuestion`). It returns `{ value, participant }`: its decision as `value`, and the new `participant` if the participant changed; without one, the participant stays as it was.
+Simulators and simulate functions take a single object, so each one names only what it uses. A simulator receives `props` and `participant`, plus whatever the simulate function passes along (`question`, for `answerQuestion`). It returns `{ value, participant }`: its decision as `value`, and the new `participant` if the participant changed; without one, the participant stays as it was. It may be async, for example to ask an LLM (see [LLM Integration](#llm-integration)).
 
 ### Overriding simulators on a trial
 
@@ -568,8 +568,8 @@ export default defineComponent({
   name: 'MyTrial',
   component: MyTrialView,
   // Simulate function: uses shared trial logic + decision functions
-  simulate: ({ props, simulators, participant }) => {
-    const result = simulators.decide({ props, participant });
+  simulate: async ({ props, simulators, participant }) => {
+    const result = await simulators.decide({ props, participant });
     return { recorded: { choice: result.value }, participant: result.participant };
   },
   // Default simulators: one per decision point
@@ -579,7 +579,7 @@ export default defineComponent({
 });
 ```
 
-A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data` and `store`), so a simulation can depend on earlier answers, read with `getAll` and `getLatest`. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participant ?? participant`), and returns the last one as its `participant`.
+A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data` and `store`), so a simulation can depend on earlier answers, read with `getAll` and `getLatest`. It awaits its simulators, since a replacement may be async. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participant ?? participant`), and returns the last one as its `participant`.
 
 A component that records nothing, such as a screen of instructions, can use `simulate: noopSimulate`, which moves on at once.
 
@@ -1050,6 +1050,18 @@ const result = await invokeLLM(
 );
 const parsed = JSON.parse(result);
 // parsed.text and parsed.confidence are guaranteed to exist
+```
+
+### Simulated answers
+
+A simulator can let an LLM answer. The cache gives identical prompts the identical reply, so the prompt should contain something about the participant:
+
+```tsx
+PlainInput.trial('reason', { content: <p>Why did you decide this way?</p> }).simulators({
+  respond: async ({ participant }) => ({
+    value: await invokeLLM(config, `You are ${participant.age} years old. Why did you decide this way?`),
+  }),
+}),
 ```
 
 ### Configuration

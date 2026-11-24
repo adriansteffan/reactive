@@ -111,12 +111,12 @@ export default defineComponent({
   name: 'Text',
   component: Text,
   csv: 'text',
-  simulate: ({ props, simulators, participant }) => {
+  simulate: async ({ props, simulators, participant }) => {
     const { durationMs } = props;
     if (durationMs !== undefined && !props.buttonText && !props.allowedResponseKeys) {
       return { recorded: {}, durationMs };
     }
-    const result = simulators.respond({ props, participant });
+    const result = await simulators.respond({ props, participant });
     const reactionTimeMs = result.value.reactionTimeMs ?? 0;
     // A timed screen that the participant does not end in time ends after its duration
     if (durationMs !== undefined && reactionTimeMs >= durationMs) {

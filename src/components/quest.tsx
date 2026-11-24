@@ -107,14 +107,14 @@ export default defineComponent({
   name: 'Quest',
   component: Quest,
   session: true,
-  simulate: ({ props, simulators, participant }) => {
+  simulate: async ({ props, simulators, participant }) => {
     const recorded: Record<string, any> = {};
     let totalDuration = 0;
     const pages = props.surveyJson?.pages || [{ elements: props.surveyJson?.elements || [] }];
     for (const page of pages) {
       for (const el of page.elements || []) {
         if (!el.name) continue;
-        const result = simulators.answerQuestion({ props, participant, question: el });
+        const result = await simulators.answerQuestion({ props, participant, question: el });
         participant = result.participant ?? participant;
         recorded[el.name] = result.value.answer;
         totalDuration += result.value.durationMs;

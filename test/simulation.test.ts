@@ -12,13 +12,15 @@ const Rated = defineComponent({
   name: 'Rated',
   component: (_props: BaseComponentProps<{ rating: number }> & { item: number }) => null,
   csv: 'ratings',
-  defaultSimulators: { rate: () => ({ value: normal(4, 1) }) },
+  defaultSimulators: {
+    rate: async () => {
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 5));
+      return { value: normal(4, 1) };
+    },
+  },
   simulate: async ({ props, simulators, participant }) => {
-    await new Promise((resolve) => setTimeout(resolve, Math.random() * 5));
-    return {
-      recorded: { rating: simulators.rate({ props, participant }).value + props.item },
-      durationMs: uniform(100, 500),
-    };
+    const result = await simulators.rate({ props, participant });
+    return { recorded: { rating: result.value + props.item }, durationMs: uniform(100, 500) };
   },
 });
 

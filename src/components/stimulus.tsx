@@ -353,7 +353,7 @@ export default defineComponent({
       return responses && responses.length > 0 ? responses.map((answer) => ({ ...answer, options: first.options })) : first;
     },
   },
-  simulate: ({ props, simulators, participant }) => {
+  simulate: async ({ props, simulators, participant }) => {
     const timeoutMs = props.response?.timeLimitMs ?? props.displayDurationMs ?? Number.POSITIVE_INFINITY;
     const recordAll = props.response?.recordAll === true;
     const endsAtAnswer = props.response?.endsTrial !== false && !recordAll;
@@ -362,7 +362,7 @@ export default defineComponent({
     // One answer after another, under the browser's rules: an answer counts within the trial's
     // time, and with recordAll, each after the one before
     do {
-      const result = simulators.respond({ props, participant, answers });
+      const result = await simulators.respond({ props, participant, answers });
       participant = result.participant ?? participant;
       const { response, key, reactionTimeMs } = result.value;
       if (response === null || reactionTimeMs === null || reactionTimeMs >= timeoutMs) break;

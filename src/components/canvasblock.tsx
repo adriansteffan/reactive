@@ -167,7 +167,7 @@ export default defineComponent({
   component: CanvasBlock,
   // Every slide's row has metadata, if only empty, so the block's own always goes to slideblock_meta_ columns
   csv: { canvas: (item) => item.recorded.map((row) => ({ metadata: {}, ...row })) },
-  simulate: ({ props, simulators, participant, data, store }) => {
+  simulate: async ({ props, simulators, participant, data, store }) => {
     const compiled = compileSlides(props.timeline);
     const context = { data, store, slides: [] };
     let run = startSlides(compiled, context);
@@ -175,7 +175,7 @@ export default defineComponent({
 
     while (run.slide) {
       const slide = run.slide;
-      const result = simulators.respondToSlide({ props, participant, slide });
+      const result = await simulators.respondToSlide({ props, participant, slide });
       participant = result.participant ?? participant;
 
       // The same rules as in the browser: a key or click counts within the slide's time, and ends it

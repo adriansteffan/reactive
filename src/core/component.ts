@@ -48,11 +48,16 @@ export type SimulatorInput<C = any> = {
 /** A simulator's decision, as `value`. Without `participant`, the participant stays as it was. */
 export type SimulatorResult = { value?: any; participant?: ParticipantState };
 
-/** Decides one part of a simulated participant's behavior. */
-export type Simulator<C = any> = (input: SimulatorInput<C>) => SimulatorResult;
+type MaybePromise<T> = T | Promise<T>;
+
+/** Decides one part of a simulated participant's behavior. It may be async, for example to ask an LLM. */
+export type Simulator<C = any> = (input: SimulatorInput<C>) => MaybePromise<SimulatorResult>;
 
 /** A trial's replacement for a default simulator, which it receives to build on. */
-export type SimulatorReplacement = (input: SimulatorInput, defaultSimulator: Simulator) => SimulatorResult;
+export type SimulatorReplacement = (
+  input: SimulatorInput,
+  defaultSimulator: Simulator,
+) => MaybePromise<SimulatorResult>;
 
 // A replacement takes what a simulator of the component takes, along with the default simulator,
 // returns what the default returns, and may leave the participant as it was
@@ -60,7 +65,7 @@ type Replacement<C, F> = F extends (...args: any[]) => infer R
   ? (
       input: SimulatorInput<C>,
       defaultSimulator: (input: SimulatorInput<C>) => R,
-    ) => Omit<R, 'participant'> & { participant?: ParticipantState }
+    ) => MaybePromise<Omit<Awaited<R>, 'participant'> & { participant?: ParticipantState }>
   : never;
 
 /** Replacements for some of the default simulators `D` of component `C`. */
@@ -87,7 +92,7 @@ export type SimulateInput<C = any, S extends string = string> = TimelineContext 
 
 export type SimulateFunction<C = any, S extends string = string> = (
   input: SimulateInput<C, S>,
-) => SimulateResult<RecordedOf<C>> | Promise<SimulateResult<RecordedOf<C>>>;
+) => MaybePromise<SimulateResult<RecordedOf<C>>>;
 
 /** What a component's `check` sees of one of its trials when the experiment loads. */
 export interface TrialCheck<C = any, P = {}> {

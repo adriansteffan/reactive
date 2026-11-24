@@ -229,11 +229,11 @@ export const Tutorial = defineComponent({
   name: 'Tutorial',
   component: TutorialComponent,
   csv: null,
-  simulate: ({ props, simulators, participant }) => {
+  simulate: async ({ props, simulators, participant }) => {
     const slideData: Record<number, Record<string, unknown>> = {};
     let totalDuration = 0;
     for (let i = 0; i < (props.slides?.length ?? 0); i++) {
-      const result = simulators.respondToSlide({ props, participant, slideIndex: i });
+      const result = await simulators.respondToSlide({ props, participant, slideIndex: i });
       participant = result.participant ?? participant;
       slideData[i] = result.value.data;
       totalDuration += result.value.durationMs;

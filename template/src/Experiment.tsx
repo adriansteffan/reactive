@@ -49,10 +49,10 @@ const CustomTrial = defineComponent({
   // The CSV file this component's data goes into, which a trial can change with .csv()
   csv: 'customtrial',
   // simulate replays the trial, asking the click simulator how fast the participant clicks
-  simulate: ({ props, simulators, participant }) => {
+  simulate: async ({ props, simulators, participant }) => {
     let totalTimeMs = 0;
     for (let i = 0; i < props.maxCount; i++) {
-      const result = simulators.click({ props, participant });
+      const result = await simulators.click({ props, participant });
       participant = result.participant ?? participant;
       totalTimeMs += result.value;
     }

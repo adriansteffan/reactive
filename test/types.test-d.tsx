@@ -41,9 +41,11 @@ const CustomTrial = defineComponent({
       return { value: 300 * n, participant: { ...participant, clicked: true } };
     },
   },
-  simulate: ({ props, simulators, participant, store, data }) => {
+  simulate: async ({ props, simulators, participant, store, data }) => {
     const n: number = props.maxCount;
-    const r = simulators.click({ props, participant });
+    const r = await simulators.click({ props, participant });
+    // @ts-expect-error a simulator may be async, so its result has to be awaited
+    simulators.click({ props, participant }).value;
     // @ts-expect-error simulator that does not exist
     simulators.tap({ props, participant });
     // @ts-expect-error a simulator needs the props and the participant
@@ -70,10 +72,11 @@ defineComponent({
 defineComponent({
   name: 'SimulateFirst',
   component: (_props: BaseComponentProps<ClickResponse> & { maxCount: number }) => null,
-  simulate: ({ props, simulators, participant }) => {
+  simulate: async ({ props, simulators, participant }) => {
     // @ts-expect-error simulator that does not exist
     simulators.tap({ props, participant });
-    return { recorded: { totalTime: simulators.click({ props, participant }).value, clicks: 1 } };
+    const result = await simulators.click({ props, participant });
+    return { recorded: { totalTime: result.value, clicks: 1 } };
   },
   defaultSimulators: {
     click: ({ props }) => {
@@ -212,6 +215,10 @@ PlainInput.trial('typed').simulators({
 PlainInput.trial('typed').simulators({ respond: (_input, defaultSimulator) => defaultSimulator() });
 // @ts-expect-error PlainInput's simulated answer is text
 PlainInput.trial('typed').simulators({ respond: () => ({ value: 5 }) });
+// A replacement may be async, and still returns what the simulator it replaces returns
+PlainInput.trial('typed').simulators({ respond: async () => ({ value: 'typed' }) });
+// @ts-expect-error PlainInput's simulated answer is text
+PlainInput.trial('typed').simulators({ respond: async () => ({ value: 5 }) });
 
 // --- reading results ---
 const nickname = PlainInput.trial('nickname', { placeholder: 'Name' });

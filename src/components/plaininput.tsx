@@ -95,8 +95,8 @@ export default defineComponent({
   name: 'PlainInput',
   component: PlainInput,
   session: true,
-  simulate: ({ props, simulators, participant }) => {
-    const result = simulators.respond({ props, participant });
+  simulate: async ({ props, simulators, participant }) => {
+    const result = await simulators.respond({ props, participant });
     const typingDuration = String(result.value).length * uniform(50, 150);
     return {
       recorded: { value: result.value },

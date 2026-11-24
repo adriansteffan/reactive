@@ -995,9 +995,9 @@ export const RandomDotKinematogram = defineComponent({
   name: 'RandomDotKinematogram',
   component: RandomDotKinematogramComponent,
   csv: 'rdk',
-  simulate: ({ props, simulators, participant }) => {
+  simulate: async ({ props, simulators, participant }) => {
     const merged: any = { ...RDK_DEFAULTS, ...props };
-    const result = simulators.respond({ props: merged, participant });
+    const result = await simulators.respond({ props: merged, participant });
     const { reactionTimeMs: rt, key } = result.value;
 
     const preTrialDuration = merged.preTrialMessage?.durationMs ?? 0;

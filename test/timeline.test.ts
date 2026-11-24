@@ -9,6 +9,7 @@ import { defineComponent } from '../src/core/component';
 import { buildUploadFiles, type FileUpload, markRecordingUploaded } from '../src/core/files';
 import CanvasBlock from '../src/components/canvasblock';
 import { canvasSize } from '../src/utils/canvas';
+import PlainInput from '../src/components/plaininput';
 import Text from '../src/components/text';
 import Stimulus from '../src/components/stimulus';
 import type { ResponseKey } from '../src/utils/keys';
@@ -640,8 +641,8 @@ describe('components', () => {
       defaultSimulators: {
         see: ({ participant }) => ({ participant: { ...participant, seen: participant.seen + 1 } }),
       },
-      simulate: ({ props, simulators, participant, data }) => {
-        const result = simulators.see({ props, participant });
+      simulate: async ({ props, simulators, participant, data }) => {
+        const result = await simulators.see({ props, participant });
         return {
           recorded: { seen: result.participant?.seen, earlierRows: data.trials.length },
           participant: result.participant,
@@ -838,8 +839,8 @@ describe('components', () => {
     const Tap = defineComponent({
       name: 'Tap',
       component: (_props: BaseComponentProps<{ taps: number; tappedBefore: boolean }>) => null,
-      simulate: ({ props, simulators, participant }) => {
-        const result = simulators.tap({ props, participant });
+      simulate: async ({ props, simulators, participant }) => {
+        const result = await simulators.tap({ props, participant });
         return { recorded: { taps: result.value, tappedBefore: participant.tapped === true }, participant: result.participant };
       },
       defaultSimulators: {
@@ -859,6 +860,17 @@ describe('components', () => {
       { taps: 20, tappedBefore: false },
       { taps: 2, tappedBefore: true },
     ]);
+  });
+
+  test('simulators may be async', async () => {
+    const rows = await run([
+      PlainInput.trial().simulators({ respond: async () => ({ value: 'typed' }) }),
+      Stimulus.trial({ response: { buttons: ['Yes', 'No'] } }).simulators({
+        respond: async () => ({ value: { response: 'No', reactionTimeMs: 900 } }),
+      }),
+    ]);
+    expect(rows[0].recorded).toEqual({ value: 'typed' });
+    expect(rows[1].recorded).toMatchObject({ response: 'No', reactionTimeMs: 900 });
   });
 
   test('the canvas takes its size from pixels, shares of the screen and ratios, and fits the screen', () => {

@@ -424,7 +424,7 @@ defineComponent({ name: 'Reaction', component: ReactionView, params });
 
 `as const` keeps the `values` of a param as a union of them, as `defineExperiment` does. A param that `useParams` reads but `defineComponent` does not declare would have no value, so it stops the experiment during development and simulation.
 
-A component can check each of its trials when the experiment loads, with `check`. It gets the trial's `props` (`undefined` when they are computed during the run), the run's `params`, every trial of the timeline as `trials` with this one's `index`, and `production`, which is true in a production build. It returns what is wrong, if anything. Any message keeps the run from starting, and the settings screen shows it while you build a link. A check for something only the real link provides, such as a URL param, can leave development and simulation alone by returning nothing unless `production` is set:
+A component can check each of its trials when the experiment loads, with `check`. It gets the trial's `props` (`undefined` when they are computed during the run), the run's `params`, every trial of the timeline as `trials` with this one's `index`, and `production`, which is true in a production build. It returns what is wrong, if anything. Any message keeps the run from starting and appears on the page instead, like any error that stops the experiment; the settings screen shows it while you build a link. A check for something only the real link provides, such as a URL param, can leave development and simulation alone by returning nothing unless `production` is set:
 
 ```tsx
 defineComponent({

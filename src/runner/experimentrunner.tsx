@@ -16,6 +16,7 @@ import { uuidv4 } from '../utils/ids';
 import { now } from '../utils/time';
 import { AudioDeviceContext, CompiledTimelineContext, ParamsProvider } from './contexts';
 import { DevPanel } from './devpanel';
+import { ErrorBoundary } from './errorboundary';
 import { FullscreenGuard } from './fullscreenguard';
 import { ProgressBar } from './progressbar';
 import { SettingsScreen } from './settingsscreen';
@@ -73,10 +74,14 @@ export default function ExperimentRunner({
   const showSettings =
     !parseBooleanProp(disableSettings) && window.location.pathname.endsWith('/settings');
 
-  return showSettings ? (
-    <SettingsScreen experiment={experiment} />
-  ) : (
-    <Runner experiment={experiment} devDisabled={parseBooleanProp(disableDev)} />
+  return (
+    <ErrorBoundary experiment={experiment}>
+      {showSettings ? (
+        <SettingsScreen experiment={experiment} />
+      ) : (
+        <Runner experiment={experiment} devDisabled={parseBooleanProp(disableDev)} />
+      )}
+    </ErrorBoundary>
   );
 }
 

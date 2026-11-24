@@ -28,7 +28,7 @@ function ProlificEnding({
   content = defaultContent,
   className,
   containerClass,
-  centered,
+  centered = true,
   animate,
 }: {
   prolificCode?: string;

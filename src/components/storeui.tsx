@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { defineComponent } from '../core/component';
 import { hoverArea, t, useTheme } from '../runner/theme';
 import type { ExperimentStore } from '../core/store';
+import { Article } from './article';
 
 interface BaseFieldConfig {
   type: 'string' | 'integer' | 'float' | 'boolean';
@@ -139,7 +140,7 @@ function StoreUI({
   
   return (
     <div className="max-w-prose mx-auto mt-20 mb-20 px-4">
-      <article className={th.article}>{content}</article>
+      <Article>{content}</Article>
       
       <div className="mt-12 space-y-12">
         {fields.map((field) => (

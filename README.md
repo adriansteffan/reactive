@@ -208,7 +208,22 @@ Its row records the `response`, the `key` that gave it, empty for a button, and 
 
 `displayDurationMs` hides the content after that time, while answers count until the time limit. Without a time limit, the trial ends when the content disappears. A trial needs a way to end, an answer, a time limit or a display duration, which the types check.
 
-The buttons are all as wide as the widest, so that none stands out. `centered: false` starts the stimulus at the top of the screen instead of its middle.
+The buttons are all as wide as the widest, so that none stands out. `centered: false` starts the stimulus at the top of the screen instead of its middle, and `animate: true` slides it in with its buttons.
+
+The content is shown as it is. Text that should look like that of the other screens goes in an `Article`:
+
+```tsx
+Stimulus.trial('vote', {
+  content: (
+    <Article>
+      <h2>How would you decide?</h2>
+      <p>Please choose the option closer to your own view.</p>
+    </Article>
+  ),
+  response: { buttons: ['For', 'Against'], buttonDelayMs: 1000 },
+  animate: true,
+}),
+```
 
 With `endsTrial: false`, every trial lasts until its time limit, whenever the answer came, as fixed-duration designs need. With `recordAll`, a trial records each answer in `responses`, in order, such as a press for every target in a stream; `response`, `key` and `reactionTimeMs` still hold the first. In the stimulus CSV, such a trial has a row for each answer, or one empty row without any. Both need a time limit, and the types reject `recordAll` together with `endsTrial: true`.
 
@@ -386,7 +401,7 @@ export default defineComponent({
 
 Write the component as a named function, as above, rather than inline in `defineComponent`: hot reloading then keeps the state of a trial that is on screen when its file changes.
 
-A component that measures times takes them with `now()`, the clock of the rows' `startMs` and `endMs`. To match the built-in screens, `useTheme()` returns the experiment's theme, and `t(theme)` its Tailwind classes, such as `t(useTheme()).button` for a button that ends a screen and `.article` for a screen's text. Headings in an `.article` are set in Besley, which other headings get with the class `font-besley`.
+A component that measures times takes them with `now()`, the clock of the rows' `startMs` and `endMs`. To match the built-in screens, `useTheme()` returns the experiment's theme, and `t(theme)` its Tailwind classes, such as `t(useTheme()).button` for a button that ends a screen. An `<Article>` holds a screen's text in a column as wide as theirs, and `.article` is its look alone, for a column of another width. Their headings are set in Besley, which other headings get with the class `font-besley`.
 
 A component can declare params of its own, in the same format as the experiment's. The settings page lists them whenever the component is in the timeline, the URL can set them, and the component reads their values with `useParams(params)`, typed like the experiment's. Upload's `upload` and `download` switches work this way:
 

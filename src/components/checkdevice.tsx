@@ -2,6 +2,7 @@ import { BaseComponentProps } from '../core/component';
 import { useEffect, useRef, useState } from 'react';
 import { defineComponent } from '../core/component';
 import { useTheme, t } from '../runner/theme';
+import { Article } from './article';
 
 export interface DeviceInfo {
   windowWidth: number;
@@ -137,9 +138,7 @@ function CheckDevice({
   return showContent ? (
     <div className={`min-h-screen ${th.containerBg}`}>
     <div className='max-w-prose mx-auto mt-20 mb-20 px-4'>
-      <article className={th.article}>
-        {errorContent}
-      </article>
+      <Article>{errorContent}</Article>
     </div>
     </div>
   ) : null;

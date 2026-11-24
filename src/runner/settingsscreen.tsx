@@ -263,6 +263,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
 
       <div className='col-span-1 flex justify-end'>
         <button
+          type='button'
           onClick={() => setCustomParams((prev) => prev.filter((_, i) => i !== index))}
           className='inline-flex cursor-pointer items-center justify-center rounded-lg p-2 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-2 focus-visible:outline-neutral-900'
           aria-label='Remove parameter'
@@ -315,7 +316,8 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
   );
 
   return (
-    <div className='max-w-4xl mx-auto p-6'>
+    // When someone comes back to the page, Chrome would refill its fields without React noticing
+    <form className='max-w-4xl mx-auto p-6' autoComplete='off' onSubmit={(e) => e.preventDefault()}>
       <h1 className='font-besley text-2xl font-semibold mb-4'>Configure a Run</h1>
       <p className='text-neutral-600 mb-6'>
         Configure the experiment by setting parameter values below. Fields left empty will be
@@ -350,6 +352,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
         description='Add any additional parameters to be stored in the data for this run.'
         action={
           <button
+            type='button'
             onClick={() => setCustomParams((prev) => [...prev, { name: '', value: '' }])}
             className={secondaryButton}
           >
@@ -495,7 +498,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
         <div className='px-6 py-5'>
           <div className='flex flex-col md:flex-row gap-3'>
             <input ref={urlInputRef} type='text' className={fieldClass} value={generatedUrl} readOnly />
-            <button onClick={handleCopyUrl} className={secondaryButton}>
+            <button type='button' onClick={handleCopyUrl} className={secondaryButton}>
               {copied ? 'Copied!' : 'Copy URL'}
             </button>
           </div>
@@ -513,6 +516,6 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
           Launch Experiment with these Settings
         </a>
       </div>
-    </div>
+    </form>
   );
 };

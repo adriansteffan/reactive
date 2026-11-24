@@ -1,4 +1,5 @@
 import { type ReactNode, useState, useEffect } from 'react';
+import { Article } from './article';
 import { Recorder } from './recorder';
 import { noopSimulate } from '../core/simulation';
 import { defineComponent } from '../core/component';
@@ -149,14 +150,10 @@ const MicrophoneCheck = ({
   return (
     <div className={`min-h-screen ${th.containerBg}`}>
       <div className={`max-w-prose mx-auto mt-20 mb-20 px-4 ${animate ? 'animate-fade-in opacity-0' : ''}`}>
-        <article className={th.article}>
-          {content}
-        </article>
+        <Article>{content}</Article>
         <MicrophoneSelect onMicrophoneSelect={handleMicSelect} disabled={isRecording} placeholder={placeholder} />
 
-        <article className={th.article}>
-          {recordingContent}
-        </article>
+        <Article>{recordingContent}</Article>
 
         <div className='mt-4 mb-12'>
           <Recorder
@@ -172,9 +169,7 @@ const MicrophoneCheck = ({
 
         {recordingExists && (
           <div className='animate-fade-in opacity-0'>
-            <article className={th.article}>
-              {playbackContent}
-            </article>
+            <Article>{playbackContent}</Article>
 
             <div className='mt-16 flex justify-center'>
               <button

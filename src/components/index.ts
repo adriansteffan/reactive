@@ -1,4 +1,5 @@
 export { default as Text } from './text';
+export { Article } from './article';
 export { default as Stimulus, Canvas, type StimulusAnswer, type StimulusChoice, type StimulusControls, type StimulusData, type StimulusResponse } from './stimulus';
 export { default as PlainInput } from './plaininput';
 export { default as ProlificEnding } from './prolificending';

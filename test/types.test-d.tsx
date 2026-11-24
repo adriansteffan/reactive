@@ -1,5 +1,6 @@
 // Type tests, checked by `bun check`: every @ts-expect-error marks a mistake the types must catch
 import {
+  Article,
   type BaseComponentProps,
   Canvas,
   CanvasBlock,
@@ -481,7 +482,7 @@ Stimulus.trial('face', {
   displayDurationMs: 500,
 });
 Stimulus.trial('fixation', { content: '+', displayDurationMs: 500 });
-Stimulus.trial({ response: { buttons: ['Yes', 'No'], buttonDelayMs: 1000 }, centered: false });
+Stimulus.trial({ content: <Article><p>Text</p></Article>, response: { buttons: ['Yes', 'No'], buttonDelayMs: 1000 }, centered: false, animate: true });
 Stimulus.trial({
   content: ({ respond }) => <Canvas draw={(ctx, width, height) => ctx.fillRect(0, 0, width, height)} onClick={(x, y) => respond({ x, y })} />,
 });

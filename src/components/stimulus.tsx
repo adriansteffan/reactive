@@ -64,6 +64,8 @@ type StimulusFields = {
   containerClass?: string;
   /** Centers the stimulus vertically; otherwise it starts at the top of the screen. */
   centered?: boolean;
+  /** Slides the stimulus and its buttons in. */
+  animate?: boolean;
 };
 
 // An answer ends the trial, unless endsTrial is false or the trial records every answer
@@ -129,7 +131,7 @@ function recordAnswer(
   );
 }
 
-function Stimulus({ content, response, displayDurationMs, className = '', containerClass, centered = true, next, store }: StimulusProps) {
+function Stimulus({ content, response, displayDurationMs, className = '', containerClass, centered = true, animate = false, next, store }: StimulusProps) {
   const th = t(useTheme());
   // The content and its buttons, hidden until the images in the content can show
   const stageRef = useRef<HTMLDivElement>(null);
@@ -169,7 +171,10 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
     const frame = (timestamp: number) => {
       if (paintedAt === undefined) {
         // Shown in a frame callback, so this frame is the one that paints it
-        if (stageRef.current) stageRef.current.style.visibility = 'visible';
+        if (stageRef.current) {
+          stageRef.current.style.visibility = 'visible';
+          stageRef.current.style.animationPlayState = 'running';
+        }
         paintedAt = timestamp;
       } else {
         onset ??= timestamp;
@@ -217,7 +222,11 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
 
   return (
     <div className={`min-h-screen flex justify-center ${centered ? 'items-center' : ''} px-4 py-20 ${th.text} ${containerClass ?? th.containerBg}`}>
-      <div ref={stageRef} className='flex flex-col items-center gap-12' style={{ visibility: 'hidden' }}>
+      <div
+        ref={stageRef}
+        className={`flex flex-col items-center gap-12 ${animate ? 'animate-slide-down opacity-0' : ''}`}
+        style={{ visibility: 'hidden', animationPlayState: 'paused' }}
+      >
         <div ref={contentRef} className={className}>
           {/* A function is rendered as a component, so that it can use hooks */}
           {typeof content === 'function' ? createElement(content, { respond }) : content}

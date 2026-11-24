@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { ComponentCsv, CsvTarget, SessionColumns, TrialRow } from './files';
-import type { CheckedParams, ParamSpec, ParamValues } from './params';
+import type { CheckedParams, ParamSpec, ParamSpecs, ParamValues } from './params';
 import { type ExperimentData, rowsOf } from './rows';
 import { report } from './development';
 import type { Store } from './store';
@@ -160,7 +160,8 @@ export function defineComponent<
   C extends AnyComponent,
   S extends string = never,
   D extends Partial<Record<S, Simulator<C>>> = {},
-  const P extends Record<string, ParamSpec> = {},
+  const PV extends Record<string, unknown> = {},
+  PD extends Record<string, unknown> = {},
 >(definition: {
   /** Identifies the component in the data. Required, since function names do not survive minification. */
   name: string;
@@ -177,15 +178,15 @@ export function defineComponent<
    */
   session?: SessionColumns<RecordedOf<C>>;
   /** Params it reads with `useParams`, which the settings screen lists whenever it is in the timeline. */
-  params?: CheckedParams<P>;
+  params?: CheckedParams<PV, PD>;
   defaultSimulators?: Record<S, Simulator<C>> & D;
   simulate?: SimulateFunction<C, S>;
   /**
    * Checks each of its trials when the experiment loads, and returns what is wrong with it. Any
    * message keeps the run from starting, and the settings screen shows it.
    */
-  check?: (trial: TrialCheck<C, P>) => string | undefined;
-}): DefinedComponent<C, D, keyof P & string> {
+  check?: (trial: TrialCheck<C, ParamSpecs<PV, PD>>) => string | undefined;
+}): DefinedComponent<C, D, keyof PV & string> {
   const { name, component, session, params = {}, simulate } = definition;
   const csv = definition.csv !== undefined ? definition.csv : session === undefined ? name.toLowerCase() : null;
   const files: CsvTarget[] =
@@ -206,7 +207,7 @@ export function defineComponent<
       `The components '${previous.name}' and '${name}' are defined with the same function, so their trials could not be told apart. Give one of them a function of its own that renders the shared one.`,
     );
   }
-  const defined = component as DefinedComponent<C, D, keyof P & string>;
+  const defined = component as DefinedComponent<C, D, keyof PV & string>;
   defined.reactive = {
     name,
     csv: files,
@@ -233,6 +234,6 @@ export function defineComponent<
       name: named ? first : undefined,
       props: props ?? {},
     });
-  }) as TrialFunction<C, D, keyof P & string>;
+  }) as TrialFunction<C, D, keyof PV & string>;
   return defined;
 }

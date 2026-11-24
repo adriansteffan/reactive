@@ -723,8 +723,8 @@ describe('components', () => {
       Stimulus.trial({ content: '+', displayDurationMs: 500 }),
     ]);
     expect(rows.map((row) => [row.recorded, row.durationMs])).toEqual([
-      [{ response: null, key: null, reactionTimeMs: null }, 2000],
-      [{ response: null, key: null, reactionTimeMs: null }, 500],
+      [{ response: null, key: null, reactionTimeMs: null, options: ['f'] }, 2000],
+      [{ response: null, key: null, reactionTimeMs: null, options: [] }, 500],
     ]);
   });
 
@@ -738,11 +738,12 @@ describe('components', () => {
       answering({ response: 'skip' }),
       answering({ response: 'X' }),
     ]);
+    const options = ['happy', 'sad', 'skip'];
     expect(rows.map((row) => row.recorded)).toEqual([
-      { response: 'happy', key: 'f', reactionTimeMs: 500 },
-      { response: 'happy', key: null, reactionTimeMs: 500 },
-      { response: 'skip', key: null, reactionTimeMs: 500 },
-      { response: 'x', key: 'x', reactionTimeMs: 500 },
+      { response: 'happy', key: 'f', reactionTimeMs: 500, options },
+      { response: 'happy', key: null, reactionTimeMs: 500, options },
+      { response: 'skip', key: null, reactionTimeMs: 500, options },
+      { response: 'x', key: 'x', reactionTimeMs: 500, options },
     ]);
 
     await expect(run([answering({ response: 'happy', key: 'j' })])).rejects.toThrow("with the key 'j', which gives 'sad'");
@@ -762,7 +763,7 @@ describe('components', () => {
     const rows = await run([
       Stimulus.trial({ content }).simulators({ respond: () => ({ value: { response: 0.62, reactionTimeMs: 3100 } }) }),
     ]);
-    expect(rows[0].recorded).toEqual({ response: 0.62, key: null, reactionTimeMs: 3100 });
+    expect(rows[0].recorded).toEqual({ response: 0.62, key: null, reactionTimeMs: 3100, options: [] });
   });
 
   test('a Stimulus that an answer does not end records it and stays on until its time limit', async () => {
@@ -771,7 +772,7 @@ describe('components', () => {
         respond: () => ({ value: { response: 'f', reactionTimeMs: 500 } }),
       }),
     ]);
-    expect([rows[0].recorded, rows[0].durationMs]).toEqual([{ response: 'f', key: 'f', reactionTimeMs: 500 }, 2000]);
+    expect([rows[0].recorded, rows[0].durationMs]).toEqual([{ response: 'f', key: 'f', reactionTimeMs: 500, options: ['f'] }, 2000]);
   });
 
   test('a Stimulus that records every answer lists them, and has a CSV row for each', async () => {
@@ -789,6 +790,7 @@ describe('components', () => {
         response: ' ',
         key: ' ',
         reactionTimeMs: 700,
+        options: [' '],
         responses: [
           { response: ' ', key: ' ', reactionTimeMs: 700 },
           { response: ' ', key: ' ', reactionTimeMs: 1400 },
@@ -796,20 +798,33 @@ describe('components', () => {
       },
       2000,
     ]);
-    expect(data.trials[1].recorded).toEqual({ response: null, key: null, reactionTimeMs: null, responses: [] });
+    expect(data.trials[1].recorded).toEqual({ response: null, key: null, reactionTimeMs: null, options: [' '], responses: [] });
 
     const csv = filesOf(timeline, data).find((file) => file.filename.startsWith('stimulus.s.'))!.content.split('\n');
-    expect(csv.map((line) => line.split(',').slice(0, 1).concat(line.split(',').slice(-3)))).toEqual([
-      ['trial_trialNumber', 'response', 'key', 'reactionTimeMs'],
-      ['1', ' ', ' ', '700'],
-      ['1', ' ', ' ', '1400'],
-      ['2', '', '', ''],
+    expect(csv.map((line) => line.split(',').slice(0, 1).concat(line.split(',').slice(-4)))).toEqual([
+      ['trial_trialNumber', 'response', 'key', 'reactionTimeMs', 'options'],
+      ['1', ' ', ' ', '700', '"["" ""]"'],
+      ['1', ' ', ' ', '1400', '"["" ""]"'],
+      ['2', '', '', '', '"["" ""]"'],
     ]);
 
     const outOfOrder = Stimulus.trial({ response: { keys: [' '], timeLimitMs: 2000, recordAll: true } }).simulators({
       respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: answers.length === 0 ? 900 : 400 } }),
     });
     await expect(run([outOfOrder])).rejects.toThrow('at 400 ms, which is not after the answer before at 900 ms');
+  });
+
+  test("a Stimulus's buttons take no simulated clicks before they appear, while its keys count", async () => {
+    const response = { choices: { yes: { button: 'Yes' }, no: { key: 'n' } }, buttonDelayMs: 2000 } as const;
+    const rows = await run(Array.from({ length: 20 }, () => Stimulus.trial({ response })));
+    for (const { recorded } of rows) {
+      const [from, to] = recorded.response === 'yes' ? [2300, 3500] : [300, 1500];
+      expect(recorded.reactionTimeMs).toBeWithin(from, to + 1);
+    }
+    const answering = (answer: string) =>
+      Stimulus.trial({ response }).simulators({ respond: () => ({ value: { response: answer, reactionTimeMs: 500 } }) });
+    expect((await run([answering('no')]))[0].recorded.reactionTimeMs).toBe(500);
+    await expect(run([answering('yes')])).rejects.toThrow('at 500 ms, before the buttons appear at 2000 ms');
   });
 
   test('a Stimulus whose answers share a key or button stops the run when the experiment loads', async () => {

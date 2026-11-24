@@ -96,7 +96,7 @@ defineComponent({
 });
 
 // A component's own params are typed like the experiment's
-const readerParams = { showFeedback: { default: true }, mode: { values: ['a', 'b'], default: 'a' } } as const;
+const readerParams = { showFeedback: { default: true }, mode: { values: ['a', 'b'], random: true } } as const;
 const ParamReader = defineComponent({
   name: 'ParamReader',
   component: (_props: BaseComponentProps) => {
@@ -260,20 +260,21 @@ const slow = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customt
 
 const experiment = defineExperiment({
   params: {
-    group: {
-      values: ['vn', 'scenario'],
-      default: () => (Math.random() < 0.5 ? 'vn' : 'scenario'),
-      defaultDescription: 'one of the two, at random',
-    },
+    group: { values: ['vn', 'scenario'], random: true },
+    hand: { values: ['left', 'right'], default: (values) => values[0], defaultDescription: 'the left one' },
+    start: { default: () => Math.random() },
     vnOnly: { default: false },
     trials: { default: 20 },
     weights: { default: [1, 2] },
   },
-  timeline: ({ group, vnOnly, trials, weights }) => {
-    const n: number = trials;
+  timeline: ({ group, hand, start, vnOnly, trials, weights }) => {
+    const n: number = trials + start;
+    const h: 'left' | 'right' = hand;
     const w: number[] = weights;
     // @ts-expect-error value outside the param's values
     if (group === 'vns') return [];
+    // @ts-expect-error value outside the values that the default takes
+    if (h === 'both') return [];
     if (vnOnly) return [nickname];
     return [
       nickname,
@@ -377,6 +378,14 @@ defineExperiment({
 });
 // @ts-expect-error a computed default outside the values
 defineExperiment({ params: { group: { values: ['a', 'b'], default: () => 'c' } }, timeline: [] });
+// @ts-expect-error a default that takes the values and returns something else
+defineExperiment({ params: { group: { values: ['a', 'b'], default: (values) => `${values[0]}!` } }, timeline: [] });
+// @ts-expect-error random draws one of the values, which this param does not have
+defineExperiment({ params: { group: { random: true } }, timeline: [] });
+// @ts-expect-error random takes the place of a default
+defineExperiment({ params: { group: { values: ['a', 'b'], random: true, default: 'a' } }, timeline: [] });
+// @ts-expect-error a param needs a default or random
+defineExperiment({ params: { group: { values: ['a', 'b'] } }, timeline: [] });
 // @ts-expect-error the session CSV keeps url_ columns for URL params that nothing declares
 defineExperiment({ params: { url_source: { default: 'x' } }, timeline: [] });
 defineComponent({
@@ -472,7 +481,7 @@ Stimulus.trial('face', {
   displayDurationMs: 500,
 });
 Stimulus.trial('fixation', { content: '+', displayDurationMs: 500 });
-Stimulus.trial({ response: { buttons: ['Yes', 'No'] } });
+Stimulus.trial({ response: { buttons: ['Yes', 'No'], buttonDelayMs: 1000 }, centered: false });
 Stimulus.trial({
   content: ({ respond }) => <Canvas draw={(ctx, width, height) => ctx.fillRect(0, 0, width, height)} onClick={(x, y) => respond({ x, y })} />,
 });
@@ -495,5 +504,6 @@ Stimulus.trial({ response: { keys: ['f'], recordAll: true } });
 Stimulus.trial({ response: { keys: ['f'], timeLimitMs: 2000, recordAll: true, endsTrial: true } });
 const tapCount = ({ data }: TimelineContext) => Stimulus.getLatest(data, 'taps').recorded.responses?.length ?? 0;
 const stimulusAnswer = ({ data }: TimelineContext) => Stimulus.getLatest(data, 'face').recorded.response === 'happy';
+const stimulusOptions = ({ data }: TimelineContext): string[] => Stimulus.getLatest(data, 'face').recorded.options;
 
-export { asJsx, bonusRead, experiment, reads, sampledTraits, stimulusAnswer, slideKey, tapCount };
+export { asJsx, bonusRead, experiment, reads, sampledTraits, stimulusAnswer, stimulusOptions, slideKey, tapCount };

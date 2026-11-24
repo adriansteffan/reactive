@@ -16,6 +16,8 @@ interface StimulusResponseFields {
   buttons?: readonly string[];
   /** Answers recorded by their names, each given by a key, a button, or both. */
   choices?: Record<string, StimulusChoice>;
+  /** Fades the buttons in this long after the stimulus appears, from which reaction times still count. */
+  buttonDelayMs?: number;
   /** How long after the stimulus appears an answer counts. The trial ends then, if no answer has ended it. */
   timeLimitMs?: number;
   /** Whether the first answer ends the trial. Defaults to `true`; otherwise the trial ends at its time limit. */
@@ -38,12 +40,13 @@ export type StimulusAnswer = { response: unknown; key: string | null; reactionTi
 
 /**
  * The first answer, the key that gave it, and how long after the stimulus appeared it came, all null
- * without an answer; with `recordAll`, every answer as `responses`.
+ * without an answer; the answers on offer as `options`; with `recordAll`, every answer as `responses`.
  */
 export type StimulusData = {
   response: unknown;
   key: string | null;
   reactionTimeMs: number | null;
+  options: string[];
   responses?: StimulusAnswer[];
 };
 
@@ -59,6 +62,8 @@ type StimulusFields = {
   displayDurationMs?: number;
   className?: string;
   containerClass?: string;
+  /** Centers the stimulus vertically; otherwise it starts at the top of the screen. */
+  centered?: boolean;
 };
 
 // An answer ends the trial, unless endsTrial is false or the trial records every answer
@@ -91,10 +96,11 @@ function answersOf(response: StimulusResponse | undefined): Answer[] {
   ];
 }
 
-// What a trial records from its answers: the first, and with recordAll, every one
-function recordOf(answers: StimulusAnswer[], recordAll: boolean): StimulusData {
+// What a trial records from its answers: the first, the options it had, and with recordAll, every answer
+function recordOf(answers: StimulusAnswer[], response: StimulusResponse | undefined): StimulusData {
   const first = answers[0] ?? { response: null, key: null, reactionTimeMs: null };
-  return recordAll ? { ...first, responses: answers } : { ...first };
+  const options = answersOf(response).map((answer) => answer.response);
+  return response?.recordAll ? { ...first, options, responses: answers } : { ...first, options };
 }
 
 // A simulated answer as the browser would record it. The simulator's key says how the answer was
@@ -123,11 +129,12 @@ function recordAnswer(
   );
 }
 
-function Stimulus({ content, response, displayDurationMs, className = '', containerClass, next, store }: StimulusProps) {
+function Stimulus({ content, response, displayDurationMs, className = '', containerClass, centered = true, next, store }: StimulusProps) {
   const th = t(useTheme());
   // The content and its buttons, hidden until the images in the content can show
   const stageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const buttonsRef = useRef<HTMLDivElement>(null);
   // Set while the trial runs; key presses, buttons and the content answer through it
   const answerRef = useRef<(response: unknown, key: string | null, timeStamp: number) => void>(() => {});
   const respond = useCallback((value: unknown) => answerRef.current(value, null, performance.now()), []);
@@ -149,7 +156,7 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
     const end = () => {
       done = true;
       cancelAnimationFrame(frameId);
-      next(recordOf(answers, recordAll));
+      next(recordOf(answers, response));
     };
     answerRef.current = (value, key, timeStamp) => {
       const reactionTimeMs = Math.round(Math.max(0, timeStamp - (onset ?? timeStamp)));
@@ -174,6 +181,10 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
         }
         if (contentRef.current && elapsed >= (displayDurationMs ?? Number.POSITIVE_INFINITY)) {
           contentRef.current.style.visibility = 'hidden';
+        }
+        if (buttonsRef.current && elapsed >= (response?.buttonDelayMs ?? Number.POSITIVE_INFINITY)) {
+          buttonsRef.current.style.visibility = 'inherit';
+          buttonsRef.current.style.opacity = '1';
         }
       }
       frameId = requestAnimationFrame(frame);
@@ -205,14 +216,19 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
   const buttons = answersOf(response).filter((answer) => answer.button !== undefined);
 
   return (
-    <div className={`min-h-screen flex items-center justify-center px-4 py-20 ${th.text} ${containerClass ?? th.containerBg}`}>
+    <div className={`min-h-screen flex justify-center ${centered ? 'items-center' : ''} px-4 py-20 ${th.text} ${containerClass ?? th.containerBg}`}>
       <div ref={stageRef} className='flex flex-col items-center gap-12' style={{ visibility: 'hidden' }}>
         <div ref={contentRef} className={className}>
           {/* A function is rendered as a component, so that it can use hooks */}
           {typeof content === 'function' ? createElement(content, { respond }) : content}
         </div>
         {buttons.length > 0 && (
-          <div className='flex flex-wrap justify-center gap-4'>
+          <div
+            ref={buttonsRef}
+            className='flex flex-wrap justify-center gap-4 transition-opacity duration-500'
+            // Hidden buttons take no clicks
+            style={response?.buttonDelayMs === undefined ? undefined : { visibility: 'hidden', opacity: 0 }}
+          >
             {buttons.map((answer) => (
               <button
                 key={answer.response}
@@ -223,9 +239,14 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
                   if (event.key === ' ' || event.key === 'Enter') event.preventDefault();
                 }}
                 onClick={(event) => answerRef.current(answer.response, null, event.timeStamp)}
-                className={th.button}
+                className={`grid ${th.button}`}
               >
-                {answer.button}
+                {/* Each button holds every text, so that all are as wide as the widest and none stands out */}
+                {buttons.map((other) => (
+                  <span key={other.response} className={`col-start-1 row-start-1 ${other === answer ? '' : 'invisible'}`}>
+                    {other.button}
+                  </span>
+                ))}
               </button>
             ))}
           </div>
@@ -320,13 +341,14 @@ export default defineComponent({
   csv: {
     stimulus: (row) => {
       const { responses, ...first } = row.recorded;
-      return responses && responses.length > 0 ? responses : first;
+      return responses && responses.length > 0 ? responses.map((answer) => ({ ...answer, options: first.options })) : first;
     },
   },
   simulate: ({ props, simulators, participant }) => {
     const timeoutMs = props.response?.timeLimitMs ?? props.displayDurationMs ?? Number.POSITIVE_INFINITY;
     const recordAll = props.response?.recordAll === true;
     const endsAtAnswer = props.response?.endsTrial !== false && !recordAll;
+    const buttonDelayMs = props.response?.buttonDelayMs ?? 0;
     const answers: StimulusAnswer[] = [];
     // One answer after another, under the browser's rules: an answer counts within the trial's
     // time, and with recordAll, each after the one before
@@ -341,14 +363,21 @@ export default defineComponent({
           `A simulated participant answered a Stimulus at ${reactionTimeMs} ms, which is not after the answer before at ${previous.reactionTimeMs} ms.`,
         );
       }
-      answers.push({ ...recordAnswer(props, response, key), reactionTimeMs });
+      const answer = { ...recordAnswer(props, response, key), reactionTimeMs };
+      // Content that answers by itself needs no button
+      if (answer.key === null && reactionTimeMs < buttonDelayMs && typeof props.content !== 'function') {
+        throw new Error(
+          `A simulated participant clicked a Stimulus's button at ${reactionTimeMs} ms, before the buttons appear at ${buttonDelayMs} ms.`,
+        );
+      }
+      answers.push(answer);
     } while (recordAll);
 
     const durationMs = endsAtAnswer && answers.length > 0 ? answers[0].reactionTimeMs : timeoutMs;
     if (durationMs === Number.POSITIVE_INFINITY) {
       throw new Error('A simulated participant gave no answer to a Stimulus that only an answer ends.');
     }
-    return { recorded: recordOf(answers, recordAll), participant, durationMs };
+    return { recorded: recordOf(answers, props.response), participant, durationMs };
   },
   defaultSimulators: {
     // One answer: a trial that records every answer gets no second
@@ -357,7 +386,8 @@ export default defineComponent({
       const answers = answersOf(props.response);
       if (answers.length > 0) {
         const answer = answers[Math.floor(uniform(0, answers.length))];
-        return { value: { response: answer.response, reactionTimeMs: Math.round(uniform(300, 1500)) } };
+        const delayMs = answer.key === undefined ? (props.response?.buttonDelayMs ?? 0) : 0;
+        return { value: { response: answer.response, reactionTimeMs: Math.round(delayMs + uniform(300, 1500)) } };
       }
       if (props.response?.keys === true) {
         return { value: { response: ' ', reactionTimeMs: Math.round(uniform(300, 1500)) } };

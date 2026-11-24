@@ -1,15 +1,29 @@
+import { sample } from '../utils/array';
 import type { ReservedParamName } from './columns';
 
-/** A param: an input of the experiment or a setting of a component, read from the URL. */
-export interface ParamSpec {
-  /** The values the param can take. */
-  values?: readonly (string | number)[];
-  /** Used when the URL does not set the param. A function is called once per participant. */
-  default: unknown;
+interface ParamTexts {
   description?: string;
   /** Shown on the settings page in place of the default's value, such as how a function chooses it. */
   defaultDescription?: string;
 }
+
+/** A param: an input of the experiment or a setting of a component, read from the URL. */
+export type ParamSpec = ParamTexts &
+  (
+    | {
+        /** The values the param can take. */
+        values?: readonly (string | number)[];
+        /** Used when the URL does not set the param. A function is called once per participant, with the param's `values`. */
+        default: unknown;
+        random?: undefined;
+      }
+    | {
+        values: readonly (string | number)[];
+        /** When the URL does not set the param, each participant gets one of its values at random. */
+        random: true;
+        default?: undefined;
+      }
+  );
 
 type Widen<T> = T extends boolean
   ? boolean
@@ -31,14 +45,31 @@ export type ParamValues<Params> = { [K in keyof Params]: ParamValue<Params[K]> }
 
 /**
  * Params as declared, checked by the types: a param with `values` has a default among them, also
- * when a function computes it, and no param takes a session CSV column that the library writes.
+ * when a function computes it, or is `random`, only such a function takes the values, and no param
+ * takes a session CSV column that the library writes. The types of the values, `V`, and of the
+ * defaults, `D`, are inferred apart, so that a function in the same declaration knows the values it
+ * takes. A param without values has `unknown` in `V`.
  */
-export type CheckedParams<Params> = {
-  [K in keyof Params]: K extends ReservedParamName
+export type CheckedParams<V, D> = {
+  [K in keyof V]: K extends ReservedParamName
     ? `The session CSV keeps '${K & string}' for a column of its own, so the param needs another name`
-    : Params[K] extends { values: readonly (infer V)[] }
-      ? Omit<Params[K], 'default'> & { default: V | (() => V) }
-      : Params[K];
+    : { values?: readonly (V[K] & (string | number))[] } & ParamTexts;
+} & {
+  [K in keyof D]: unknown extends V[K & keyof V]
+    ? {
+        default: D[K] extends (values: any) => unknown ? () => unknown : D[K];
+        random?: 'A random param draws one of its values, so it needs values';
+      }
+    :
+        | { default: V[K & keyof V] | ((values: readonly V[K & keyof V][]) => V[K & keyof V]); random?: undefined }
+        | { random: true; default?: undefined };
+};
+
+/** The specs of the params whose values and defaults have the types `V` and `D`. */
+export type ParamSpecs<V, D> = {
+  [K in keyof V]: unknown extends V[K]
+    ? { default: D[K & keyof D] }
+    : { values: readonly (V[K] & (string | number))[]; default: unknown };
 };
 
 /** The library's own params, available in every experiment. */
@@ -143,7 +174,8 @@ export function resolveParams(
       if (previous && name in previous) {
         console.warn(`The param '${name}' no longer allows ${JSON.stringify(previous[name])}, so it was set again.`);
       }
-      value = typeof spec.default === 'function' ? spec.default() : spec.default;
+      if (spec.random) value = sample(spec.values)[0];
+      else value = typeof spec.default === 'function' ? spec.default(spec.values) : spec.default;
     }
 
     check(name, spec, value);

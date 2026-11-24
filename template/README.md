@@ -109,10 +109,10 @@ Define your participant generator in the `simulation` field of `defineExperiment
 
 ```tsx
 export default defineExperiment({
+  timeline: ({ clicks }) => [ ... ],
   simulation: {
     createParticipants: () => Array.from({ length: 10 }, (_, i) => ({ id: i, nickname: `participant_${i}` })),
   },
-  timeline: ({ clicks }) => [ ... ],
 });
 ```
 

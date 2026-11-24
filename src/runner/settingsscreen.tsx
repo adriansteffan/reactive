@@ -56,11 +56,17 @@ function describeParam(name: string, spec: ParamSpec) {
     spec,
     type: paramType(spec),
     defaultValue: typeof spec.default === 'function' ? undefined : spec.default,
-    computedDefault: typeof spec.default === 'function',
   };
 }
 
 type ParamField = ReturnType<typeof describeParam>;
+
+function describeDefault(spec: ParamSpec) {
+  if (spec.defaultDescription !== undefined) return spec.defaultDescription;
+  if (spec.random) return 'drawn at random for each participant';
+  if (typeof spec.default === 'function') return 'computed for each participant';
+  return <code>{JSON.stringify(spec.default)}</code>;
+}
 
 const fieldsOf = (params: Record<string, ParamSpec> = {}) =>
   Object.entries(params).map(([name, spec]) => describeParam(name, spec));
@@ -159,7 +165,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
   // Until these are set, every participant can get other trials, so none are shown
   const unsetFields =
     typeof experiment.timeline === 'function'
-      ? experimentFields.filter((field) => field.computedDefault && !paramValues[field.name])
+      ? experimentFields.filter((field) => field.defaultValue === undefined && !paramValues[field.name])
       : [];
   const trialsKnown = unsetFields.length === 0;
 
@@ -285,15 +291,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
             {param.spec.description && (
               <p className='mt-1 text-sm text-neutral-500 flex-grow'>{param.spec.description}</p>
             )}
-            <p className='mt-auto pt-2 text-xs text-neutral-500'>
-              Default:{' '}
-              {param.spec.defaultDescription ??
-                (param.computedDefault ? (
-                  'computed for each participant'
-                ) : (
-                  <code>{JSON.stringify(param.defaultValue)}</code>
-                ))}
-            </p>
+            <p className='mt-auto pt-2 text-xs text-neutral-500'>Default: {describeDefault(param.spec)}</p>
           </div>
         </div>
         <div className='col-span-1 flex items-center'>

@@ -5,7 +5,7 @@ import { withSeed } from '../utils/distributions';
 import { advanceToNextContent } from './bytecode';
 import { isReservedParamName, sessionColumns, sessionPrefixes } from './columns';
 import { freezeInDevelopment, isProduction } from './development';
-import { type CheckedParams, libraryParams, type ParamSpec, type ParamValues, resolveParams } from './params';
+import { type CheckedParams, libraryParams, type ParamSpec, type ParamSpecs, type ParamValues, resolveParams } from './params';
 import { createTrialRow, type ExperimentData } from './rows';
 import type { RunSimulationConfig } from './simulation';
 import type { Store } from './store';
@@ -37,11 +37,11 @@ export interface Experiment<Params extends Record<string, ParamSpec> = Record<st
   simulation?: RunSimulationConfig;
 }
 
-export function defineExperiment<const Params extends Record<string, ParamSpec> = {}>(
-  experiment: Omit<Experiment<Params>, 'params'> & { params?: CheckedParams<Params> },
-): Experiment<Params> {
+export function defineExperiment<const V extends Record<string, unknown> = {}, D extends Record<string, unknown> = {}>(
+  experiment: Omit<Experiment<ParamSpecs<V, D>>, 'params'> & { params?: CheckedParams<V, D> },
+): Experiment<ParamSpecs<V, D>> {
   // The checked params are the declared ones, which the types only compare against what they allow
-  return experiment as Experiment<Params>;
+  return experiment as Experiment<ParamSpecs<V, D>>;
 }
 
 // --- Runs ---

@@ -74,13 +74,6 @@ export default defineExperiment({
   params: {
     clicks: { default: 5, description: 'How often the participant needs to click the button' },
   },
-  simulation: {
-    seed: 42,
-    createParticipants: () =>
-      sampleParticipants('sobol', 10, {
-        needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
-      }).map((p) => ({ ...p, nickname: `participant_${p.index}` })),
-  },
   timeline: ({ clicks }) => [
     Text.trial('introtext', {
       buttonText: "Let's Begin",
@@ -117,4 +110,11 @@ export default defineExperiment({
       ),
     })),
   ],
+  simulation: {
+    seed: 42,
+    createParticipants: () =>
+      sampleParticipants('sobol', 10, {
+        needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
+      }).map((p) => ({ ...p, nickname: `participant_${p.index}` })),
+  },
 });

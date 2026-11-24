@@ -78,6 +78,14 @@ describe('params', () => {
     expect(resolveParams({ drawn: { default: () => 'any type' } })).toEqual({ drawn: 'any type' });
   });
 
+  test('a default that is a function takes the values, and random draws one of them', () => {
+    const values = ['a', 'b'];
+    expect(resolveParams({ last: { values, default: (all: string[]) => all.at(-1) } })).toEqual({ last: 'b' });
+    const drawn = Array.from({ length: 200 }, () => resolveParams({ group: { values, random: true } }).group);
+    expect([...new Set(drawn)].sort()).toEqual(values);
+    expect(resolveParams({ group: { values, random: true } }, { url: urlParams('?group=b') })).toEqual({ group: 'b' });
+  });
+
   test('values from the base64 link keep their type', () => {
     const encoded = btoa(JSON.stringify({ count: 5, group: 'scenario' }));
     expect(resolveParams({ count: { default: 1 }, group }, { url: urlParams(`?_b=${encoded}`) })).toEqual({

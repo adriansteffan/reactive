@@ -45,7 +45,7 @@ declare global {
 /**
  * Returns random elements from an array
  */
-export function sample<T>(array: T[], n: number = 1, options: SampleOptions = {}): T[] {
+export function sample<T>(array: readonly T[], n: number = 1, options: SampleOptions = {}): T[] {
   const { replace = true } = options;
   if (array.length === 0) return [];
 
@@ -71,7 +71,7 @@ export function sample<T>(array: T[], n: number = 1, options: SampleOptions = {}
 /**
  * Shuffles array elements using Fisher-Yates algorithm
  */
-export function shuffle<T>(array: T[]): T[] {
+export function shuffle<T>(array: readonly T[]): T[] {
   const result = [...array];
   
   for (let i = result.length - 1; i >= 0; i--) {

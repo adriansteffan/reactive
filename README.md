@@ -194,18 +194,21 @@ Stimulus.trial('face', {
 }),
 ```
 
-Its row records the `response`, the `key` that gave it, empty for a button, and the `reactionTimeMs`. Without an answer in time, all three are empty.
+Its row records the `response`, the `key` that gave it, empty for a button, and the `reactionTimeMs`. Without an answer in time, all three are empty. `options` lists the answers the trial offered, in order: the choices, then the keys, then the buttons, though not the keys of `keys: true`.
 
 | `response` field | Description |
 |---|---|
 | `choices` | Answers recorded by their names, each given by a `key`, a `button`, or both |
 | `keys` | Keys recorded as themselves, or `true` for any key |
 | `buttons` | Buttons recorded as their text |
+| `buttonDelayMs` | Fades the buttons in this long after the stimulus appears; they take no clicks before, while keys count and reaction times run from the stimulus as always |
 | `timeLimitMs` | How long after the stimulus appears an answer counts; the trial ends then |
 | `endsTrial` | Whether the first answer ends the trial; `true` by default, and otherwise the trial ends at its time limit |
 | `recordAll` | Records every answer until the time limit, not only the first, so the trial lasts until then |
 
 `displayDurationMs` hides the content after that time, while answers count until the time limit. Without a time limit, the trial ends when the content disappears. A trial needs a way to end, an answer, a time limit or a display duration, which the types check.
+
+The buttons are all as wide as the widest, so that none stands out. `centered: false` starts the stimulus at the top of the screen instead of its middle.
 
 With `endsTrial: false`, every trial lasts until its time limit, whenever the answer came, as fixed-duration designs need. With `recordAll`, a trial records each answer in `responses`, in order, such as a press for every target in a stream; `response`, `key` and `reactionTimeMs` still hold the first. In the stimulus CSV, such a trial has a row for each answer, or one empty row without any. Both need a time limit, and the types reject `recordAll` together with `endsTrial: true`.
 
@@ -324,9 +327,8 @@ export default defineExperiment({
   params: {
     group: {
       values: ['vn', 'scenario'],
-      default: () => (Math.random() < 0.5 ? 'vn' : 'scenario'),
+      random: true,
       description: 'Which version of the study the participant sees',
-      defaultDescription: 'one of the two, at random',
     },
     rounds: { default: 3 },
   },
@@ -337,10 +339,10 @@ export default defineExperiment({
 });
 ```
 
-* A param is read from the URL by its key (`?group=scenario&rounds=5`), otherwise its default is used. A default that is a function is called once per participant.
+* A param is read from the URL by its key (`?group=scenario&rounds=5`), otherwise its default is used. A default that is a function is called once per participant, with the param's `values` if it has any, as in `default: (values) => (Math.random() < 0.8 ? values[0] : values[1])` for groups of unequal size. With `random: true` in place of a default, each participant gets one of the `values` at random.
 * With `values`, the param is typed as one of them (`'vn' | 'scenario'`), and its default, or what a default function returns, must be one of them too. Without `values`, the param takes the type of its default.
 * Whatever sets a param, the URL, a simulated participant or a default function, a value of another type stops the experiment with an error: one outside `values`, text for a number, or anything but `true` or `false` for a switch. Only a default function without `values` declares no type, so its values are not checked.
-* The settings page shows the `description`, and what the default is. A `defaultDescription` takes the place of the default's value there, so it can say how a function chooses it, or what a value like `0` stands for.
+* The settings page shows the `description`, and what the default is: its value, or that it is drawn at random or computed for each participant. A `defaultDescription` takes the place of that, so it can say how a function chooses it, or what a value like `0` stands for.
 * The resolved values are recorded in the data. Simulated participants can set them (see [Simulation](#simulation)).
 * `timeline` may use any JavaScript, such as `shuffle` or loops. Its random draws are seeded per participant, and the seed (`buildSeed`) is recorded, so the exact timeline a participant saw can be rebuilt later.
 * Params exist only inside `timeline`. Parts of the timeline in other files that need one become functions that take it, and components get it as a prop.
@@ -461,13 +463,13 @@ Define your participant generator in `defineExperiment`:
 
 ```tsx
 export default defineExperiment({
+  timeline: [ ... ],
   simulation: {
     seed: 42, // optional: makes simulations fully reproducible
     createParticipants: () => sampleParticipants('sobol', 10, {
       needForCognition: { distribution: 'normal', mean: 3.5, sd: 0.8 },
     }),
   },
-  timeline: [ ... ],
 });
 ```
 
@@ -631,7 +633,7 @@ createParticipants: () => {
 | Component | Decision functions | Its `value` | Default behavior |
 |---|---|---|---|
 | Text | `respond` | `{ key, reactionTimeMs }` | Click button, random reaction time |
-| Stimulus | `respond`, also given the `answers` so far | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT; a Stimulus whose content answers needs its own |
+| Stimulus | `respond`, also given the `answers` so far | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT, after `buttonDelayMs` for a button; a Stimulus whose content answers needs its own |
 | PlainInput | `respond` | the text entered | Returns `'simulated_input'`, filled up to `minLength` |
 | Quest | `answerQuestion`, also given `question` | `{ answer, durationMs }` | Random valid answer per question type |
 | CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }`, or `{ x, y, reactionTimeMs }` for a click | Random key from the slide's `keys` and `choices`, or a random point on a slide that takes clicks, random RT; it counts under the same rules as a real response |

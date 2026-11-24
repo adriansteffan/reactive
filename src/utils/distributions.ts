@@ -260,13 +260,11 @@ type TraitSpec = DimensionSpec & {
   correlations?: Record<string, number>;
 };
 
-// Traits as declared, whose correlations can only name the other traits
-type CheckedTraits<T> = {
-  [K in keyof T]: T[K] extends { correlations: infer C }
-    ? Omit<T[K], 'correlations'> & {
-        correlations: { [O in keyof C]: O extends Exclude<keyof T, K> ? number : `'${O & string}' is not another trait` };
-      }
-    : T[K];
+// Traits as declared, whose correlations can only name the other traits. `C` holds what each trait correlates with.
+type CheckedTraits<C> = {
+  [K in keyof C]: DimensionSpec & {
+    correlations?: { [O in keyof C[K]]: O extends Exclude<keyof C, K> ? number : `'${O & string}' is not another trait` };
+  };
 };
 
 // Inverse CDFs return +-Infinity at exactly 0 or 1, so clamp to open interval (0, 1).
@@ -471,11 +469,11 @@ function correlate(points: number[][], factor: number[][]): number[][] {
 
 type SamplingMethod = 'sobol' | 'halton' | 'random';
 
-function sampleParticipants<T extends Record<string, TraitSpec>>(
+function sampleParticipants<C>(
   method: SamplingMethod,
   count: number,
-  specs: CheckedTraits<T>,
-): Array<{ [K in keyof T]: number } & { index: number }> {
+  specs: CheckedTraits<C>,
+): Array<{ [K in keyof C]: number } & { index: number }> {
   const traits = specs as Record<string, TraitSpec>;
   const keys = Object.keys(traits);
 
@@ -495,7 +493,7 @@ function sampleParticipants<T extends Record<string, TraitSpec>>(
   const factor = correlationFactor(keys, traits);
   const points = transformPoints(factor ? correlate(unitPoints, factor) : unitPoints, keys.map((key) => traits[key]));
   return points.map((point, index) => ({ index, ...Object.fromEntries(keys.map((key, d) => [key, point[d]])) })) as Array<
-    { [K in keyof T]: number } & { index: number }
+    { [K in keyof C]: number } & { index: number }
   >;
 }
 

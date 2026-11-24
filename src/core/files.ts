@@ -30,8 +30,8 @@ export type Flatten<R = any> = (item: TrialRow<R>) => CsvRow | CsvRow[];
 export type ComponentCsv<R = any> = string | null | { [file: string]: Flatten<R> | true };
 
 /**
- * A trial's columns in the session CSV, the single row per participant: `true` for its response's
- * fields, or a function that returns them. A response that is a list has no fields, so it needs the function.
+ * A trial's columns in the session CSV, the single row per participant: `true` for the
+ * fields it recorded, or a function that returns them. A recorded list has no fields, so it needs the function.
  */
 export type SessionColumns<R = any> = (R extends readonly unknown[] ? never : true) | ((item: TrialRow<R>) => CsvRow);
 
@@ -143,7 +143,7 @@ function autoBuildCSVs(
     const prefix = item.name || item.type;
     // Add metadata, namespaced by trial name
     for (const [key, value] of Object.entries(item.metadata ?? {})) row[`${prefix}_${columnPrefixes.meta}${key}`] = value;
-    // Add the response's fields, or those the component's session function returns, namespaced by trial name
+    // Add the recorded fields, or those the component's session function returns, namespaced by trial name
     const fields = typeof columns === 'function' ? columns(item) : item.recorded;
     if (fields === undefined || fields === null) continue;
     if (typeof fields !== 'object' || Array.isArray(fields)) {
@@ -156,14 +156,14 @@ function autoBuildCSVs(
   }
   files.push({ filename: `session.${sessionId}.${Date.now()}.csv`, content: convertArrayOfObjectsToCSV([row]), encoding: 'utf8' });
 
-  // All other groups: multi-row CSVs, through the flatteners or from the responses. Each row is
+  // All other groups: multi-row CSVs, through the flatteners or from what was recorded. Each row is
   // prepended with standard trial fields (prefixed trial_) and the trial's metadata (prefixed meta_).
   for (const [csvName, entries] of Object.entries(groups)) {
     const rows = entries.flatMap(({ item, flatten }) => {
       const base: CsvRow = {};
       for (const key of trialColumns) base[columnPrefixes.trial + key] = item[key];
-      // A flattener's rows, and the items of a response that is a list, are rows of their own, which
-      // can carry metadata of their own, as CanvasBlock's slides do; any other response is one row
+      // A flattener's rows, and the items of a recorded list, are rows of their own, which can carry
+      // metadata of their own, as CanvasBlock's slides do; anything else recorded is one row
       const output = flatten ? flatten(item) : item.recorded;
       const flatRows: { fields: Record<string, any>; metadata?: Record<string, any> }[] =
         flatten || Array.isArray(output)

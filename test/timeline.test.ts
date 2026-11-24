@@ -11,7 +11,7 @@ import CanvasBlock from '../src/components/canvasblock';
 import { canvasSize } from '../src/utils/canvas';
 import PlainInput from '../src/components/plaininput';
 import Text from '../src/components/text';
-import Stimulus from '../src/components/stimulus';
+import Screen from '../src/components/screen';
 import type { ResponseKey } from '../src/utils/keys';
 import type { SlideData, SlideSimulatorResult } from '../src/core/slides';
 import { RandomDotKinematogram } from '../src/components/randomdotkinematogram';
@@ -641,8 +641,8 @@ describe('components', () => {
       defaultSimulators: {
         see: ({ participant }) => ({ participant: { ...participant, seen: participant.seen + 1 } }),
       },
-      simulate: async ({ props, simulators, participant, data }) => {
-        const result = await simulators.see({ props, participant });
+      simulate: async ({ simulators, participant, data }) => {
+        const result = await simulators.see({ stimulus: {}, participant });
         return {
           recorded: { seen: result.participant?.seen, earlierRows: data.trials.length },
           participant: result.participant,
@@ -694,7 +694,7 @@ describe('components', () => {
   });
 
   test("a timed Text screen ends after its duration, unless its button ends it first", async () => {
-    const clickAfter = (reactionTimeMs: number) => () => ({ value: { key: 'button', reactionTimeMs } });
+    const clickAfter = (reactionTimeMs: number) => () => ({ response: { key: 'button', reactionTimeMs } });
     const rows = await run([
       Text.trial({ durationMs: 1000 }),
       Text.trial({ durationMs: 1000, buttonText: 'Skip' }).simulators({ respond: clickAfter(300) }),
@@ -707,9 +707,9 @@ describe('components', () => {
     ]);
   });
 
-  test('a Stimulus records the named answer and the key that gave it', async () => {
+  test('a Screen records the named answer and the key that gave it', async () => {
     const choices = { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' } } as const;
-    const rows = await run(Array.from({ length: 20 }, () => Stimulus.trial({ content: 'face', response: { choices } })));
+    const rows = await run(Array.from({ length: 20 }, () => Screen.trial({ content: 'face', response: { choices } })));
     for (const { recorded, durationMs } of rows) {
       expect(['happy', 'sad']).toContain(recorded.response);
       expect(recorded.key).toBe(choices[recorded.response as 'happy' | 'sad'].key);
@@ -717,11 +717,11 @@ describe('components', () => {
     }
   });
 
-  test('a Stimulus ends at its time limit, or after its display duration, without an answer in time', async () => {
-    const late = () => ({ value: { response: 'f', key: 'f', reactionTimeMs: 2500 } });
+  test('a Screen ends at its time limit, or after its display duration, without an answer in time', async () => {
+    const late = () => ({ response: { answer: 'f', key: 'f', reactionTimeMs: 2500 } });
     const rows = await run([
-      Stimulus.trial({ response: { keys: ['f'], timeLimitMs: 2000 } }).simulators({ respond: late }),
-      Stimulus.trial({ content: '+', displayDurationMs: 500 }),
+      Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000 } }).simulators({ respond: late }),
+      Screen.trial({ content: '+', displayDurationMs: 500 }),
     ]);
     expect(rows.map((row) => [row.recorded, row.durationMs])).toEqual([
       [{ response: null, key: null, reactionTimeMs: null, options: ['f'] }, 2000],
@@ -729,15 +729,15 @@ describe('components', () => {
     ]);
   });
 
-  test('a simulated answer to a Stimulus is recorded as the browser would record it', async () => {
+  test('a simulated answer to a Screen is recorded as the browser would record it', async () => {
     const response = { keys: true, choices: { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' }, skip: { button: 'Skip' } } } as const;
-    const answering = (value: { response: string; key?: string | null }) =>
-      Stimulus.trial({ response }).simulators({ respond: () => ({ value: { ...value, reactionTimeMs: 500 } }) });
+    const answering = (given: { answer: string; key?: string | null }) =>
+      Screen.trial({ response }).simulators({ respond: () => ({ response: { ...given, reactionTimeMs: 500 } }) });
     const rows = await run([
-      answering({ response: 'happy' }),
-      answering({ response: 'happy', key: null }),
-      answering({ response: 'skip' }),
-      answering({ response: 'X' }),
+      answering({ answer: 'happy' }),
+      answering({ answer: 'happy', key: null }),
+      answering({ answer: 'skip' }),
+      answering({ answer: 'X' }),
     ]);
     const options = ['happy', 'sad', 'skip'];
     expect(rows.map((row) => row.recorded)).toEqual([
@@ -747,42 +747,42 @@ describe('components', () => {
       { response: 'x', key: 'x', reactionTimeMs: 500, options },
     ]);
 
-    await expect(run([answering({ response: 'happy', key: 'j' })])).rejects.toThrow("with the key 'j', which gives 'sad'");
-    await expect(run([answering({ response: 'sad', key: null })])).rejects.toThrow('without its key, but it has no button');
-    const choicesOnly = Stimulus.trial({ response: { choices: response.choices } });
+    await expect(run([answering({ answer: 'happy', key: 'j' })])).rejects.toThrow("with the key 'j', which gives 'sad'");
+    await expect(run([answering({ answer: 'sad', key: null })])).rejects.toThrow('without its key, but it has no button');
+    const choicesOnly = Screen.trial({ response: { choices: response.choices } });
     await expect(
-      run([choicesOnly.simulators({ respond: () => ({ value: { response: 'maybe', reactionTimeMs: 500 } }) })]),
-    ).rejects.toThrow(`answered "maybe", which the Stimulus does not take. Its answers are 'happy', 'sad', 'skip'`);
+      run([choicesOnly.simulators({ respond: () => ({ response: { answer: 'maybe', reactionTimeMs: 500 } }) })]),
+    ).rejects.toThrow(`answered "maybe", which the Screen does not take. Its answers are 'happy', 'sad', 'skip'`);
   });
 
-  test("a Stimulus whose content answers needs a simulator, which gives the content's answer", async () => {
+  test("a Screen whose content answers needs a simulator, which gives the content's answer", async () => {
     // Content that would answer through respond, which the simulation does not render
     const content = () => null;
-    await expect(run([Stimulus.trial({ content: '+', displayDurationMs: 500 }), Stimulus.trial('location', { content })])).rejects.toThrow(
-      "In the Stimulus trial 'location' (trial 2): A Stimulus whose content answers through respond needs a simulator of its own",
+    await expect(run([Screen.trial({ content: '+', displayDurationMs: 500 }), Screen.trial('location', { content })])).rejects.toThrow(
+      "In the Screen trial 'location' (trial 2): A Screen whose content answers through respond needs a simulator of its own",
     );
     const rows = await run([
-      Stimulus.trial({ content }).simulators({ respond: () => ({ value: { response: 0.62, reactionTimeMs: 3100 } }) }),
+      Screen.trial({ content }).simulators({ respond: () => ({ response: { answer: 0.62, reactionTimeMs: 3100 } }) }),
     ]);
     expect(rows[0].recorded).toEqual({ response: 0.62, key: null, reactionTimeMs: 3100, options: [] });
   });
 
-  test('a Stimulus that an answer does not end records it and stays on until its time limit', async () => {
+  test('a Screen that an answer does not end records it and stays on until its time limit', async () => {
     const rows = await run([
-      Stimulus.trial({ response: { keys: ['f'], timeLimitMs: 2000, endsTrial: false } }).simulators({
-        respond: () => ({ value: { response: 'f', reactionTimeMs: 500 } }),
+      Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000, endsTrial: false } }).simulators({
+        respond: () => ({ response: { answer: 'f', reactionTimeMs: 500 } }),
       }),
     ]);
     expect([rows[0].recorded, rows[0].durationMs]).toEqual([{ response: 'f', key: 'f', reactionTimeMs: 500, options: ['f'] }, 2000]);
   });
 
-  test('a Stimulus that records every answer lists them, and has a CSV row for each', async () => {
+  test('a Screen that records every answer lists them, and has a CSV row for each', async () => {
     // Taps every 700 ms, so the third comes after the time limit and does not count
-    const tapping = Stimulus.trial({ response: { keys: [' '], timeLimitMs: 2000, recordAll: true } }).simulators({
-      respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: (answers.length + 1) * 700 } }),
+    const tapping = Screen.trial({ response: { keys: [' '], timeLimitMs: 2000, recordAll: true } }).simulators({
+      respond: ({ stimulus }) => ({ response: { answer: ' ', reactionTimeMs: (stimulus.answers.length + 1) * 700 } }),
     });
-    const silent = Stimulus.trial({ response: { keys: [' '], timeLimitMs: 1000, recordAll: true } }).simulators({
-      respond: () => ({ value: { response: null, reactionTimeMs: null } }),
+    const silent = Screen.trial({ response: { keys: [' '], timeLimitMs: 1000, recordAll: true } }).simulators({
+      respond: () => ({ response: { answer: null, reactionTimeMs: null } }),
     });
     const timeline = [tapping, silent];
     const data = await simulateParticipant(defineExperiment({ timeline }), {});
@@ -801,7 +801,7 @@ describe('components', () => {
     ]);
     expect(data.trials[1].recorded).toEqual({ response: null, key: null, reactionTimeMs: null, options: [' '], responses: [] });
 
-    const csv = filesOf(timeline, data).find((file) => file.filename.startsWith('stimulus.s.'))!.content.split('\n');
+    const csv = filesOf(timeline, data).find((file) => file.filename.startsWith('screen.s.'))!.content.split('\n');
     expect(csv.map((line) => line.split(',').slice(0, 1).concat(line.split(',').slice(-4)))).toEqual([
       ['trial_trialNumber', 'response', 'key', 'reactionTimeMs', 'options'],
       ['1', ' ', ' ', '700', '"["" ""]"'],
@@ -809,49 +809,49 @@ describe('components', () => {
       ['2', '', '', '', '"["" ""]"'],
     ]);
 
-    const outOfOrder = Stimulus.trial({ response: { keys: [' '], timeLimitMs: 2000, recordAll: true } }).simulators({
-      respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: answers.length === 0 ? 900 : 400 } }),
+    const outOfOrder = Screen.trial({ response: { keys: [' '], timeLimitMs: 2000, recordAll: true } }).simulators({
+      respond: ({ stimulus }) => ({ response: { answer: ' ', reactionTimeMs: stimulus.answers.length === 0 ? 900 : 400 } }),
     });
     await expect(run([outOfOrder])).rejects.toThrow('at 400 ms, which is not after the answer before at 900 ms');
   });
 
-  test("a Stimulus's buttons take no simulated clicks before they appear, while its keys count", async () => {
+  test("a Screen's buttons take no simulated clicks before they appear, while its keys count", async () => {
     const response = { choices: { yes: { button: 'Yes' }, no: { key: 'n' } }, buttonDelayMs: 2000 } as const;
-    const rows = await run(Array.from({ length: 20 }, () => Stimulus.trial({ response })));
+    const rows = await run(Array.from({ length: 20 }, () => Screen.trial({ response })));
     for (const { recorded } of rows) {
       const [from, to] = recorded.response === 'yes' ? [2300, 3500] : [300, 1500];
       expect(recorded.reactionTimeMs).toBeWithin(from, to + 1);
     }
     const answering = (answer: string) =>
-      Stimulus.trial({ response }).simulators({ respond: () => ({ value: { response: answer, reactionTimeMs: 500 } }) });
+      Screen.trial({ response }).simulators({ respond: () => ({ response: { answer, reactionTimeMs: 500 } }) });
     expect((await run([answering('no')]))[0].recorded.reactionTimeMs).toBe(500);
     await expect(run([answering('yes')])).rejects.toThrow('at 500 ms, before the buttons appear at 2000 ms');
   });
 
-  test('a Stimulus whose answers share a key or button stops the run when the experiment loads', async () => {
+  test('a Screen whose answers share a key or button stops the run when the experiment loads', async () => {
     await expect(
-      run([Stimulus.trial({ response: { choices: { happy: { key: 'f' }, sad: { key: 'F' } } } })]),
+      run([Screen.trial({ response: { choices: { happy: { key: 'f' }, sad: { key: 'F' } } } })]),
     ).rejects.toThrow("share the key 'f'");
-    await expect(run([Stimulus.trial({ response: { keys: [] } })])).rejects.toThrow('would never end');
+    await expect(run([Screen.trial({ response: { keys: [] } })])).rejects.toThrow('would never end');
   });
 
   test("a replacement builds on the default simulator, keeping the participant it returns", async () => {
     const Tap = defineComponent({
       name: 'Tap',
       component: (_props: BaseComponentProps<{ taps: number; tappedBefore: boolean }>) => null,
-      simulate: async ({ props, simulators, participant }) => {
-        const result = await simulators.tap({ props, participant });
-        return { recorded: { taps: result.value, tappedBefore: participant.tapped === true }, participant: result.participant };
+      simulate: async ({ simulators, participant }) => {
+        const result = await simulators.tap({ stimulus: {}, participant });
+        return { recorded: { taps: result.response, tappedBefore: participant.tapped === true }, participant: result.participant };
       },
       defaultSimulators: {
-        tap: ({ participant }) => ({ value: 2, participant: { ...participant, tapped: true } }),
+        tap: ({ participant }) => ({ response: 2, participant: { ...participant, tapped: true } }),
       },
     });
     const rows = await run([
       Tap.trial().simulators({
-        tap: (input, defaultSimulator) => {
-          const result = defaultSimulator(input);
-          return { ...result, value: result.value * 10 };
+        tap: (args, defaultSimulator) => {
+          const result = defaultSimulator(args);
+          return { ...result, response: result.response * 10 };
         },
       }),
       Tap.trial(),
@@ -864,9 +864,9 @@ describe('components', () => {
 
   test('simulators may be async', async () => {
     const rows = await run([
-      PlainInput.trial().simulators({ respond: async () => ({ value: 'typed' }) }),
-      Stimulus.trial({ response: { buttons: ['Yes', 'No'] } }).simulators({
-        respond: async () => ({ value: { response: 'No', reactionTimeMs: 900 } }),
+      PlainInput.trial().simulators({ respond: async () => ({ response: 'typed' }) }),
+      Screen.trial({ response: { buttons: ['Yes', 'No'] } }).simulators({
+        respond: async () => ({ response: { answer: 'No', reactionTimeMs: 900 } }),
       }),
     ]);
     expect(rows[0].recorded).toEqual({ value: 'typed' });
@@ -907,7 +907,7 @@ describe('components', () => {
       }).simulators({
         respondToSlide: () => {
           const [key, reactionTimeMs] = answers.shift() ?? [null, null];
-          return { value: { key, reactionTimeMs } };
+          return { response: { key, reactionTimeMs } };
         },
       }),
     ]);
@@ -921,7 +921,7 @@ describe('components', () => {
   });
 
   test('a slide with choices records the choice its key gives, and one that takes clicks where it landed', async () => {
-    const decisions: SlideSimulatorResult['value'][] = [
+    const responses: SlideSimulatorResult['response'][] = [
       { key: 'F', reactionTimeMs: 300 },
       { key: 'x', reactionTimeMs: 300 },
       { x: 120, y: 45, reactionTimeMs: 600 },
@@ -936,7 +936,7 @@ describe('components', () => {
           { draw: () => {}, response: { click: true } },
           { draw: () => {}, response: { click: true, timeLimitMs: 1000 } },
         ],
-      }).simulators({ respondToSlide: () => ({ value: decisions.shift() ?? { key: null, reactionTimeMs: null } }) }),
+      }).simulators({ respondToSlide: () => ({ response: responses.shift() ?? { key: null, reactionTimeMs: null } }) }),
     ]);
     const answers = rows[0].recorded.map(({ slideNumber: _n, startMs: _s, endMs: _e, durationMs: _d, ...answer }: SlideData) => answer);
     expect(answers).toEqual([

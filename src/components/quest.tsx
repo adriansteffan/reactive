@@ -3,7 +3,7 @@ import { defaultCss, Model, Question, Serializer } from 'survey-core';
 import { ReactQuestionFactory, Survey, SurveyQuestionElementBase } from 'survey-react-ui';
 import { ContrastLight, ContrastDark } from 'survey-core/themes';
 import 'survey-core/survey-core.min.css';
-import { defineComponent } from '../core/component';
+import { defineComponent, type SimulatorArgs } from '../core/component';
 import { uniform, uniformInt } from '../utils/distributions';
 import { useTheme, t } from '../runner/theme';
 import { Recorder } from './recorder';
@@ -114,16 +114,16 @@ export default defineComponent({
     for (const page of pages) {
       for (const el of page.elements || []) {
         if (!el.name) continue;
-        const result = await simulators.answerQuestion({ props, participant, question: el });
+        const result = await simulators.answerQuestion({ stimulus: { question: el }, participant });
         participant = result.participant ?? participant;
-        recorded[el.name] = result.value.answer;
-        totalDuration += result.value.durationMs;
+        recorded[el.name] = result.response.answer;
+        totalDuration += result.response.durationMs;
       }
     }
     return { recorded, participant, durationMs: totalDuration };
   },
   defaultSimulators: {
-    answerQuestion: ({ question }) => {
+    answerQuestion: ({ stimulus: { question } }: SimulatorArgs<{ question: any }>) => {
       let value: any;
       switch (question.type) {
         case 'rating': value = uniformInt(question.rateMin ?? 1, question.rateMax ?? 5); break;
@@ -156,7 +156,7 @@ export default defineComponent({
         }
         default: value = null;
       }
-      return { value: { answer: value, durationMs: uniform(1000, 5000) } };
+      return { response: { answer: value, durationMs: uniform(1000, 5000) } };
     },
   },
 });

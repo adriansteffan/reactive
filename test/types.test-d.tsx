@@ -12,7 +12,8 @@ import {
   ifBlock,
   PlainInput,
   sampleParticipants,
-  Stimulus,
+  Screen,
+  type SimulatorArgs,
   StoreUI,
   Text,
   Upload,
@@ -36,30 +37,32 @@ const CustomTrial = defineComponent({
     return null;
   },
   defaultSimulators: {
-    click: ({ props, participant }) => {
-      const n: number = props.maxCount;
-      return { value: 300 * n, participant: { ...participant, clicked: true } };
+    click: ({ stimulus, participant }: SimulatorArgs<{ count: number }>) => {
+      const n: number = stimulus.count;
+      return { response: 300 * n, participant: { ...participant, clicked: true } };
     },
   },
   simulate: async ({ props, simulators, participant, store, data }) => {
     const n: number = props.maxCount;
-    const r = await simulators.click({ props, participant });
+    const r = await simulators.click({ stimulus: { count: 1 }, participant });
     // @ts-expect-error a simulator may be async, so its result has to be awaited
-    simulators.click({ props, participant }).value;
+    simulators.click({ stimulus: { count: 1 }, participant }).response;
     // @ts-expect-error simulator that does not exist
-    simulators.tap({ props, participant });
-    // @ts-expect-error a simulator needs the props and the participant
+    simulators.tap({ stimulus: { count: 1 }, participant });
+    // @ts-expect-error a simulator needs the stimulus and the participant
     simulators.click({ participant });
+    // @ts-expect-error the stimulus is the one the simulator declares
+    simulators.click({ stimulus: { cuont: 1 }, participant });
     const bonus: number | undefined = store.bonus;
     const name: string = PlainInput.getLatest(data, 'nickname').recorded.value;
-    return { recorded: { totalTime: r.value * n + (bonus ?? 0) + name.length, clicks: n } };
+    return { recorded: { totalTime: r.response * n + (bonus ?? 0) + name.length, clicks: n } };
   },
 });
 
 defineComponent({
   name: 'Bad',
   component: ({ next }: BaseComponentProps<ClickResponse>) => {
-    // @ts-expect-error a component that declares a response ends with it
+    // @ts-expect-error a component that declares what it records ends with it
     next();
     next({ totalTime: 1, clicks: 1 });
     return null;
@@ -68,23 +71,43 @@ defineComponent({
   simulate: () => ({ recorded: { totalTime: 'x' } }),
 });
 
-// simulate may come before defaultSimulators
-defineComponent({
+// simulate may come before defaultSimulators, which may leave their stimulus undeclared
+const SimulateFirst = defineComponent({
   name: 'SimulateFirst',
-  component: (_props: BaseComponentProps<ClickResponse> & { maxCount: number }) => null,
-  simulate: async ({ props, simulators, participant }) => {
+  component: (_props: BaseComponentProps<ClickResponse>) => null,
+  simulate: async ({ simulators, participant }) => {
     // @ts-expect-error simulator that does not exist
-    simulators.tap({ props, participant });
-    const result = await simulators.click({ props, participant });
-    return { recorded: { totalTime: result.value, clicks: 1 } };
+    simulators.tap({ stimulus: {}, participant });
+    // @ts-expect-error the stimulus is the one the simulator declares
+    simulators.click({ stimulus: { cuont: 1 }, participant });
+    simulators.wait({ stimulus: { anything: 1 }, participant });
+    const result = await simulators.click({ stimulus: { count: 1 }, participant });
+    return { recorded: { totalTime: result.response, clicks: 1 } };
   },
   defaultSimulators: {
-    click: ({ props }) => {
-      // @ts-expect-error the props keep their types
-      const wrong: string = props.maxCount;
-      return { value: wrong.length };
-    },
+    click: ({ stimulus }: SimulatorArgs<{ count: number }>) => ({ response: stimulus.count }),
+    wait: ({ participant }) => ({ response: participant.patience }),
+    rest: () => ({ response: 'rested' }),
   },
+});
+SimulateFirst.trial().simulators({
+  click: ({ stimulus }) => ({ response: stimulus.count * 2 }),
+  wait: ({ stimulus }) => ({ response: stimulus.anything }),
+  rest: ({ stimulus }) => ({ response: String(stimulus.anything) }),
+});
+// @ts-expect-error the stimulus is the one the default simulator declares
+SimulateFirst.trial().simulators({ click: ({ stimulus }) => ({ response: stimulus.cuont }) });
+// @ts-expect-error a simulator receives a stimulus and a participant
+SimulateFirst.trial().simulators({ wait: ({ partcipant }) => ({ response: partcipant }) });
+
+defineComponent({
+  name: 'OnlyUndeclared',
+  component: (_props: BaseComponentProps<ClickResponse>) => null,
+  simulate: async ({ simulators, participant }) => {
+    const result = await simulators.click({ stimulus: { count: 1 }, participant });
+    return { recorded: { totalTime: result.response, clicks: 1 } };
+  },
+  defaultSimulators: { click: ({ participant }) => ({ response: participant.speed }) },
 });
 
 // Components see the declared store
@@ -183,42 +206,42 @@ const asJsx = <Warmup next={() => {}} data={noData} store={{}} updateStore={() =
 const base = CustomTrial.trial({ maxCount: 5 });
 base.metadata({ block: 1 }).collectRefreshRate().csv(null);
 CustomTrial.trial(({ data }) => ({ maxCount: PlainInput.getLatest(data, 'nickname').recorded.value.length }));
-base.simulators({ click: ({ participant }) => ({ value: participant.speed }) });
+base.simulators({ click: ({ participant }) => ({ response: participant.speed }) });
 // @ts-expect-error simulator the component does not have
-base.simulators({ tap: () => ({ value: 1 }) });
+base.simulators({ tap: () => ({ response: 1 }) });
 // @ts-expect-error a replacement returns what the simulator it replaces returns
 base.simulators({ click: () => ({ wrong: 1 }) });
-PlainInput.trial('typed').simulators({ respond: () => ({ value: 'typed' }) });
+PlainInput.trial('typed').simulators({ respond: () => ({ response: 'typed' }) });
 defineComponent({
-  name: 'OutsideValue',
+  name: 'OutsideResponse',
   component: (_props: BaseComponentProps) => null,
   defaultSimulators: {
-    // @ts-expect-error a simulator's decision goes in value
+    // @ts-expect-error what the participant does goes in response
     decide: () => ({ key: 'f' }),
   },
 });
-CanvasBlock.trial({ timeline: [] }).simulators({ respondToSlide: () => ({ value: { key: 'f', reactionTimeMs: 300 } }) });
-// @ts-expect-error a replacement returns the decision in value, like the simulator it replaces
+CanvasBlock.trial({ timeline: [] }).simulators({ respondToSlide: () => ({ response: { key: 'f', reactionTimeMs: 300 } }) });
+// @ts-expect-error a replacement returns a response, like the simulator it replaces
 CanvasBlock.trial({ timeline: [] }).simulators({ respondToSlide: () => ({ key: 'f', reactionTimeMs: 300 }) });
 // A replacement receives the participant, also where the default simulator takes nothing
-PlainInput.trial('typed').simulators({ respond: ({ participant }) => ({ value: String(participant.nickname) }) });
+PlainInput.trial('typed').simulators({ respond: ({ participant }) => ({ response: String(participant.nickname) }) });
 // A replacement can build on the default simulator, whose result the types know
 PlainInput.trial('typed').simulators({
-  respond: (input, defaultSimulator) => {
-    const result = defaultSimulator(input);
-    // @ts-expect-error PlainInput's default answers with text
-    result.value.toFixed();
-    return { ...result, value: result.value.toUpperCase() };
+  respond: (args, defaultSimulator) => {
+    const result = defaultSimulator(args);
+    // @ts-expect-error PlainInput's default responds with text
+    result.response.toFixed();
+    return { ...result, response: result.response.toUpperCase() };
   },
 });
-// @ts-expect-error the default simulator takes the input it should run with
-PlainInput.trial('typed').simulators({ respond: (_input, defaultSimulator) => defaultSimulator() });
-// @ts-expect-error PlainInput's simulated answer is text
-PlainInput.trial('typed').simulators({ respond: () => ({ value: 5 }) });
+// @ts-expect-error the default simulator takes the arguments it should run with
+PlainInput.trial('typed').simulators({ respond: (_args, defaultSimulator) => defaultSimulator() });
+// @ts-expect-error PlainInput's simulated response is text
+PlainInput.trial('typed').simulators({ respond: () => ({ response: 5 }) });
 // A replacement may be async, and still returns what the simulator it replaces returns
-PlainInput.trial('typed').simulators({ respond: async () => ({ value: 'typed' }) });
-// @ts-expect-error PlainInput's simulated answer is text
-PlainInput.trial('typed').simulators({ respond: async () => ({ value: 5 }) });
+PlainInput.trial('typed').simulators({ respond: async () => ({ response: 'typed' }) });
+// @ts-expect-error PlainInput's simulated response is text
+PlainInput.trial('typed').simulators({ respond: async () => ({ response: 5 }) });
 
 // --- reading results ---
 const nickname = PlainInput.trial('nickname', { placeholder: 'Name' });
@@ -483,35 +506,39 @@ sampleParticipants('sobol', 10, {
 });
 
 // --- stimuli ---
-Stimulus.trial('face', {
+Screen.trial('face', {
   content: <img src='face.png' alt='' />,
   response: { choices: { happy: { key: 'f', button: 'Happy' }, sad: { key: 'j' } }, timeLimitMs: 3000 },
   displayDurationMs: 500,
 });
-Stimulus.trial('fixation', { content: '+', displayDurationMs: 500 });
-Stimulus.trial({ content: <Article><p>Text</p></Article>, response: { buttons: ['Yes', 'No'], buttonDelayMs: 1000 }, centered: false, animate: true });
-Stimulus.trial({
+Screen.trial('fixation', { content: '+', displayDurationMs: 500 });
+Screen.trial({ content: <Article><p>Text</p></Article>, response: { buttons: ['Yes', 'No'], buttonDelayMs: 1000 }, centered: false, animate: true });
+Screen.trial({
   content: ({ respond }) => <Canvas draw={(ctx, width, height) => ctx.fillRect(0, 0, width, height)} onClick={(x, y) => respond({ x, y })} />,
 });
 // @ts-expect-error a trial needs a way to end
-Stimulus.trial({ content: 'Nothing ends this trial' });
+Screen.trial({ content: 'Nothing ends this trial' });
 // @ts-expect-error a choice is given by a key, a button, or both
-Stimulus.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
+Screen.trial({ response: { choices: { happy: {} } }, displayDurationMs: 500 });
 // An answer through respond is the simulator's to give, typed like the default's
-Stimulus.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
-  respond: () => ({ value: { response: 'typed', reactionTimeMs: 2000 } }),
+Screen.trial({ content: ({ respond }) => <input onBlur={(event) => respond(event.target.value)} /> }).simulators({
+  respond: () => ({ response: { answer: 'typed', reactionTimeMs: 2000 } }),
+});
+// A simulator knows how the Screen can be answered
+Screen.trial({ response: { buttons: ['Yes', 'No'] } }).simulators({
+  respond: ({ stimulus }) => ({ response: { answer: stimulus.buttons?.[0], reactionTimeMs: 2000 } }),
 });
 // Answers that do not end a trial need its time limit, and recording every answer cannot end it
-Stimulus.trial({ response: { choices: { yes: { key: 'f' } }, timeLimitMs: 2000, endsTrial: false } });
-Stimulus.trial({ response: { keys: [' '], timeLimitMs: 30000, recordAll: true } });
+Screen.trial({ response: { choices: { yes: { key: 'f' } }, timeLimitMs: 2000, endsTrial: false } });
+Screen.trial({ response: { keys: [' '], timeLimitMs: 30000, recordAll: true } });
 // @ts-expect-error a trial that its answers do not end needs a time limit
-Stimulus.trial({ response: { keys: ['f'], endsTrial: false } });
+Screen.trial({ response: { keys: ['f'], endsTrial: false } });
 // @ts-expect-error so does one that records every answer
-Stimulus.trial({ response: { keys: ['f'], recordAll: true } });
+Screen.trial({ response: { keys: ['f'], recordAll: true } });
 // @ts-expect-error recording every answer keeps the trial going
-Stimulus.trial({ response: { keys: ['f'], timeLimitMs: 2000, recordAll: true, endsTrial: true } });
-const tapCount = ({ data }: TimelineContext) => Stimulus.getLatest(data, 'taps').recorded.responses?.length ?? 0;
-const stimulusAnswer = ({ data }: TimelineContext) => Stimulus.getLatest(data, 'face').recorded.response === 'happy';
-const stimulusOptions = ({ data }: TimelineContext): string[] => Stimulus.getLatest(data, 'face').recorded.options;
+Screen.trial({ response: { keys: ['f'], timeLimitMs: 2000, recordAll: true, endsTrial: true } });
+const tapCount = ({ data }: TimelineContext) => Screen.getLatest(data, 'taps').recorded.responses?.length ?? 0;
+const stimulusAnswer = ({ data }: TimelineContext) => Screen.getLatest(data, 'face').recorded.response === 'happy';
+const stimulusOptions = ({ data }: TimelineContext): string[] => Screen.getLatest(data, 'face').recorded.options;
 
 export { asJsx, bonusRead, experiment, reads, sampledTraits, stimulusAnswer, stimulusOptions, slideKey, tapCount };

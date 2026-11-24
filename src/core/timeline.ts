@@ -90,7 +90,7 @@ export interface Trial<C = any, D = any, H extends string = string> {
   /** Hides the component's params from the settings screen: all of them, or the ones named. */
   hideParams(params: readonly H[] | boolean | undefined): Trial<C, D, H>;
   /** Replaces some of the component's simulators for this trial, each with one that returns what it returns. */
-  simulators(simulators: SimulatorOverrides<C, D> | undefined): Trial<C, D, H>;
+  simulators(simulators: SimulatorOverrides<D> | undefined): Trial<C, D, H>;
 }
 
 export function isTrial(item: unknown): item is Trial {

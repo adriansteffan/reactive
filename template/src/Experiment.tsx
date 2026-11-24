@@ -52,9 +52,9 @@ const CustomTrial = defineComponent({
   simulate: async ({ props, simulators, participant }) => {
     let totalTimeMs = 0;
     for (let i = 0; i < props.maxCount; i++) {
-      const result = await simulators.click({ props, participant });
+      const result = await simulators.click({ stimulus: { count: i }, participant });
       participant = result.participant ?? participant;
-      totalTimeMs += result.value;
+      totalTimeMs += result.response;
     }
     return {
       recorded: { totalTimeMs, clicks: props.maxCount },
@@ -63,7 +63,7 @@ const CustomTrial = defineComponent({
     };
   },
   defaultSimulators: {
-    click: () => ({ value: 200 + Math.random() * 500 }),
+    click: () => ({ response: 200 + Math.random() * 500 }),
   },
 });
 

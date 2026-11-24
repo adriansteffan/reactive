@@ -168,16 +168,16 @@ export default defineComponent({
   simulate: async ({ props, simulators, participant }) => {
     // A trial can set respondTTS to undefined to use the base64 simulator instead
     const { respondTTS } = simulators as Partial<typeof simulators>;
-    const result = await (respondTTS ?? simulators.respondBase64)({ props, participant });
+    const result = await (respondTTS ?? simulators.respondBase64)({ stimulus: { content: props.content }, participant });
 
     let data64: string;
     if (respondTTS) {
-      const text = result.value as string;
+      const text = result.response as string;
       const ttsResult = await textToWebmBase64(text);
       if (!ttsResult) throw new Error('TTS failed. Ensure say/espeak and ffmpeg are installed.');
       data64 = ttsResult;
     } else {
-      data64 = result.value as string;
+      data64 = result.response as string;
     }
 
     // Exact duration via ffprobe, fall back to estimate from file size
@@ -195,8 +195,8 @@ export default defineComponent({
   },
   defaultSimulators: {
     /** Returns text to be spoken via platform TTS. Default: generic test sentence. */
-    respondTTS: () => ({ value: 'This is a simulated voice recording for testing purposes.' }),
+    respondTTS: () => ({ response: 'This is a simulated voice recording for testing purposes.' }),
     /** Returns raw base64-encoded WebM audio directly. Default: dummy 0.5s sine tone. */
-    respondBase64: () => ({ value: DUMMY_AUDIO_BASE64 }),
+    respondBase64: () => ({ response: DUMMY_AUDIO_BASE64 }),
   },
 });

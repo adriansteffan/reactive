@@ -116,21 +116,24 @@ export default defineComponent({
     if (durationMs !== undefined && !props.buttonText && !props.allowedResponseKeys) {
       return { recorded: {}, durationMs };
     }
-    const result = await simulators.respond({ props, participant });
-    const reactionTimeMs = result.value.reactionTimeMs ?? 0;
+    const result = await simulators.respond({
+      stimulus: { content: props.content, buttonText: props.buttonText, allowedResponseKeys: props.allowedResponseKeys },
+      participant,
+    });
+    const reactionTimeMs = result.response.reactionTimeMs ?? 0;
     // A timed screen that the participant does not end in time ends after its duration
     if (durationMs !== undefined && reactionTimeMs >= durationMs) {
       return { recorded: {}, participant: result.participant, durationMs };
     }
     return {
-      recorded: result.value,
+      recorded: result.response,
       participant: result.participant,
       durationMs: reactionTimeMs,
     };
   },
   defaultSimulators: {
     respond: () => ({
-      value: { key: 'button', reactionTimeMs: uniform(500, 2000) },
+      response: { key: 'button', reactionTimeMs: uniform(500, 2000) },
     }),
   },
 });

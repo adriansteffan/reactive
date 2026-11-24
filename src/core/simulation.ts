@@ -1,11 +1,11 @@
 import { countDraws, seedDistributions, withStream } from '../utils/distributions';
 import { setBackendUrl } from './backend';
-import type { ParticipantState, SimulateResult, SimulatorInput } from './component';
+import type { ParticipantState, SimulateResult, SimulatorArgs } from './component';
 import { createRunState, type Experiment, respond, startRun, trialAt } from './experiment';
 import { createExperimentData, type ExperimentData } from './rows';
 import { createTimelineContext } from './timeline';
 
-/** A simulation for components without a response, such as entering fullscreen. */
+/** A simulation for components that record nothing, such as entering fullscreen. */
 export const noopSimulate = () => ({ recorded: {} as any });
 
 /**
@@ -43,7 +43,7 @@ export async function simulateParticipant(
     const replacements = Object.fromEntries(
       Object.entries(content.simulators ?? {}).map(([key, replacement]) => [
         key,
-        replacement && ((input: SimulatorInput) => replacement(input, defaultSimulators?.[key])),
+        replacement && ((args: SimulatorArgs) => replacement(args, defaultSimulators?.[key])),
       ]),
     );
     let result: SimulateResult;

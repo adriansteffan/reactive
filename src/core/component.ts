@@ -38,38 +38,39 @@ type WithoutRunnerProps<P> = P extends unknown
 export type RecordedOf<C> =
   PropsOf<C> extends { next: (data: infer R, ...rest: any[]) => void } ? R : unknown;
 
-/** What a simulator receives: the trial's props, the participant, and whatever else the component's simulation passes along. */
-export type SimulatorInput<C = any> = {
-  props: OwnProps<C>;
-  participant: ParticipantState;
-  [extra: string]: any;
-};
+/** What a simulator receives: what the participant can perceive, as `stimulus`, and the participant. */
+export type SimulatorArgs<S = any> = { stimulus: S; participant: ParticipantState };
 
-/** A simulator's decision, as `value`. Without `participant`, the participant stays as it was. */
-export type SimulatorResult = { value?: any; participant?: ParticipantState };
+/** What the participant does, as `response`, and the participant, if it changed. */
+export type SimulatorResult =
+  | { response: any; participant?: ParticipantState }
+  | { response?: undefined; participant: ParticipantState };
 
 type MaybePromise<T> = T | Promise<T>;
 
-/** Decides one part of a simulated participant's behavior. It may be async, for example to ask an LLM. */
-export type Simulator<C = any> = (input: SimulatorInput<C>) => MaybePromise<SimulatorResult>;
+/** How a simulated participant responds to a stimulus. It may be async, for example to ask an LLM. */
+export type Simulator<S = any> = (args: SimulatorArgs<S>) => MaybePromise<SimulatorResult>;
 
 /** A trial's replacement for a default simulator, which it receives to build on. */
 export type SimulatorReplacement = (
-  input: SimulatorInput,
+  args: SimulatorArgs,
   defaultSimulator: Simulator,
 ) => MaybePromise<SimulatorResult>;
 
-// A replacement takes what a simulator of the component takes, along with the default simulator,
-// returns what the default returns, and may leave the participant as it was
-type Replacement<C, F> = F extends (...args: any[]) => infer R
+// A default simulator that does not declare its stimulus takes any
+type DeclaredStimulus<S> = unknown extends S ? any : S;
+
+// A replacement takes what the default simulator takes, along with the default simulator, returns
+// what the default returns, and may leave the participant as it was
+type Replacement<F> = F extends (args: { stimulus: infer S; participant: ParticipantState }) => infer R
   ? (
-      input: SimulatorInput<C>,
-      defaultSimulator: (input: SimulatorInput<C>) => R,
+      args: SimulatorArgs<DeclaredStimulus<S>>,
+      defaultSimulator: (args: SimulatorArgs<DeclaredStimulus<S>>) => R,
     ) => MaybePromise<Omit<Awaited<R>, 'participant'> & { participant?: ParticipantState }>
   : never;
 
-/** Replacements for some of the default simulators `D` of component `C`. */
-export type SimulatorOverrides<C, D> = { [K in keyof D]?: Replacement<C, D[K]> };
+/** Replacements for some of the default simulators `D`. */
+export type SimulatorOverrides<D> = { [K in keyof D]?: Replacement<D[K]> };
 
 export type SimulateResult<R = unknown> = {
   recorded: R;
@@ -80,18 +81,18 @@ export type SimulateResult<R = unknown> = {
 };
 
 /** What a component's simulation receives: the context of the trial, plus its props, the participant and the simulators. */
-export type SimulateInput<C = any, S extends string = string> = TimelineContext & {
+export type SimulateArgs<C = any, N extends string = string, S = {}> = TimelineContext & {
   props: OwnProps<C>;
   participant: ParticipantState;
   /** The participant as the simulation started it. */
   initialParticipant: ParticipantState;
-  simulators: Record<S, Simulator<C>>;
+  simulators: { [K in N]: Simulator<K extends keyof S ? S[K] : any> };
   /** The components of the timeline, by name, for building the CSV files. */
   components: ReadonlyMap<string, RuntimeComponent>;
 };
 
-export type SimulateFunction<C = any, S extends string = string> = (
-  input: SimulateInput<C, S>,
+export type SimulateFunction<C = any, N extends string = string, S = {}> = (
+  args: SimulateArgs<C, N, S>,
 ) => MaybePromise<SimulateResult<RecordedOf<C>>>;
 
 /** What a component's `check` sees of one of its trials when the experiment loads. */
@@ -129,7 +130,7 @@ export type RuntimeComponent = AnyComponent & { reactive: ComponentInfo };
 type HasRequired<T> = {} extends T ? false : true;
 
 // Props are an object, so that a name is never taken for them, even by a component without props of
-// its own. Keyed on the component's props, which error messages name, as in TrialProps<StimulusProps>
+// its own. Keyed on the component's props, which error messages name, as in TrialProps<ScreenProps>
 type TrialProps<P> = ContextArg<WithoutRunnerProps<P> & object>;
 
 // TypeScript reports the error of the last overload, so a name that reaches it, being taken or
@@ -163,8 +164,9 @@ export type DefinedComponent<C extends AnyComponent = AnyComponent, D = any, H e
 
 export function defineComponent<
   C extends AnyComponent,
-  S extends string = never,
-  D extends Partial<Record<S, Simulator<C>>> = {},
+  N extends string = never,
+  S = {},
+  D extends Partial<Record<N, Simulator>> = {},
   const PV extends Record<string, unknown> = {},
   PD extends Record<string, unknown> = {},
 >(definition: {
@@ -172,20 +174,20 @@ export function defineComponent<
   name: string;
   component: C;
   /**
-   * The CSV file its rows go to: one row per trial, or per item of a response that is a list.
+   * The CSV file its rows go to: one row per trial, or per item of a recorded list.
    * Defaults to the name in lowercase, unless the component sets `session`; `null` keeps them out of
    * the CSVs. A map gives files the function that turns a row into the file's rows, or `true`.
    */
   csv?: ComponentCsv<RecordedOf<C>>;
   /**
    * Puts its trials' columns in the session CSV, the single row per participant: `true` for the
-   * response's fields, or a function that returns them.
+   * fields it records, or a function that returns them.
    */
   session?: SessionColumns<RecordedOf<C>>;
   /** Params it reads with `useParams`, which the settings screen lists whenever it is in the timeline. */
   params?: CheckedParams<PV, PD>;
-  defaultSimulators?: Record<S, Simulator<C>> & D;
-  simulate?: SimulateFunction<C, S>;
+  defaultSimulators?: Record<N, Simulator> & { [K in keyof S]: Simulator<S[K]> } & D;
+  simulate?: SimulateFunction<C, N, S>;
   /**
    * Checks each of its trials when the experiment loads, and returns what is wrong with it. Any
    * message keeps the run from starting, and the settings screen shows it.

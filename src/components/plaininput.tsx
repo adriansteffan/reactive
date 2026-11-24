@@ -1,4 +1,4 @@
-import { BaseComponentProps } from '../core/component';
+import { BaseComponentProps, type SimulatorArgs } from '../core/component';
 import { useState } from 'react';
 import { defineComponent } from '../core/component';
 import { uniform } from '../utils/distributions';
@@ -96,15 +96,20 @@ export default defineComponent({
   component: PlainInput,
   session: true,
   simulate: async ({ props, simulators, participant }) => {
-    const result = await simulators.respond({ props, participant });
-    const typingDuration = String(result.value).length * uniform(50, 150);
+    const result = await simulators.respond({
+      stimulus: { content: props.content, minLength: props.minLength ?? 1 },
+      participant,
+    });
+    const typingDuration = String(result.response).length * uniform(50, 150);
     return {
-      recorded: { value: result.value },
+      recorded: { value: result.response },
       participant: result.participant,
       durationMs: typingDuration,
     };
   },
   defaultSimulators: {
-    respond: ({ props }) => ({ value: 'simulated_input'.padEnd(props.minLength ?? 0, '_') }),
+    respond: ({ stimulus }: SimulatorArgs<{ content: React.ReactNode; minLength: number }>) => ({
+      response: 'simulated_input'.padEnd(stimulus.minLength, '_'),
+    }),
   },
 });

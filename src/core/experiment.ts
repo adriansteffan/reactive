@@ -214,7 +214,7 @@ export function createRunState(compiled: CompiledTimeline, data: ExperimentData,
 }
 
 /**
- * Ends the trial on screen: merges the changes it made to the store, records its response, and
+ * Ends the trial on screen: merges the changes it made to the store, records its data, and
  * moves on to the next trial.
  */
 export function respond(

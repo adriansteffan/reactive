@@ -21,7 +21,7 @@ const reserved: readonly string[] = Object.values(columnPrefixes);
 export const sessionPrefixes = [columnPrefixes.url, columnPrefixes.session] as const;
 
 /**
- * The CSV column for a field of a response. A field whose name starts with one of the prefixes gets
+ * The CSV column for a recorded field. A field whose name starts with one of the prefixes gets
  * `response_` in front, so that it can never take the place of a column the library writes.
  */
 export function responseColumn(field: string): string {

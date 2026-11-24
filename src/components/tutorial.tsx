@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useContext, createContext, ReactNode } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
-import { BaseComponentProps } from '../core/component';
-import { defineComponent } from '../core/component';
+import { BaseComponentProps, defineComponent } from '../core/component';
 import { hoverArea, useTheme, t } from '../runner/theme';
 import { type ResponseKey, responseKey } from '../utils/keys';
 
@@ -233,14 +232,14 @@ export const Tutorial = defineComponent({
     const slideData: Record<number, Record<string, unknown>> = {};
     let totalDuration = 0;
     for (let i = 0; i < (props.slides?.length ?? 0); i++) {
-      const result = await simulators.respondToSlide({ props, participant, slideIndex: i });
+      const result = await simulators.respondToSlide({ stimulus: { slide: props.slides[i], slideIndex: i }, participant });
       participant = result.participant ?? participant;
-      slideData[i] = result.value.data;
-      totalDuration += result.value.durationMs;
+      slideData[i] = result.response.data;
+      totalDuration += result.response.durationMs;
     }
     return { recorded: { slides: slideData }, participant, durationMs: totalDuration };
   },
   defaultSimulators: {
-    respondToSlide: () => ({ value: { data: {}, durationMs: 500 } }),
+    respondToSlide: () => ({ response: { data: {}, durationMs: 500 } }),
   },
 });

@@ -2,12 +2,16 @@ import { advanceToNextContent, type Bytecode, compileTimeline } from './bytecode
 import type { ParticipantState } from './component';
 import { freezeInDevelopment, report } from './development';
 import type { Store } from './store';
+import type { CanvasSize } from '../utils/canvas';
 import type { ResponseKey } from '../utils/keys';
 import type { Block, TimelineContext } from './timeline';
 
+/** What a CanvasBlock's `respondToSlide` simulator receives: the slide, and the canvas it is drawn on. */
+export type SlideStimulus = { slide: Slide; width?: CanvasSize; height?: CanvasSize };
+
 export type SlideSimulatorResult = {
   /** The key pressed, or on a slide that takes clicks the point clicked, and when; nulls for no response. */
-  value: { key?: string | null; x?: number; y?: number; reactionTimeMs: number | null };
+  response: { key?: string | null; x?: number; y?: number; reactionTimeMs: number | null };
   /** Without it, the participant stays as it was. */
   participant?: ParticipantState;
 };

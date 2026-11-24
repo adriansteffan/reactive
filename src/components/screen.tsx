@@ -1,5 +1,5 @@
 import React, { createElement, useCallback, useLayoutEffect, useRef } from 'react';
-import { type BaseComponentProps, defineComponent } from '../core/component';
+import { type BaseComponentProps, defineComponent, type SimulatorArgs } from '../core/component';
 import { t, useTheme } from '../runner/theme';
 import { type CanvasSize, type Draw, prepareCanvas } from '../utils/canvas';
 import { uniform } from '../utils/distributions';
@@ -7,15 +7,15 @@ import { keyAnswer, type ResponseKey, responseKey } from '../utils/keys';
 import { halfFrameMs } from '../utils/time';
 
 /** An answer the participant gives by a key, a button, or both. */
-export type StimulusChoice = { key: ResponseKey; button?: string } | { key?: ResponseKey; button: string };
+export type ScreenChoice = { key: ResponseKey; button?: string } | { key?: ResponseKey; button: string };
 
-interface StimulusResponseFields {
+interface ScreenResponseFields {
   /** Keys that answer, each recorded as itself, letters in either case; `true` for any key. */
   keys?: readonly ResponseKey[] | true;
   /** Buttons that answer, each recorded as its text. */
   buttons?: readonly string[];
   /** Answers recorded by their names, each given by a key, a button, or both. */
-  choices?: Record<string, StimulusChoice>;
+  choices?: Record<string, ScreenChoice>;
   /** Fades the buttons in this long after the stimulus appears, from which reaction times still count. */
   buttonDelayMs?: number;
   /** How long after the stimulus appears an answer counts. The trial ends then, if no answer has ended it. */
@@ -28,32 +28,32 @@ interface StimulusResponseFields {
 
 /** The answers a stimulus takes, how long they count, and whether the first ends the trial. */
 // Recording every answer keeps the trial going, so it cannot also end at the first
-export type StimulusResponse = StimulusResponseFields & ({ recordAll?: false } | { recordAll: true; endsTrial?: false });
+export type ScreenResponse = ScreenResponseFields & ({ recordAll?: false } | { recordAll: true; endsTrial?: false });
 
 /** What a content function receives: `respond` ends the trial with an answer of the content's own. */
-export interface StimulusControls {
+export interface ScreenControls {
   respond: (response: unknown) => void;
 }
 
 /** An answer, the key that gave it, and how long after the stimulus appeared it came. */
-export type StimulusAnswer = { response: unknown; key: string | null; reactionTimeMs: number };
+export type ScreenAnswer = { response: unknown; key: string | null; reactionTimeMs: number };
 
 /**
  * The first answer, the key that gave it, and how long after the stimulus appeared it came, all null
  * without an answer; the answers on offer as `options`; with `recordAll`, every answer as `responses`.
  */
-export type StimulusData = {
+export type ScreenData = {
   response: unknown;
   key: string | null;
   reactionTimeMs: number | null;
   options: string[];
-  responses?: StimulusAnswer[];
+  responses?: ScreenAnswer[];
 };
 
-type StimulusFields = {
+type ScreenFields = {
   /** The stimulus: React, or a function of `{ respond }` for content that answers by itself. */
-  content?: React.ReactNode | ((controls: StimulusControls) => React.ReactNode);
-  response?: StimulusResponse;
+  content?: React.ReactNode | ((controls: ScreenControls) => React.ReactNode);
+  response?: ScreenResponse;
   /**
    * How long the content stays visible. Unless the response has a time limit, the trial ends then.
    * Without one, the trial needs another way to end: a time limit, or keys, buttons, choices or
@@ -74,22 +74,22 @@ type EndsAtAnswer = { endsTrial?: true; recordAll?: false };
 // A trial needs a way to end: an answer, a time limit, a display duration, or content that responds.
 // TypeScript explains a mismatch against the last of these, so a trial without an end reads as
 // missing its displayDurationMs, whose documentation lists the other ways.
-type StimulusEnd =
-  | { content: (controls: StimulusControls) => React.ReactNode; response?: EndsAtAnswer }
+type ScreenEnd =
+  | { content: (controls: ScreenControls) => React.ReactNode; response?: EndsAtAnswer }
   | {
       response:
         | { timeLimitMs: number }
         | (EndsAtAnswer &
-            ({ keys: readonly ResponseKey[] | true } | { buttons: readonly string[] } | { choices: Record<string, StimulusChoice> }));
+            ({ keys: readonly ResponseKey[] | true } | { buttons: readonly string[] } | { choices: Record<string, ScreenChoice> }));
     }
   | { displayDurationMs: number };
 
-export type StimulusProps = StimulusFields & StimulusEnd & BaseComponentProps<StimulusData>;
+export type ScreenProps = ScreenFields & ScreenEnd & BaseComponentProps<ScreenData>;
 
 type Answer = { response: string; key?: ResponseKey; button?: string };
 
 // The declared answers: the named choices, then the keys and buttons, which are recorded as themselves
-function answersOf(response: StimulusResponse | undefined): Answer[] {
+function answersOf(response: ScreenResponseFields | undefined): Answer[] {
   const keys = response?.keys === true ? [] : (response?.keys ?? []);
   return [
     ...Object.entries(response?.choices ?? {}).map(([name, choice]) => ({ response: name, ...choice })),
@@ -99,7 +99,7 @@ function answersOf(response: StimulusResponse | undefined): Answer[] {
 }
 
 // What a trial records from its answers: the first, the options it had, and with recordAll, every answer
-function recordOf(answers: StimulusAnswer[], response: StimulusResponse | undefined): StimulusData {
+function recordOf(answers: ScreenAnswer[], response: ScreenResponse | undefined): ScreenData {
   const first = answers[0] ?? { response: null, key: null, reactionTimeMs: null };
   const options = answersOf(response).map((answer) => answer.response);
   return response?.recordAll ? { ...first, options, responses: answers } : { ...first, options };
@@ -109,7 +109,7 @@ function recordOf(answers: StimulusAnswer[], response: StimulusResponse | undefi
 // given: by a key, judged as a press is, or with null, by a button or the content's respond. Left
 // out, it is the declared answer's key, or with `keys: true`, the answer itself.
 function recordAnswer(
-  props: Pick<StimulusFields, 'content' | 'response'>,
+  props: Pick<ScreenFields, 'content' | 'response'>,
   response: unknown,
   given: string | null | undefined,
 ): { response: unknown; key: string | null } {
@@ -120,18 +120,18 @@ function recordAnswer(
     const answer = keyAnswer(props.response, key);
     if (answer && typeof response === 'string' && responseKey([answer.response], response) !== undefined) return answer;
     throw new Error(
-      `A simulated participant answered ${JSON.stringify(response)} with the key '${key}', which ${answer ? `gives '${answer.response}'` : 'does not answer the Stimulus'}.`,
+      `A simulated participant answered ${JSON.stringify(response)} with the key '${key}', which ${answer ? `gives '${answer.response}'` : 'does not answer the Screen'}.`,
     );
   }
   if (declared?.button !== undefined || typeof props.content === 'function') return { response, key: null };
   throw new Error(
     declared
-      ? `A simulated participant gave the Stimulus's answer '${declared.response}' without its key, but it has no button.`
-      : `A simulated participant answered ${JSON.stringify(response)}, which the Stimulus does not take. Its answers are ${answersOf(props.response).map((answer) => `'${answer.response}'`).join(', ') || 'none'}.`,
+      ? `A simulated participant gave the Screen's answer '${declared.response}' without its key, but it has no button.`
+      : `A simulated participant answered ${JSON.stringify(response)}, which the Screen does not take. Its answers are ${answersOf(props.response).map((answer) => `'${answer.response}'`).join(', ') || 'none'}.`,
   );
 }
 
-function Stimulus({ content, response, displayDurationMs, className = '', containerClass, centered = true, animate = false, next, store }: StimulusProps) {
+function Screen({ content, response, displayDurationMs, className = '', containerClass, centered = true, animate = false, next, store }: ScreenProps) {
   const th = t(useTheme());
   // The content and its buttons, hidden until the images in the content can show
   const stageRef = useRef<HTMLDivElement>(null);
@@ -147,7 +147,7 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
     const timeoutMs = response?.timeLimitMs ?? displayDurationMs ?? Number.POSITIVE_INFINITY;
     const recordAll = response?.recordAll === true;
     const endsAtAnswer = response?.endsTrial !== false && !recordAll;
-    const answers: StimulusAnswer[] = [];
+    const answers: ScreenAnswer[] = [];
     const halfFrame = halfFrameMs(refreshRate);
     // The frame that paints the stimulus, and the next one, with which it appears
     let paintedAt: number | undefined;
@@ -266,7 +266,7 @@ function Stimulus({ content, response, displayDurationMs, className = '', contai
 }
 
 /**
- * A canvas in a Stimulus's content, which `draw` paints when the stimulus appears and again whenever
+ * A canvas in a Screen's content, which `draw` paints when the stimulus appears and again whenever
  * `draw` changes. Its size works as a CanvasBlock's does.
  */
 export function Canvas({
@@ -312,15 +312,19 @@ export function Canvas({
   );
 }
 
+/** What a Screen's `respond` simulator receives: the content, how it can be answered, and the answers so far. */
+type ScreenStimulus = Pick<ScreenFields, 'content' | 'displayDurationMs'> &
+  ScreenResponseFields & { answers: { answer: unknown; key: string | null; reactionTimeMs: number }[] };
+
 /**
- * What a Stimulus's `respond` simulator decides: the answer and its reaction time, or nulls for none.
+ * What a Screen's `respond` simulator returns: the answer and its reaction time, or nulls for none.
  * The key says how the answer was given, null for a button; left out, it is the answer's own.
  */
-type StimulusDecision = { value: { response: unknown; key?: string | null; reactionTimeMs: number | null } };
+type ScreenSimulatorResult = { response: { answer: unknown; key?: string | null; reactionTimeMs: number | null } };
 
 export default defineComponent({
-  name: 'Stimulus',
-  component: Stimulus,
+  name: 'Screen',
+  component: Screen,
   check: ({ props }) => {
     if (props === undefined) return undefined;
     const answers = answersOf(props.response);
@@ -330,7 +334,7 @@ export default defineComponent({
       props.response?.timeLimitMs !== undefined ||
       props.displayDurationMs !== undefined;
     if (!ends) {
-      return 'A Stimulus would never end. Give it a displayDurationMs, or a response with a timeLimitMs, or with keys, buttons or choices whose first answer ends it.';
+      return 'A Screen would never end. Give it a displayDurationMs, or a response with a timeLimitMs, or with keys, buttons or choices whose first answer ends it.';
     }
     // Keys count in any case, so two that differ only in case are the same key
     const givenBy = new Map<string, string>();
@@ -339,7 +343,7 @@ export default defineComponent({
         if (!way) continue;
         const other = givenBy.get(way);
         if (other !== undefined) {
-          return `The Stimulus's answers '${other}' and '${answer.response}' share the ${way}, so only one of them can be given.`;
+          return `The Screen's answers '${other}' and '${answer.response}' share the ${way}, so only one of them can be given.`;
         }
         givenBy.set(way, answer.response);
       }
@@ -348,7 +352,7 @@ export default defineComponent({
   },
   // A trial that records every answer has a CSV row for each, or one without an answer
   csv: {
-    stimulus: (row) => {
+    screen: (row) => {
       const { responses, ...first } = row.recorded;
       return responses && responses.length > 0 ? responses.map((answer) => ({ ...answer, options: first.options })) : first;
     },
@@ -358,25 +362,33 @@ export default defineComponent({
     const recordAll = props.response?.recordAll === true;
     const endsAtAnswer = props.response?.endsTrial !== false && !recordAll;
     const buttonDelayMs = props.response?.buttonDelayMs ?? 0;
-    const answers: StimulusAnswer[] = [];
+    const answers: ScreenAnswer[] = [];
     // One answer after another, under the browser's rules: an answer counts within the trial's
     // time, and with recordAll, each after the one before
     do {
-      const result = await simulators.respond({ props, participant, answers });
+      const result = await simulators.respond({
+        stimulus: {
+          content: props.content,
+          displayDurationMs: props.displayDurationMs,
+          ...props.response,
+          answers: answers.map(({ response, ...rest }) => ({ answer: response, ...rest })),
+        },
+        participant,
+      });
       participant = result.participant ?? participant;
-      const { response, key, reactionTimeMs } = result.value;
-      if (response === null || reactionTimeMs === null || reactionTimeMs >= timeoutMs) break;
+      const { answer: given, key, reactionTimeMs } = result.response;
+      if (given === null || reactionTimeMs === null || reactionTimeMs >= timeoutMs) break;
       const previous = answers.at(-1);
       if (previous && reactionTimeMs <= previous.reactionTimeMs) {
         throw new Error(
-          `A simulated participant answered a Stimulus at ${reactionTimeMs} ms, which is not after the answer before at ${previous.reactionTimeMs} ms.`,
+          `A simulated participant answered a Screen at ${reactionTimeMs} ms, which is not after the answer before at ${previous.reactionTimeMs} ms.`,
         );
       }
-      const answer = { ...recordAnswer(props, response, key), reactionTimeMs };
+      const answer = { ...recordAnswer(props, given, key), reactionTimeMs };
       // Content that answers by itself needs no button
       if (answer.key === null && reactionTimeMs < buttonDelayMs && typeof props.content !== 'function') {
         throw new Error(
-          `A simulated participant clicked a Stimulus's button at ${reactionTimeMs} ms, before the buttons appear at ${buttonDelayMs} ms.`,
+          `A simulated participant clicked a Screen's button at ${reactionTimeMs} ms, before the buttons appear at ${buttonDelayMs} ms.`,
         );
       }
       answers.push(answer);
@@ -384,29 +396,29 @@ export default defineComponent({
 
     const durationMs = endsAtAnswer && answers.length > 0 ? answers[0].reactionTimeMs : timeoutMs;
     if (durationMs === Number.POSITIVE_INFINITY) {
-      throw new Error('A simulated participant gave no answer to a Stimulus that only an answer ends.');
+      throw new Error('A simulated participant gave no answer to a Screen that only an answer ends.');
     }
     return { recorded: recordOf(answers, props.response), participant, durationMs };
   },
   defaultSimulators: {
     // One answer: a trial that records every answer gets no second
-    respond: ({ props, answers: given }): StimulusDecision => {
-      if (given.length > 0) return { value: { response: null, reactionTimeMs: null } };
-      const answers = answersOf(props.response);
+    respond: ({ stimulus }: SimulatorArgs<ScreenStimulus>): ScreenSimulatorResult => {
+      if (stimulus.answers.length > 0) return { response: { answer: null, reactionTimeMs: null } };
+      const answers = answersOf(stimulus);
       if (answers.length > 0) {
         const answer = answers[Math.floor(uniform(0, answers.length))];
-        const delayMs = answer.key === undefined ? (props.response?.buttonDelayMs ?? 0) : 0;
-        return { value: { response: answer.response, reactionTimeMs: Math.round(delayMs + uniform(300, 1500)) } };
+        const delayMs = answer.key === undefined ? (stimulus.buttonDelayMs ?? 0) : 0;
+        return { response: { answer: answer.response, reactionTimeMs: Math.round(delayMs + uniform(300, 1500)) } };
       }
-      if (props.response?.keys === true) {
-        return { value: { response: ' ', reactionTimeMs: Math.round(uniform(300, 1500)) } };
+      if (stimulus.keys === true) {
+        return { response: { answer: ' ', reactionTimeMs: Math.round(uniform(300, 1500)) } };
       }
-      if (typeof props.content === 'function') {
+      if (typeof stimulus.content === 'function') {
         throw new Error(
-          "A Stimulus whose content answers through respond needs a simulator of its own, since the simulation cannot guess its answers. Give the trial one with .simulators({ respond: ({ participant }) => ({ value: { response, reactionTimeMs } }) }).",
+          "A Screen whose content answers through respond needs a simulator of its own, since the simulation cannot guess its answers. Give the trial one with .simulators({ respond: ({ participant }) => ({ response: { answer, reactionTimeMs } }) }).",
         );
       }
-      return { value: { response: null, reactionTimeMs: null } };
+      return { response: { answer: null, reactionTimeMs: null } };
     },
   },
 });

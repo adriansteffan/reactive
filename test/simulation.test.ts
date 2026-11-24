@@ -15,12 +15,12 @@ const Rated = defineComponent({
   defaultSimulators: {
     rate: async () => {
       await new Promise((resolve) => setTimeout(resolve, Math.random() * 5));
-      return { value: normal(4, 1) };
+      return { response: normal(4, 1) };
     },
   },
   simulate: async ({ props, simulators, participant }) => {
-    const result = await simulators.rate({ props, participant });
-    return { recorded: { rating: result.value + props.item }, durationMs: uniform(100, 500) };
+    const result = await simulators.rate({ stimulus: { item: props.item }, participant });
+    return { recorded: { rating: result.response + props.item }, durationMs: uniform(100, 500) };
   },
 });
 

@@ -44,7 +44,7 @@ export default defineExperiment({
 Premade components available so far:
 
 * Text: A simple display of Text and a Button
-* Stimulus: Any React or a canvas, answered by keys, buttons, or the content itself (see [Stimuli](#stimuli))
+* Screen: Any React or a canvas, answered by keys, buttons, or the content itself (see [Screens](#screens))
 * PlainInput: A text input with a prompt, of one line or several (`rows`), that can ask for a minimum length (`minLength`)
 * MicrophoneCheck: used to test the voice recording feature and choose a preferred microphone to use
 * CanvasBlock: A sequence of canvas slides with keyboard responses, for timed tasks (see [Timed slides](#timed-slides))
@@ -110,7 +110,7 @@ Props, metadata, conditions and store updates can be functions of the timeline c
 Text.trial(({ data }) => ({ content: <p>Hello {PlainInput.getLatest(data, 'nickname').recorded.value}</p> }));
 
 // Repeat the practice until 8 of the last 10 answers are correct
-whileBlock(({ data }) => Stimulus.getAll(data, 'practice').slice(-10)
+whileBlock(({ data }) => Screen.getAll(data, 'practice').slice(-10)
   .filter((row) => row.recorded.response === row.metadata?.correct).length < 8, [practice]),
 ```
 
@@ -176,12 +176,12 @@ On the settings screen, the block's screen is listed as an item of its own, so t
 
 Within one timeline, two different trials cannot share a name, even if their components differ, unless they sit in different branches of the same `ifBlock`. A name cannot be `url` or `session`, or start with `url_` or `session_`, since its columns in the session CSV would then take the library's (see [Output files](#output-files)); the types reject these names too. An unnamed trial that goes to the session CSV is named after its component for its columns there: the first `PlainInput` (`PlainInput_value`), the next ones `PlainInput_2`, `PlainInput_3` and so on, in the order they appear in the timeline. These names count positions, so they change when the timeline does; give a trial a name of its own when your analysis reads its columns.
 
-### Stimuli
+### Screens
 
-`Stimulus` shows any React and takes an answer, by a key, a button, or both:
+`Screen` shows any React and takes an answer, by a key, a button, or both:
 
 ```tsx
-Stimulus.trial('face', {
+Screen.trial('face', {
   content: <img src={face} />,
   response: {
     choices: {
@@ -213,7 +213,7 @@ The buttons are all as wide as the widest, so that none stands out. `centered: f
 The content is shown as it is. Text that should look like that of the other screens goes in an `Article`:
 
 ```tsx
-Stimulus.trial('vote', {
+Screen.trial('vote', {
   content: (
     <Article>
       <h2>How would you decide?</h2>
@@ -225,13 +225,13 @@ Stimulus.trial('vote', {
 }),
 ```
 
-With `endsTrial: false`, every trial lasts until its time limit, whenever the answer came, as fixed-duration designs need. With `recordAll`, a trial records each answer in `responses`, in order, such as a press for every target in a stream; `response`, `key` and `reactionTimeMs` still hold the first. In the stimulus CSV, such a trial has a row for each answer, or one empty row without any. Both need a time limit, and the types reject `recordAll` together with `endsTrial: true`.
+With `endsTrial: false`, every trial lasts until its time limit, whenever the answer came, as fixed-duration designs need. With `recordAll`, a trial records each answer in `responses`, in order, such as a press for every target in a stream; `response`, `key` and `reactionTimeMs` still hold the first. In the screen CSV, such a trial has a row for each answer, or one empty row without any. Both need a time limit, and the types reject `recordAll` together with `endsTrial: true`.
 
 Named choices record what an answer means, so a counterbalanced key mapping stays in the experiment and out of the analysis:
 
 ```tsx
 timeline: ({ group }) => [
-  Stimulus.trial('face', {
+  Screen.trial('face', {
     content: <img src={face} />,
     response: {
       choices: {
@@ -248,24 +248,28 @@ Both groups record `happy` and `sad`, and the key next to it. Two answers that s
 The content can also answer by itself. As a function, it receives `respond`, which ends the trial with whatever it is given as the `response`; an object is written to the CSV as JSON. The function is rendered as a component, so it can use hooks. `Canvas` draws within the content, sized like a CanvasBlock, and its `onClick` gives a click's position in the drawing's coordinates:
 
 ```tsx
-Stimulus.trial('location', {
+Screen.trial('location', {
   content: ({ respond }) => (
     <Canvas width={600} height={400} draw={drawScene} onClick={(x, y) => respond({ x, y })} />
   ),
 }),
 ```
 
-The simulation cannot guess such answers, so a Stimulus whose content answers needs a simulator of its own (see [Overriding simulators on a trial](#overriding-simulators-on-a-trial)):
+The simulation cannot guess such answers, so a Screen whose content answers needs a simulator of its own (see [Overriding simulators on a trial](#overriding-simulators-on-a-trial)):
 
 ```tsx
-.simulators({ respond: () => ({ value: { response: { x: 300, y: 200 }, reactionTimeMs: 900 } }) })
+.simulators({ respond: () => ({ response: { answer: { x: 300, y: 200 }, reactionTimeMs: 900 } }) })
 ```
 
-A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ response: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the Stimulus does not take, or a key that gives another answer, stops the simulation with an error. For a trial that records every answer, `respond` is asked again after each, with the `answers` so far, until it gives none or one after the time limit; each answer has to come after the one before:
+A simulated answer is recorded as the browser would record it. Its `key` says how it was given, `null` for a button or the content's `respond`; left out, it is the answer's own key, so `{ answer: 'happy', reactionTimeMs: 700 }` records the F of the example above. An answer the Screen does not take, or a key that gives another answer, stops the simulation with an error. For a trial that records every answer, `respond` is asked again after each, with the answers so far as `stimulus.answers`, until it gives none or one after the time limit; each answer has to come after the one before:
 
 ```tsx
 // a tap every 700 ms
-.simulators({ respond: ({ answers }) => ({ value: { response: ' ', reactionTimeMs: (answers.length + 1) * 700 } }) })
+.simulators({
+  respond: ({ stimulus }) => ({
+    response: { answer: ' ', reactionTimeMs: (stimulus.answers.length + 1) * 700 },
+  }),
+})
 ```
 
 Times work as for slides (below): a reaction time runs from the frame with which the stimulus appeared to the moment the browser timestamped the key press or click, and a key pressed before the stimulus appeared does not count. The stimulus appears once the images in its content have loaded, so their loading time is not part of a reaction time or a display duration; an image that fails to load shows as broken. Background images in CSS and videos are not waited for. Rendering a page can take varying time, though, so fast sequences, such as a fixation cross, a 50 ms stimulus and a mask, belong in a CanvasBlock.
@@ -306,7 +310,7 @@ CanvasBlock.trial('main', {
 | `draw(ctx, width, height)` | Draws the slide on a canvas cleared to white, with black as the fill color |
 | `displayDurationMs` | How long the drawing stays visible |
 | `response.keys` | The keys that count as a response, or `true` for any key (see below) |
-| `response.choices` | Responses recorded by their names, each given by its `key`, as on a Stimulus |
+| `response.choices` | Responses recorded by their names, each given by its `key`, as on a Screen |
 | `response.click` | Takes a click on the canvas as a response |
 | `response.timeLimitMs` | How long after the slide appears a response counts |
 | `response.endsSlide` | Whether the first response ends the slide; `true` by default |
@@ -531,7 +535,7 @@ Each built-in component (Text, Quest, CanvasBlock, Upload, etc.) has a **simulat
 
 For example, Quest's simulate function iterates through questions and calls `simulators.answerQuestion()` for each one. The default `answerQuestion` picks random valid answers. You can override it to model specific participant behavior.
 
-Simulators and simulate functions take a single object, so each one names only what it uses. A simulator receives `props` and `participant`, plus whatever the simulate function passes along (`question`, for `answerQuestion`). It returns `{ value, participant }`: its decision as `value`, and the new `participant` if the participant changed; without one, the participant stays as it was. It may be async, for example to ask an LLM (see [LLM Integration](#llm-integration)).
+Simulators and simulate functions take a single object, so each one names only what it uses. A simulator receives a `stimulus` and the `participant`, and returns a `response` and the `participant`. The stimulus is what the participant can perceive at that point, such as the `question` for `answerQuestion`, and what they know from before belongs in `participant`. A simulator whose participant does not change can leave them out of what it returns. It may be async, for example to ask an LLM (see [LLM Integration](#llm-integration)).
 
 ### Overriding simulators on a trial
 
@@ -539,25 +543,25 @@ Simulators and simulate functions take a single object, so each one names only w
 
 ```tsx
 PlainInput.trial('name', { content: <p>What is your name?</p> }).simulators({
-  respond: ({ participant }) => ({ value: participant.nickname }),
+  respond: ({ participant }) => ({ response: participant.nickname }),
 }),
 ```
 
 The override is merged with the component's defaults — you only need to specify the decision functions you want to change. A replacement returns what the function it replaces returns, which the types check, and may leave out `participant` to keep the participant as it was. A CanvasBlock's `respondToSlide` also receives the `slide`, so one replacement can decide each slide's response.
 
-A replacement also receives the component's default simulator, to build on what it decides. It runs the default with the input passed to it:
+A replacement also receives the component's default simulator, to build on its response. It runs the default with the arguments passed to it:
 
 ```tsx
 Text.trial('intro').simulators({
   // The default response, only twice as slow
-  respond: (input, defaultSimulator) => {
-    const result = defaultSimulator(input);
-    return { ...result, value: { ...result.value, reactionTimeMs: result.value.reactionTimeMs * 2 } };
+  respond: (args, defaultSimulator) => {
+    const result = defaultSimulator(args);
+    return { ...result, response: { ...result.response, reactionTimeMs: result.response.reactionTimeMs * 2 } };
   },
 }),
 ```
 
-Spreading `result` keeps the participant the default returned. To run the default for a different participant, pass it one: `defaultSimulator({ ...input, participant: changed })`.
+Spreading `result` keeps the participant the default returned. To run the default for a different participant, pass it one: `defaultSimulator({ ...args, participant: changed })`.
 
 ### Custom components
 
@@ -569,17 +573,17 @@ export default defineComponent({
   component: MyTrialView,
   // Simulate function: uses shared trial logic + decision functions
   simulate: async ({ props, simulators, participant }) => {
-    const result = await simulators.decide({ props, participant });
-    return { recorded: { choice: result.value }, participant: result.participant };
+    const result = await simulators.decide({ stimulus: { options: props.options }, participant });
+    return { recorded: { choice: result.response }, participant: result.participant };
   },
   // Default simulators: one per decision point
   defaultSimulators: {
-    decide: () => ({ value: 'default_choice' }),
+    decide: ({ stimulus }: SimulatorArgs<{ options: string[] }>) => ({ response: stimulus.options[0] }),
   },
 });
 ```
 
-A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data` and `store`), so a simulation can depend on earlier answers, read with `getAll` and `getLatest`. It awaits its simulators, since a replacement may be async. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participant ?? participant`), and returns the last one as its `participant`.
+A simulate function receives the trial's `props`, the `participant` and the `simulators`, along with the timeline context (`data` and `store`), so a simulation can depend on earlier answers, read with `getAll` and `getLatest`. It passes each simulator only what the participant can perceive, and awaits it, since a replacement may be async. `SimulatorArgs` declares the stimulus, which the types then check in the simulate function and in replacements; a simulator that does not declare its stimulus takes any. When it calls several simulators in a row, it passes each one the participant the previous one returned (`participant = result.participant ?? participant`), and returns the last one as its `participant`.
 
 A component that records nothing, such as a screen of instructions, can use `simulate: noopSimulate`, which moves on at once.
 
@@ -646,20 +650,20 @@ createParticipants: () => {
 
 ### Built-in simulator decision functions
 
-| Component | Decision functions | Its `value` | Default behavior |
-|---|---|---|---|
-| Text | `respond` | `{ key, reactionTimeMs }` | Click button, random reaction time |
-| Stimulus | `respond`, also given the `answers` so far | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT, after `buttonDelayMs` for a button; a Stimulus whose content answers needs its own |
-| PlainInput | `respond` | the text entered | Returns `'simulated_input'`, filled up to `minLength` |
-| Quest | `answerQuestion`, also given `question` | `{ answer, durationMs }` | Random valid answer per question type |
-| CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }`, or `{ x, y, reactionTimeMs }` for a click | Random key from the slide's `keys` and `choices`, or a random point on a slide that takes clicks, random RT; it counts under the same rules as a real response |
-| Tutorial | `respondToSlide`, also given `slideIndex` | `{ data, durationMs }` | Advances through slides, no interaction data |
-| RandomDotKinematogram | `respond` | `{ key, reactionTimeMs }` | Random key from `allowedResponseKeys`, random RT (may timeout) |
-| Upload | *(none)* | | Builds CSVs and POSTs to backend |
-| StoreUI | *(none)* | | Uses field default values |
-| CheckDevice | *(none)* | | Returns simulated device info |
-| VoiceRecording | `respondTTS`, `respondBase64` | the text to speak, or the audio as base64 | Platform TTS with default text; falls back to dummy sine tone |
-| fullscreenBlock's screen, MicrophoneCheck, ProlificEnding, RequestFilePermission | *(none)* | | No-op, advances immediately |
+| Component | Decision functions | `stimulus` | `response` | Default behavior |
+|---|---|---|---|---|
+| Text | `respond` | `content`, `buttonText`, `allowedResponseKeys` | `{ key, reactionTimeMs }` | Click button, random reaction time |
+| Screen | `respond` | `content`, `displayDurationMs`, the fields of the trial's `response`, and the `answers` so far | `{ answer, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT, after `buttonDelayMs` for a button; a Screen whose content answers needs its own |
+| PlainInput | `respond` | `content`, `minLength` | the text entered | Returns `'simulated_input'`, filled up to `minLength` |
+| Quest | `answerQuestion` | `question` | `{ answer, durationMs }` | Random valid answer per question type |
+| CanvasBlock | `respondToSlide` | `slide`, and the canvas's `width` and `height` | `{ key, reactionTimeMs }`, or `{ x, y, reactionTimeMs }` for a click | Random key from the slide's `keys` and `choices`, or a random point on a slide that takes clicks, random RT; it counts under the same rules as a real response |
+| Tutorial | `respondToSlide` | `slide`, `slideIndex` | `{ data, durationMs }` | Advances through slides, no interaction data |
+| RandomDotKinematogram | `respond` | the trial's settings, except its `feedback` | `{ key, reactionTimeMs }` | A drift-diffusion model (may timeout) |
+| Upload | *(none)* | | | Builds CSVs and POSTs to backend |
+| StoreUI | *(none)* | | | Uses field default values |
+| CheckDevice | *(none)* | | | Returns simulated device info |
+| VoiceRecording | `respondTTS`, `respondBase64` | `content` | the text to speak, or the audio as base64 | Platform TTS with default text; falls back to dummy sine tone |
+| fullscreenBlock's screen, MicrophoneCheck, ProlificEnding, RequestFilePermission | *(none)* | | | No-op, advances immediately |
 
 
 ## Data Saving
@@ -688,7 +692,7 @@ Upload.trial('upload')
 |---|---|---|
 | PlainInput, Quest, CheckDevice, VoiceRecording | session | Columns in the single session row, namespaced by trial name |
 | Text | `text` | One row per Text component |
-| Stimulus | `stimulus` | One row per Stimulus |
+| Screen | `screen` | One row per Screen |
 | CanvasBlock | `canvas` | One row per slide, with built-in flattener |
 | StoreUI | `storeui` | One row per StoreUI occurrence |
 | RandomDotKinematogram | `rdk` | One row per RDK trial |
@@ -729,7 +733,7 @@ A name of a file the component does not write, or a plain name for a component w
 
 ### Session columns
 
-The session CSV holds a single row per participant. A component with `session: true` gives each of its trials columns there, one per field of the response, prefixed with the trial's name (`nickname_value`). A function picks the columns instead, and returns them as one object:
+The session CSV holds a single row per participant. A component with `session: true` gives each of its trials columns there, one per field it records, prefixed with the trial's name (`nickname_value`). A function picks the columns instead, and returns them as one object:
 
 ```tsx
 defineComponent({
@@ -740,7 +744,7 @@ defineComponent({
 });
 ```
 
-A trial's `.session(true)` puts its columns in the session CSV although its component does not, and `.session(false)` keeps them out. Something recorded as a list has no fields to spread into columns, so it needs a function: the types reject `true` for it, and a list that reaches the session CSV from a component that does not declare its response stops the experiment during development and simulation.
+A trial's `.session(true)` puts its columns in the session CSV although its component does not, and `.session(false)` keeps them out. Something recorded as a list has no fields to spread into columns, so it needs a function: the types reject `true` for it, and a list that reaches the session CSV from a component that does not declare what it records stops the experiment during development and simulation.
 
 ### Adding session-level data
 
@@ -758,7 +762,7 @@ Upload.trial('upload', ({ store, data }) => ({
 
 ### Custom flatteners
 
-Without a flattener, each trial is one row, with the fields it recorded as columns, and a trial that recorded a list is one row per item, like CanvasBlock's slides. To give a trial rows of another shape, map the file to a function that returns its row, or a list of rows. The function reads the trial's row with the component's response, so TypeScript checks what it reads:
+Without a flattener, each trial is one row, with the fields it recorded as columns, and a trial that recorded a list is one row per item, like CanvasBlock's slides. To give a trial rows of another shape, map the file to a function that returns its row, or a list of rows. The function reads the trial's row with what the component records, so TypeScript checks what it reads:
 
 ```tsx
 defineComponent({
@@ -776,7 +780,7 @@ defineComponent({
 
 Each row automatically gets standard trial fields prefixed with `trial_` (`trial_name`, `trial_trialNumber`, `trial_startMs`, etc.) plus the trial's metadata prefixed with `meta_`.
 
-Column names starting with `trial_`, `meta_`, `response_`, `url_`, `session_` or `slideblock_meta_` belong to the library. A field of a response or of a flattener's output whose name starts with one of them gets `response_` in front (`meta_score` becomes `response_meta_score`), so it can never take the place of a column the library writes.
+Column names starting with `trial_`, `meta_`, `response_`, `url_`, `session_` or `slideblock_meta_` belong to the library. A recorded field, or one of a flattener's output, whose name starts with one of them gets `response_` in front (`meta_score` becomes `response_meta_score`), so it can never take the place of a column the library writes.
 
 ### Multi-CSV components
 
@@ -1059,7 +1063,7 @@ A simulator can let an LLM answer. The cache gives identical prompts the identic
 ```tsx
 PlainInput.trial('reason', { content: <p>Why did you decide this way?</p> }).simulators({
   respond: async ({ participant }) => ({
-    value: await invokeLLM(config, `You are ${participant.age} years old. Why did you decide this way?`),
+    response: await invokeLLM(config, `You are ${participant.age} years old. Why did you decide this way?`),
   }),
 }),
 ```

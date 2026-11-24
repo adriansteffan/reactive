@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { type BaseComponentProps, defineComponent } from '../core/component';
+import { type BaseComponentProps, defineComponent, type SimulatorArgs } from '../core/component';
 import {
   compileSlides,
   endSlide,
@@ -7,6 +7,7 @@ import {
   type SlideAnswer,
   type SlideData,
   type SlideSimulatorResult,
+  type SlideStimulus,
   type SlideTimeline,
   slideTimeoutMs,
   startSlides,
@@ -175,13 +176,16 @@ export default defineComponent({
 
     while (run.slide) {
       const slide = run.slide;
-      const result = await simulators.respondToSlide({ props, participant, slide });
+      const result = await simulators.respondToSlide({
+        stimulus: { slide, width: props.width, height: props.height },
+        participant,
+      });
       participant = result.participant ?? participant;
 
       // The same rules as in the browser: a key or click counts within the slide's time, and ends it
       // unless the slide says otherwise
       const timeoutMs = slideTimeoutMs(slide);
-      const { key, x, y, reactionTimeMs } = result.value;
+      const { key, x, y, reactionTimeMs } = result.response;
       const given =
         key != null
           ? keyAnswer(slide.response, key)
@@ -202,8 +206,8 @@ export default defineComponent({
   },
   defaultSimulators: {
     // One of the slide's ways to respond, at random: a listed key, any key, a choice's key, or a click
-    respondToSlide: ({ props, slide }): SlideSimulatorResult => {
-      const response = (slide as Slide).response;
+    respondToSlide: ({ stimulus: { slide, width, height } }: SimulatorArgs<SlideStimulus>): SlideSimulatorResult => {
+      const response = slide.response;
       const keys = response?.keys === true ? [' '] : (response?.keys ?? []);
       const options: { key?: string; x?: number; y?: number }[] = [
         ...keys.map((key) => ({ key })),
@@ -211,11 +215,11 @@ export default defineComponent({
       ];
       if (response?.click) {
         // A point on the canvas as it would be sized on a 1920 by 1080 screen
-        const size = canvasSize(props.width, props.height, 1920, 1080);
+        const size = canvasSize(width, height, 1920, 1080);
         options.push({ x: uniform(0, size.width), y: uniform(0, size.height) });
       }
-      if (options.length === 0) return { value: { key: null, reactionTimeMs: null } };
-      return { value: { ...options[Math.floor(uniform(0, options.length))], reactionTimeMs: uniform(200, 800) } };
+      if (options.length === 0) return { response: { key: null, reactionTimeMs: null } };
+      return { response: { ...options[Math.floor(uniform(0, options.length))], reactionTimeMs: uniform(200, 800) } };
     },
   },
 });

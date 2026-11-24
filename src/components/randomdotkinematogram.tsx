@@ -10,7 +10,7 @@ import {
 import type { CSSProperties } from 'react';
 import { BaseComponentProps } from '../core/component';
 import { shuffle } from '../utils/array';
-import { defineComponent } from '../core/component';
+import { defineComponent, type SimulatorArgs } from '../core/component';
 import { simulateDDMTrial, mapDDMChoice } from '../utils/ddm';
 import { type ResponseKey, responseKey } from '../utils/keys';
 
@@ -997,8 +997,9 @@ export const RandomDotKinematogram = defineComponent({
   csv: 'rdk',
   simulate: async ({ props, simulators, participant }) => {
     const merged: any = { ...RDK_DEFAULTS, ...props };
-    const result = await simulators.respond({ props: merged, participant });
-    const { reactionTimeMs: rt, key } = result.value;
+    const { feedback: _feedback, ...stimulus } = merged;
+    const result = await simulators.respond({ stimulus, participant });
+    const { reactionTimeMs: rt, key } = result.response;
 
     const preTrialDuration = merged.preTrialMessage?.durationMs ?? 0;
     const elapsed = merged.responseEndsTrial && rt != null ? rt : merged.timeLimitMs;
@@ -1032,26 +1033,26 @@ export const RandomDotKinematogram = defineComponent({
     };
   },
   defaultSimulators: {
-    respond: ({ props }) => {
+    respond: ({ stimulus }: SimulatorArgs<Omit<RDKSettings, 'feedback'>>) => {
       const ddm = simulateDDMTrial({
-        driftRate: { distribution: 'normal', mean: 0.005 * (props.coherence ?? RDK_DEFAULTS.coherence), sd: 0.0012 },
+        driftRate: { distribution: 'normal', mean: 0.005 * (stimulus.coherence ?? RDK_DEFAULTS.coherence), sd: 0.0012 },
         boundaries: 0.75,
         startingPoint: 0,
         noiseLevel: 0.02,
         sensoryDelayMs: { distribution: 'uniform', min: 150, max: 250 },
         motorDelayMs: { distribution: 'uniform', min: 130, max: 210 },
-        timeLimitMs: props.timeLimitMs ?? RDK_DEFAULTS.timeLimitMs,
-        stimOffsetMs: props.displayDurationMs ?? props.timeLimitMs ?? RDK_DEFAULTS.timeLimitMs,
+        timeLimitMs: stimulus.timeLimitMs ?? RDK_DEFAULTS.timeLimitMs,
+        stimOffsetMs: stimulus.displayDurationMs ?? stimulus.timeLimitMs ?? RDK_DEFAULTS.timeLimitMs,
         postStimStrategy: { type: 'continue' },
       });
 
-      const allowed = props.allowedResponseKeys ?? RDK_DEFAULTS.allowedResponseKeys;
-      const correct = props.correctResponse === undefined ? [] : [props.correctResponse].flat();
+      const allowed = stimulus.allowedResponseKeys ?? RDK_DEFAULTS.allowedResponseKeys;
+      const correct = stimulus.correctResponse === undefined ? [] : [stimulus.correctResponse].flat();
       // With any key allowed, the simulated participant presses the correct key, or else space
       const keys = allowed === true ? [...correct, ' '] : allowed === false ? [] : allowed;
-      const key = mapDDMChoice(ddm.choice, keys, props.correctResponse);
+      const key = mapDDMChoice(ddm.choice, keys, stimulus.correctResponse);
 
-      return { value: { reactionTimeMs: key ? ddm.reactionTimeMs : null, key } };
+      return { response: { reactionTimeMs: key ? ddm.reactionTimeMs : null, key } };
     },
   },
 });

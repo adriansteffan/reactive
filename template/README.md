@@ -130,7 +130,7 @@ Each trial component has default decision functions that model participant behav
 
 ```tsx
 PlainInput.trial('name', { content: <p>What is your name?</p> }).simulators({
-  respond: ({ participant }) => ({ value: participant.nickname }),
+  respond: ({ participant }) => ({ response: participant.nickname }),
 }),
 ```
 

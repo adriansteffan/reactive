@@ -60,8 +60,8 @@ function PlainInput({
         {content}
       </article>
 
-      <form onSubmit={handleSubmit}>
-      <div className={`mt-8 ${animate ? 'animate-slide-down opacity-0' : ''}`}>
+      <form onSubmit={handleSubmit} className={animate ? 'animate-slide-down opacity-0' : ''}>
+      <div className='mt-8'>
         {rows > 1 ? (
           <textarea {...inputProps} rows={rows} className={`block leading-relaxed ${inputClass}`} />
         ) : (
@@ -75,10 +75,7 @@ function PlainInput({
       </div>
 
       {buttonText && (
-        <div
-          className={`mt-8 flex justify-center ${animate ? 'animate-fade-in opacity-0' : ''}`}
-          style={animate ? { animationDelay: '1s' } : {}}
-        >
+        <div className='mt-8 flex justify-center'>
           <button
             type='submit'
             disabled={!canSubmit}

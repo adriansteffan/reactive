@@ -65,7 +65,7 @@ function MicrophoneSelect({
     <div className='relative w-64 mx-auto mt-8 mb-8'>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2 border-2 transition-all text-left font-bold ${th.buttonBg} ${th.buttonBorder} ${th.buttonShadow} ${disabled ? `${th.buttonDisabledText} cursor-default` : `${th.buttonText} cursor-pointer hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1`} ${isOpen ? 'shadow-none translate-x-1 translate-y-1' : ''}`}
+        className={`w-full px-4 py-2 border-2 transition-all text-left font-bold ${th.buttonBg} ${th.buttonBorder} ${th.buttonShadow} ${th.buttonText} ${disabled ? 'opacity-50 cursor-default' : 'cursor-pointer hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1'} ${isOpen ? 'shadow-none translate-x-1 translate-y-1' : ''}`}
       >
         <div className='flex items-center justify-between'>
           <span className='truncate'>{selectedLabel}</span>

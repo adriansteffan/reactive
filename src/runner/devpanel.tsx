@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { ExperimentData } from '../core/rows';
 import type { Store } from '../core/store';
 import type { TrialContent } from '../core/timeline';
+import { hoverArea } from './theme';
 
 // React elements in props refer back to React's internals, which JSON cannot hold
 const showJson = (value: unknown) =>
@@ -30,7 +31,7 @@ export function DevPanel({
       <button
         type='button'
         onClick={() => setOpen(!open)}
-        className='fixed top-2 right-2 z-50 px-3 py-1 bg-white text-black text-xs font-bold border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none cursor-pointer'
+        className={`fixed top-2 right-2 z-50 px-3 py-1 bg-white text-black text-xs font-bold border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none ${hoverArea} cursor-pointer`}
       >
         {open ? '✕' : 'DEV'}
       </button>

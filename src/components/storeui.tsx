@@ -1,7 +1,7 @@
 import { BaseComponentProps } from '../core/component';
 import React, { useState } from 'react';
 import { defineComponent } from '../core/component';
-import { t, useTheme } from '../runner/theme';
+import { hoverArea, t, useTheme } from '../runner/theme';
 import type { ExperimentStore } from '../core/store';
 
 interface BaseFieldConfig {
@@ -159,7 +159,7 @@ function StoreUI({
             {field.type === 'boolean' && (
               <div className="flex items-center">
                 <div 
-                  className={`relative cursor-pointer w-10 h-10 flex items-center justify-center border-2 border-black rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${values[field.storeKey] ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                  className={`relative cursor-pointer w-10 h-10 flex items-center justify-center border-2 border-black rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea} ${values[field.storeKey] ? 'bg-blue-600 text-white' : 'bg-white'}`}
                   onClick={() => handleChange(field.storeKey, !values[field.storeKey])}
                 >
                   <input
@@ -189,7 +189,7 @@ function StoreUI({
                         (values[field.storeKey] || 0) - (field.step || 1)
                       )
                     )}
-                    className="cursor-pointer bg-white h-10 w-10 flex items-center justify-center border-2 border-black font-bold text-black text-lg rounded-full shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none"
+                    className={`cursor-pointer bg-white h-10 w-10 flex items-center justify-center border-2 border-black font-bold text-black text-lg rounded-full shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea}`}
                   >
                     -
                   </button>
@@ -224,7 +224,7 @@ function StoreUI({
                         (values[field.storeKey] || 0) + (field.step || 1)
                       )
                     )}
-                    className="cursor-pointer bg-white h-10 w-10 flex items-center justify-center border-2 border-black font-bold text-black text-lg rounded-full shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none"
+                    className={`cursor-pointer bg-white h-10 w-10 flex items-center justify-center border-2 border-black font-bold text-black text-lg rounded-full shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea}`}
                   >
                     +
                   </button>
@@ -260,7 +260,7 @@ function StoreUI({
         <button
           onClick={handleSave}
           disabled={hasErrors}
-          className={`${th.button} ${hasErrors ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={th.button}
         >
           {buttonText}
         </button>

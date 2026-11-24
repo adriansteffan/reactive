@@ -14,9 +14,11 @@ function PlainInput({
   animate = false,
   placeholder = 'Enter your response here',
   required = true,
+  rows = 1,
+  minLength = 1,
 }: BaseComponentProps<{ value: string }> & {
   content?: React.ReactNode;
-  /** The button that submits the answer; an empty text shows none, and Enter submits. */
+  /** The button that submits the answer. A one-line input can go without it (an empty text), since Enter submits. */
   buttonText?: string;
   className?: string;
   containerClass?: string;
@@ -25,14 +27,23 @@ function PlainInput({
   placeholder?: string;
   /** Keeps the button disabled until something is entered. */
   required?: boolean;
+  /** The lines the input shows. With more than one, Enter starts a new line. */
+  rows?: number;
+  /** Keeps the button disabled until the answer has this many characters, without the spaces around it, and shows the count. */
+  minLength?: number;
 }) {
   const th = t(useTheme());
   const [inputValue, setInputValue] = useState('');
-  const canSubmit = !required || inputValue.trim() !== '';
+  const length = inputValue.trim().length;
+  // An answer that is not required can be left empty, but not too short
+  const canSubmit = length === 0 ? !required : length >= minLength;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
+  const inputProps = {
+    value: inputValue,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setInputValue(e.target.value),
+    placeholder,
   };
+  const inputClass = `w-full px-4 py-3 border-2 ${th.inputBorder} ${th.inputBg} ${th.inputText} rounded-xl text-lg focus-visible:outline-1 ${th.focusOutline}`;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,13 +62,16 @@ function PlainInput({
 
       <form onSubmit={handleSubmit}>
       <div className={`mt-8 ${animate ? 'animate-slide-down opacity-0' : ''}`}>
-        <input
-          type='text'
-          value={inputValue}
-          onChange={handleChange}
-          placeholder={placeholder}
-          className={`w-full px-4 py-3 border-2 ${th.inputBorder} ${th.inputBg} ${th.inputText} rounded-xl text-lg focus:outline-none`}
-        />
+        {rows > 1 ? (
+          <textarea {...inputProps} rows={rows} className={`block leading-relaxed ${inputClass}`} />
+        ) : (
+          <input {...inputProps} type='text' className={inputClass} />
+        )}
+        {minLength > 1 && (
+          <div className={`mt-2 text-sm text-right tabular-nums opacity-60 ${th.text}`}>
+            {length} / {minLength} minimum characters
+          </div>
+        )}
       </div>
 
       {buttonText && (
@@ -68,11 +82,7 @@ function PlainInput({
           <button
             type='submit'
             disabled={!canSubmit}
-            className={
-              canSubmit
-                ? th.button
-                : `px-8 py-3 border-2 font-bold text-lg rounded-xl ${th.buttonDisabledBg} ${th.buttonDisabledBorder} ${th.buttonDisabledText} ${th.buttonDisabledShadow} cursor-default`
-            }
+            className={th.button}
           >
             {buttonText}
           </button>
@@ -98,6 +108,6 @@ export default defineComponent({
     };
   },
   defaultSimulators: {
-    respond: () => ({ value: 'simulated_input' }),
+    respond: ({ props }) => ({ value: 'simulated_input'.padEnd(props.minLength ?? 0, '_') }),
   },
 });

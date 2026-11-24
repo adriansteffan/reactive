@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useContext, createContext, Re
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { BaseComponentProps } from '../core/component';
 import { defineComponent } from '../core/component';
-import { useTheme, t } from '../runner/theme';
+import { hoverArea, useTheme, t } from '../runner/theme';
 import { type ResponseKey, responseKey } from '../utils/keys';
 
 interface TutorialSlideContextValue {
@@ -56,9 +56,6 @@ export interface TutorialProps
   animate?: boolean;
 }
 
-const NAV_BTN_BASE =
-  'px-4 py-3 border-2 font-bold text-lg rounded-xl transition-all duration-100 outline-none focus:outline-none focus:ring-0';
-
 const TutorialComponent = ({
   next,
   slides,
@@ -72,8 +69,7 @@ const TutorialComponent = ({
 }: TutorialProps) => {
   const th = t(useTheme());
 
-  const NAV_BTN_ACTIVE = `${NAV_BTN_BASE} ${th.buttonBg} ${th.buttonText} ${th.buttonBorder} ${th.buttonShadow} cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`;
-  const NAV_BTN_DISABLED = `${NAV_BTN_BASE} ${th.buttonDisabledBg} ${th.buttonDisabledText} ${th.buttonDisabledBorder} ${th.buttonDisabledShadow} cursor-default`;
+  const navButton = `px-4 py-3 border-2 font-bold text-lg rounded-xl transition-all duration-100 outline-none focus:outline-none focus:ring-0 ${th.buttonBg} ${th.buttonText} ${th.buttonBorder} ${th.buttonShadow} cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea}`;
 
   const [page, setPage] = useState(0);
   const [progressMap, setProgressMap] = useState<Record<number, boolean>>({});
@@ -187,7 +183,7 @@ const TutorialComponent = ({
           <div style={{ justifySelf: 'end', marginRight: '1rem' }}>
             <button
               onClick={goBack}
-              className={NAV_BTN_ACTIVE}
+              className={navButton}
               tabIndex={-1}
               onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
               style={{ visibility: page > 0 ? 'visible' : 'hidden' }}
@@ -218,7 +214,7 @@ const TutorialComponent = ({
               onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
               animate={{ scale: pulse ? 1.2 : 1 }}
               transition={{ type: 'spring', stiffness: 500, damping: 15 }}
-              className={(canProgress ? NAV_BTN_ACTIVE : NAV_BTN_DISABLED) + (page === slides.length - 1 ? ' px-8' : '')}
+              className={`${navButton} ${canProgress ? '' : 'opacity-50 pointer-events-none'} ${page === slides.length - 1 ? 'px-8' : ''}`}
             >
               {page === slides.length - 1 ? buttonText : '→'}
             </motion.button>

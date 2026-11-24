@@ -45,7 +45,7 @@ Premade components available so far:
 
 * Text: A simple display of Text and a Button
 * Stimulus: Any React or a canvas, answered by keys, buttons, or the content itself (see [Stimuli](#stimuli))
-* PlainInput: A text input with a prompt
+* PlainInput: A text input with a prompt, of one line or several (`rows`), that can ask for a minimum length (`minLength`)
 * MicrophoneCheck: used to test the voice recording feature and choose a preferred microphone to use
 * CanvasBlock: A sequence of canvas slides with keyboard responses, for timed tasks (see [Timed slides](#timed-slides))
 * StoreUI: A form that writes its fields to the store
@@ -630,7 +630,7 @@ createParticipants: () => {
 |---|---|---|---|
 | Text | `respond` | `{ key, reactionTimeMs }` | Click button, random reaction time |
 | Stimulus | `respond`, also given the `answers` so far | `{ response, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT; a Stimulus whose content answers needs its own |
-| PlainInput | `respond` | the text entered | Returns `'simulated_input'` |
+| PlainInput | `respond` | the text entered | Returns `'simulated_input'`, filled up to `minLength` |
 | Quest | `answerQuestion`, also given `question` | `{ answer, durationMs }` | Random valid answer per question type |
 | CanvasBlock | `respondToSlide`, also given `slide` | `{ key, reactionTimeMs }`, or `{ x, y, reactionTimeMs }` for a click | Random key from the slide's `keys` and `choices`, or a random point on a slide that takes clicks, random RT; it counts under the same rules as a real response |
 | Tutorial | `respondToSlide`, also given `slideIndex` | `{ data, durationMs }` | Advances through slides, no interaction data |

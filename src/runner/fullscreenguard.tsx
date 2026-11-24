@@ -2,6 +2,7 @@ import type React from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { getNative } from '../core/platform';
 import { enterFullscreen, exitFullscreen, isFullscreen } from '../utils/fullscreen';
+import { hoverArea } from './theme';
 
 const SetGuardContext = createContext<(config: FullscreenGuardConfig | null) => void>(() => {});
 
@@ -62,7 +63,7 @@ function GuardPrompt({ cfg }: { cfg: FullscreenGuardConfig }) {
     }
   };
   const buttonText = cfg.buttonText ?? 'Return to Fullscreen';
-  const btnClass = 'px-6 py-3 bg-white text-black text-sm font-bold border-2 border-black rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none cursor-pointer';
+  const btnClass = `px-6 py-3 bg-white text-black text-sm font-bold border-2 border-black rounded-xl shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none ${hoverArea} cursor-pointer`;
 
   if (cfg.mode === 'overlay') {
     return (

@@ -13,10 +13,7 @@ const DARK_TOKENS = {
   buttonText: 'text-black',
   buttonBorder: 'border-black',
   buttonShadow: 'shadow-[2px_2px_0px_rgba(0,0,0,1)]',
-  buttonDisabledBg: 'bg-gray-700',
-  buttonDisabledText: 'text-gray-500',
-  buttonDisabledBorder: 'border-gray-600',
-  buttonDisabledShadow: 'shadow-[2px_2px_0px_rgba(75,85,99,1)]',
+  focusOutline: 'focus-visible:outline-white',
   error: 'text-red-400',
   inputBg: 'bg-gray-700',
   inputBorder: 'border-gray-500',
@@ -39,10 +36,7 @@ const THEME = {
     buttonText: 'text-black',
     buttonBorder: 'border-black',
     buttonShadow: 'shadow-[2px_2px_0px_rgba(0,0,0,1)]',
-    buttonDisabledBg: 'bg-gray-200',
-    buttonDisabledText: 'text-gray-400',
-    buttonDisabledBorder: 'border-gray-400',
-    buttonDisabledShadow: 'shadow-[2px_2px_0px_rgba(156,163,175,1)]',
+    focusOutline: 'focus-visible:outline-black',
     error: 'text-red-500',
     inputBg: '',
     inputBorder: 'border-black',
@@ -64,12 +58,15 @@ const THEME = {
   },
 } as const;
 
+// Keeps the cursor over a button while it shifts on hover. The shift also anchors the ::before to the button.
+export const hoverArea = 'hover:before:absolute hover:before:-inset-1.5';
+
 export function t(theme: Theme) {
   const tokens = THEME[theme];
   return {
     ...tokens,
-    /** The button that ends a screen. */
-    button: `${tokens.buttonBg} cursor-pointer px-8 py-3 border-2 ${tokens.buttonBorder} font-bold ${tokens.buttonText} text-lg rounded-xl ${tokens.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none`,
+    /** The button that ends a screen, faded while it is disabled. */
+    button: `${tokens.buttonBg} cursor-pointer px-8 py-3 border-2 ${tokens.buttonBorder} font-bold ${tokens.buttonText} text-lg rounded-xl ${tokens.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea} focus-visible:outline-2 ${tokens.focusOutline} disabled:opacity-50 disabled:pointer-events-none`,
     /** A screen's text. */
     article: `prose prose-2xl ${tokens.prose} text-xl ${tokens.proseLink} prose-a:underline prose-h1:text-4xl prose-h1:mb-10 prose-h1:font-bold prose-p:mb-4 prose-strong:font-bold ${tokens.text} leading-relaxed`,
   };

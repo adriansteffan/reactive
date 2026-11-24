@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { MicrophoneIcon, PauseIcon, StopIcon, TrashIcon } from './icons';
-import { useTheme, t } from '../runner/theme';
+import { hoverArea, useTheme, t } from '../runner/theme';
 import { useAudioDeviceId } from '../runner/contexts';
 
 // An analyser of the stream's sound, with room for its samples, and a function that stops it
@@ -301,7 +301,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
     handleDiscardVoiceData();
   };
 
-  const btnBase = `flex items-center justify-center p-4 rounded-full border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer transition-colors duration-200`;
+  const btnBase = `flex items-center justify-center p-4 rounded-full border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea} cursor-pointer transition-colors duration-200`;
 
   return (
     <div className='flex flex-col items-center space-y-4 p-4 px-8'>
@@ -385,7 +385,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(({
           <div className='flex space-x-4'>
             <button
               onClick={discardRecording}
-              className={`border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none cursor-pointer flex items-center space-x-2 px-4 py-2 ${th.text} rounded-xl transition-colors duration-200`}
+              className={`border-2 ${th.buttonBorder} ${th.buttonShadow} hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none ${hoverArea} cursor-pointer flex items-center space-x-2 px-4 py-2 ${th.text} rounded-xl transition-colors duration-200`}
             >
               <TrashIcon className='w-4 h-4' />
               <span>{discardButtonText}</span>

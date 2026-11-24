@@ -1,7 +1,9 @@
+import { ChevronDownIcon } from '../components/icons';
 import type { ParamType } from '../core/params';
 
-const fieldClass =
-  'block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm';
+/** The look of the settings page's text fields and dropdowns. */
+export const fieldClass =
+  'block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 shadow-xs transition-[border-color,box-shadow] hover:border-neutral-400 focus:border-neutral-500 focus:ring-3 focus:ring-neutral-200 focus:outline-none sm:text-sm';
 
 /** The settings page's on/off switch. */
 export function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
@@ -9,12 +11,12 @@ export function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
     <button
       type='button'
       onClick={onClick}
-      className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${on ? 'bg-blue-600' : 'bg-gray-200'}`}
+      className={`relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 ${on ? 'bg-neutral-900' : 'bg-neutral-200'}`}
       role='switch'
       aria-checked={on}
     >
       <span
-        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${on ? 'translate-x-5' : 'translate-x-0'}`}
+        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-xs transform transition ease-in-out duration-200 ${on ? 'translate-x-5' : 'translate-x-0'}`}
       />
     </button>
   );
@@ -35,18 +37,25 @@ export function ParamInput({
   values?: readonly (string | number)[];
   defaultValue?: unknown;
 }) {
+  const unset = defaultValue === undefined || defaultValue === '' ? 'Default' : `Default: ${defaultValue}`;
+
   if (values) {
     return (
-      <select className={fieldClass} value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value=''>
-          {defaultValue === undefined ? 'Default (computed for each participant)' : `Default (${defaultValue})`}
-        </option>
-        {values.map((option) => (
-          <option key={String(option)} value={String(option)}>
-            {String(option)}
-          </option>
-        ))}
-      </select>
+      <div className='relative w-full'>
+        <select
+          className={`${fieldClass} cursor-pointer appearance-none truncate pr-9 ${value === '' ? 'text-neutral-400' : ''}`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value=''>{unset}</option>
+          {values.map((option) => (
+            <option key={String(option)} value={String(option)} className='text-black'>
+              {String(option)}
+            </option>
+          ))}
+        </select>
+        <ChevronDownIcon className='pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-neutral-500' />
+      </div>
     );
   }
 
@@ -56,7 +65,7 @@ export function ParamInput({
     return (
       <>
         <Switch on={on} onClick={() => onChange(on ? 'false' : 'true')} />
-        <span className='ml-4 text-gray-500'>{on ? 'True' : 'False'}</span>
+        <span className='ml-4 text-neutral-500'>{on ? 'True' : 'False'}</span>
       </>
     );
   }
@@ -73,14 +82,13 @@ export function ParamInput({
     );
   }
 
-  const hasDefault = defaultValue !== undefined && defaultValue !== '';
   return (
     <input
       type={type === 'number' ? 'number' : 'text'}
       className={fieldClass}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder={hasDefault ? `Default: ${defaultValue}` : 'Enter a value...'}
+      placeholder={unset}
     />
   );
 }

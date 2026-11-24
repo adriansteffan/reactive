@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { type Experiment, previewTimeline } from '../core/experiment';
 import type { EntryInfo } from '../core/timeline';
 import {
@@ -9,7 +9,13 @@ import {
   resolveParams,
   urlParams,
 } from '../core/params';
-import { ParamInput, Switch } from './paraminput';
+import { fieldClass, ParamInput, Switch } from './paraminput';
+
+const buttonClass =
+  'inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900';
+const secondaryButton = `${buttonClass} border-neutral-300 bg-white px-4 py-2 text-neutral-900 hover:bg-neutral-100`;
+const primaryButton = `${buttonClass} border-neutral-900 bg-neutral-900 px-5 py-3 text-white hover:bg-neutral-700`;
+const errorClass = 'mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800';
 
 // A param the experiment does not declare, which a run only records
 type CustomParam = { name: string; value: string };
@@ -56,6 +62,34 @@ function describeParam(name: string, spec: ParamSpec) {
 
 type ParamField = ReturnType<typeof describeParam>;
 
+const fieldsOf = (params: Record<string, ParamSpec> = {}) =>
+  Object.entries(params).map(([name, spec]) => describeParam(name, spec));
+
+function Section({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className='mb-6 overflow-hidden rounded-xl border border-neutral-200 bg-white'>
+      <div className='flex items-center justify-between gap-4 border-b border-neutral-200 px-6 py-5'>
+        <div>
+          <h2 className='text-lg font-medium text-neutral-900'>{title}</h2>
+          {description && <p className='mt-1 text-sm text-neutral-500'>{description}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) => {
   // The form starts from the link the page was opened with
   const [initial] = useState(() => {
@@ -76,19 +110,11 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
       else custom.push({ name, value: asText(value) });
     }
 
-    // The trials the link leaves out are unchecked, with all those in a block it leaves out
-    const excluded = new Set(String(excludeSubset ?? '').split(','));
-    const leftOut = (entries: EntryInfo[]): EntryInfo[] =>
-      entries.flatMap((entry) =>
-        excluded.has(entry.id) || excluded.has(entry.position) ? leavesOf([entry]) : leftOut(entry.children ?? []),
-      );
-    const toggled: Record<string, boolean> = Object.fromEntries(leftOut(opened.entries).map((leaf) => [leaf.id, false]));
-
     return {
       defaults,
       entered,
       custom,
-      toggled,
+      excluded: String(excludeSubset ?? '').split(',').filter(Boolean),
       base64: new URLSearchParams(window.location.search).has('_b'),
     };
   });
@@ -97,10 +123,8 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
   const [customParams, setCustomParams] = useState<CustomParam[]>(initial.custom);
   const [copied, setCopied] = useState(false);
   const [useBase64, setUseBase64] = useState(initial.base64);
-  // Trials checked or unchecked by hand. The others are checked, so a trial the params add later
-  // runs unless someone takes it out.
-  const [toggled, setToggled] = useState<Record<string, boolean>>(initial.toggled);
-  const runs = (leaf: EntryInfo) => toggled[leaf.id] ?? true;
+  // The names and positions of the trials and blocks left out, as the link lists them
+  const [excluded, setExcluded] = useState<string[]>(initial.excluded);
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   // The params build the timeline, and the trials selected in it decide which settings apply
@@ -109,46 +133,55 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
       Object.entries(paramValues).filter(([, value]) => value !== ''),
     );
     const { entries, error } = preview(experiment, entered, initial.defaults);
-    const unchecked = [...new Set(leavesOf(entries).filter((leaf) => !(toggled[leaf.id] ?? true)).map((leaf) => leaf.id))];
-    const subset: Record<string, string> = unchecked.length > 0 ? { excludeSubset: unchecked.join(',') } : {};
+    const subset: Record<string, string> = excluded.length > 0 ? { excludeSubset: excluded.join(',') } : {};
     const { settings, problems } = preview(experiment, { ...entered, ...subset }, initial.defaults);
     return { entries, error, problems, subset, settings };
-  }, [experiment, paramValues, initial.defaults, toggled]);
+  }, [experiment, paramValues, initial.defaults, excluded]);
 
-  const experimentFields = Object.entries((experiment.params ?? {}) as Record<string, ParamSpec>).map(
-    ([name, spec]) => describeParam(name, spec),
-  );
+  const isExcluded = (entry: EntryInfo) => excluded.includes(entry.id) || excluded.includes(entry.position);
+  const leftOut = (entries: EntryInfo[]): EntryInfo[] =>
+    entries.flatMap((entry) => (isExcluded(entry) ? leavesOf([entry]) : leftOut(entry.children ?? [])));
+  const unchecked = leftOut(current.entries);
 
-  // Params left to a default computed for each participant, which the preview draws once
-  const drawnFields = experimentFields.filter((field) => field.computedDefault && !paramValues[field.name]);
+  const setChecked = (leaves: EntryInfo[], checked: boolean) => {
+    const ids = leaves.map((leaf) => leaf.id);
+    const others = unchecked.map((leaf) => leaf.id).filter((id) => !ids.includes(id));
+    // What is left out of other timelines stays
+    const inTimeline = rowsOf(current.entries).flatMap((row) =>
+      'entry' in row ? [row.entry.id, row.entry.position] : [],
+    );
+    const elsewhere = excluded.filter((id) => !inTimeline.includes(id));
+    setExcluded([...new Set([...elsewhere, ...others, ...(checked ? [] : ids)])]);
+  };
 
-  const settingGroups = Object.entries(current.settings)
-    .map(([title, params]) => ({
-      title,
-      fields: Object.entries(params).map(([name, spec]) => describeParam(name, spec)),
-    }))
-    .filter((group) => group.fields.length > 0);
+  const experimentFields = fieldsOf(experiment.params);
+
+  // Until these are set, every participant can get other trials, so none are shown
+  const unsetFields =
+    typeof experiment.timeline === 'function'
+      ? experimentFields.filter((field) => field.computedDefault && !paramValues[field.name])
+      : [];
+  const trialsKnown = unsetFields.length === 0;
+
+  const { General, ...ofComponents } = current.settings;
+  const generalFields = fieldsOf(General);
+  const componentGroups = trialsKnown
+    ? Object.entries(ofComponents).map(([title, params]) => ({ title, fields: fieldsOf(params) }))
+    : [];
 
   const generatedUrl = (() => {
     const values: Record<string, unknown> = {};
-    // Settings of components whose trials are not selected stay out of the link
-    for (const { name, spec, defaultValue } of [
-      ...experimentFields,
-      ...settingGroups.flatMap((group) => group.fields),
-    ]) {
-      const text = paramValues[name];
+    const fields = [...experimentFields, ...generalFields, ...componentGroups.flatMap((group) => group.fields)];
+    for (const [name, text] of Object.entries(paramValues)) {
+      const field = fields.find((field) => field.name === name);
+      // Settings of components whose trials are not selected stay out of the link, once the trials are known
+      if (text === '' || (!field && trialsKnown)) continue;
       // Values equal to the default stay out of the link
-      if (
-        text === undefined ||
-        text === '' ||
-        (defaultValue !== undefined && text === asText(defaultValue))
-      ) {
-        continue;
-      }
+      if (field?.defaultValue !== undefined && text === asText(field.defaultValue)) continue;
       let value: unknown = text;
-      if (useBase64) {
+      if (field && useBase64) {
         try {
-          value = parseParam(name, spec, text);
+          value = parseParam(name, field.spec, text);
         } catch {
           // The preview reports the invalid value
         }
@@ -198,7 +231,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
       <div className='col-span-3'>
         <input
           type='text'
-          className='block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm'
+          className={fieldClass}
           value={param.name}
           onChange={(e) => handleCustomParamChange(index, 'name', e.target.value)}
           placeholder='Parameter name'
@@ -206,17 +239,19 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
       </div>
 
       <div className='col-span-8'>
-        <ParamInput
-          type='string'
+        <input
+          type='text'
+          className={fieldClass}
           value={param.value}
-          onChange={(value) => handleCustomParamChange(index, 'value', value)}
+          onChange={(e) => handleCustomParamChange(index, 'value', e.target.value)}
+          placeholder='Value'
         />
       </div>
 
-      <div className='col-span-1'>
+      <div className='col-span-1 flex justify-end'>
         <button
           onClick={() => setCustomParams((prev) => prev.filter((_, i) => i !== index))}
-          className='inline-flex cursor-pointer items-center justify-center p-2 border border-transparent rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'
+          className='inline-flex cursor-pointer items-center justify-center rounded-lg p-2 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-2 focus-visible:outline-neutral-900'
           aria-label='Remove parameter'
         >
           <svg
@@ -237,29 +272,28 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
   );
 
   const renderParamRow = (param: ParamField) => (
-    <li key={param.name} className='px-4 py-4 sm:px-6'>
+    <li key={param.name} className='px-6 py-4'>
       <div className='grid grid-cols-3 gap-6'>
         <div className='col-span-2'>
           <div className='flex flex-col h-full'>
             <div className='flex items-center'>
-              <label className='text-base font-medium text-gray-900'>{param.name}</label>
-              <span className='ml-2 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600'>
+              <label className='text-base font-medium text-neutral-900'>{param.name}</label>
+              <span className='ml-2 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600'>
                 {param.type}
               </span>
             </div>
             {param.spec.description && (
-              <p className='mt-1 text-sm text-gray-500 flex-grow'>{param.spec.description}</p>
+              <p className='mt-1 text-sm text-neutral-500 flex-grow'>{param.spec.description}</p>
             )}
-            {param.defaultValue !== undefined && (
-              <p className='mt-auto pt-2 text-xs text-gray-500'>
-                Default: <code> {JSON.stringify(param.defaultValue)}</code>
-              </p>
-            )}
-            {param.computedDefault && (
-              <p className='mt-auto pt-2 text-xs text-gray-500'>
-                Default: computed for each participant
-              </p>
-            )}
+            <p className='mt-auto pt-2 text-xs text-neutral-500'>
+              Default:{' '}
+              {param.spec.defaultDescription ??
+                (param.computedDefault ? (
+                  'computed for each participant'
+                ) : (
+                  <code>{JSON.stringify(param.defaultValue)}</code>
+                ))}
+            </p>
           </div>
         </div>
         <div className='col-span-1 flex items-center'>
@@ -278,112 +312,71 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
   return (
     <div className='max-w-4xl mx-auto p-6'>
       <h1 className='text-3xl font-bold mb-4'>Configure a Run</h1>
-      <p className='text-gray-700 mb-6'>
+      <p className='text-neutral-600 mb-6'>
         Configure the experiment by setting parameter values below. Fields left empty will be
         assigned their default value. Once configured, you can copy the URL to run the experiment
         with these settings.
       </p>
 
-      <div className='bg-white shadow overflow-hidden sm:rounded-md mb-8'>
-        <div className='px-4 py-5 border-b border-gray-200 sm:px-6'>
-          <h2 className='text-lg font-medium text-gray-900'>Experiment Parameters</h2>
-          <p className='mt-1 text-sm text-gray-500'>
-            The experiment's own parameters.
-          </p>
-        </div>
+      <Section title='Experiment Parameters' description="The experiment's own parameters.">
         {experimentFields.length === 0 ? (
-          <p className='px-4 py-5 sm:px-6 text-sm text-gray-500 italic'>
-            This experiment declares no parameters.
-          </p>
+          <p className='px-6 py-5 text-sm text-neutral-500'>This experiment declares no parameters.</p>
         ) : (
-          <ul className='divide-y divide-gray-200'>{experimentFields.map(renderParamRow)}</ul>
+          <ul className='divide-y divide-neutral-200'>{experimentFields.map(renderParamRow)}</ul>
         )}
-      </div>
-
-      {drawnFields.length > 0 && (
-        <div className='bg-amber-50 border border-amber-200 text-amber-900 sm:rounded-md p-4 mb-8 text-sm'>
-          The settings and trials below are for{' '}
-          {drawnFields.map((field, index) => (
-            <span key={field.name}>
-              {index > 0 && ', '}
-              <code>{field.name}</code> = <code>{JSON.stringify(initial.defaults[field.name])}</code>
-            </span>
-          ))}
-          , drawn at random for this page. Each participant gets values of their own, which can build other
-          trials; choose a value above to see the trials it builds.
-        </div>
-      )}
+      </Section>
 
       {current.error !== undefined && (
-        <div className='bg-red-50 border border-red-200 text-red-800 sm:rounded-md p-4 mb-8 text-sm'>
-          These parameters do not build a timeline: {current.error}
-        </div>
+        <div className={errorClass}>These parameters do not build a timeline: {current.error}</div>
       )}
 
       {current.problems.length > 0 && (
-        <div className='bg-red-50 border border-red-200 text-red-800 sm:rounded-md p-4 mb-8 text-sm'>
-          Participants could not start with this link: {current.problems.join(' ')}
-        </div>
+        <div className={errorClass}>Participants could not start with this link: {current.problems.join(' ')}</div>
       )}
 
-      <div className='bg-white shadow overflow-hidden sm:rounded-md mb-8'>
-        <div className='px-4 py-5 border-b border-gray-200 sm:px-6'>
-          <h2 className='text-lg font-medium text-gray-900'>Settings</h2>
-          <p className='mt-1 text-sm text-gray-500'>
-            General settings, and those of the components in the selected trials.
-          </p>
-        </div>
-        {settingGroups.map((group) => (
-          <div key={group.title} className='border-b border-gray-200 last:border-b-0'>
-            <h3 className='px-4 pt-4 sm:px-6 text-sm font-semibold text-gray-700'>{group.title}</h3>
-            <ul className='divide-y divide-gray-200'>{group.fields.map(renderParamRow)}</ul>
-          </div>
-        ))}
-      </div>
+      {generalFields.length > 0 && (
+        <Section title='General Settings' description='The settings that every experiment has.'>
+          <ul className='divide-y divide-neutral-200'>{generalFields.map(renderParamRow)}</ul>
+        </Section>
+      )}
 
-      <div className='bg-white shadow overflow-hidden sm:rounded-md mb-8'>
-        <div className='px-4 py-5 border-b border-gray-200 sm:px-6'>
-          <div className='flex justify-between items-center'>
-            <div>
-              <h2 className='text-lg font-medium text-gray-900'>Custom Parameters</h2>
-              <p className='mt-1 text-sm text-gray-500'>
-                Add any additional parameters to be stored in the data for this run.
-              </p>
-            </div>
-            <button
-              onClick={() => setCustomParams((prev) => [...prev, { name: '', value: '' }])}
-              className='inline-flex cursor-pointer items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+      <Section
+        title='Custom Parameters'
+        description='Add any additional parameters to be stored in the data for this run.'
+        action={
+          <button
+            onClick={() => setCustomParams((prev) => [...prev, { name: '', value: '' }])}
+            className={secondaryButton}
+          >
+            <svg
+              xmlns='http://www.w3.org/2000/svg'
+              className='-ml-1 mr-2 h-5 w-5'
+              viewBox='0 0 20 20'
+              fill='currentColor'
             >
-              <svg
-                xmlns='http://www.w3.org/2000/svg'
-                className='-ml-1 mr-2 h-5 w-5'
-                viewBox='0 0 20 20'
-                fill='currentColor'
-              >
-                <path
-                  fillRule='evenodd'
-                  d='M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z'
-                  clipRule='evenodd'
-                />
-              </svg>
-              Add Parameter
-            </button>
-          </div>
-        </div>
-
-        <div className='px-4 py-5 sm:px-6'>
+              <path
+                fillRule='evenodd'
+                d='M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z'
+                clipRule='evenodd'
+              />
+            </svg>
+            Add Parameter
+          </button>
+        }
+      >
+        <div className='px-6 py-5'>
           {customParams.length === 0 ? (
-            <p className='text-sm text-gray-500 italic'>
+            <p className='text-sm text-neutral-500'>
               No custom parameters added. Click "Add Parameter" to create one.
             </p>
           ) : (
             <div>
               <div className='grid grid-cols-12 gap-2 mb-2'>
                 <div className='col-span-3'>
-                  <label className='block text-xs font-medium text-gray-500'>PARAMETER NAME</label>
+                  <label className='block text-xs font-medium text-neutral-500'>PARAMETER NAME</label>
                 </div>
                 <div className='col-span-8'>
-                  <label className='block text-xs font-medium text-gray-500'>VALUE</label>
+                  <label className='block text-xs font-medium text-neutral-500'>VALUE</label>
                 </div>
                 <div className='col-span-1'></div>
               </div>
@@ -391,124 +384,127 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
             </div>
           )}
         </div>
-      </div>
+      </Section>
 
-      {current.entries.length > 0 && (
-        <div className='bg-white shadow overflow-hidden sm:rounded-md mb-8'>
-          <div className='px-4 py-5 border-b border-gray-200 sm:px-6'>
-            <h2 className='text-lg font-medium text-gray-900'>Trial Selection</h2>
-            <p className='mt-1 text-sm text-gray-500'>
-              The checked trials run. A trial that other parameter values add runs too.
+      {!trialsKnown && (
+        <Section title='Trial Selection'>
+          <div className='px-6 py-5 text-sm'>
+            <p className='text-neutral-900'>
+              Set{' '}
+              {new Intl.ListFormat('en').formatToParts(unsetFields.map((field) => field.name)).map((part) =>
+                part.type === 'element' ? <code key={part.value}>{part.value}</code> : part.value,
+              )}{' '}
+              above to see the trials and their settings.
             </p>
+            <p className='mt-1 text-neutral-500'>Both depend on values that are computed for each participant.</p>
           </div>
-
-          <div className='px-4 py-5 sm:px-6'>
-
-            <div className='border border-gray-200 rounded-md overflow-hidden'>
-              <ul className='divide-y divide-gray-200'>
-                {rowsOf(current.entries).map((row) => {
-                  const indent = { paddingLeft: `${16 + row.depth * 24}px` };
-                  if ('elseAt' in row) {
-                    return (
-                      <li key={`else-${row.elseAt}`} style={indent} className='py-1 text-xs font-medium text-gray-400'>
-                        else
-                      </li>
-                    );
-                  }
-                  const { entry } = row;
-                  const leaves = leavesOf([entry]);
-                  const running = leaves.filter(runs).length;
-                  const label = (
-                    <>
-                      <div className='ml-3 w-12 text-xs text-gray-500 font-medium'>#{entry.position}</div>
-                      <div className='flex-grow'>
-                        {entry.name ? (
-                          <span className='font-medium text-gray-900'>{entry.name}</span>
-                        ) : (
-                          <span className='font-medium text-gray-500'>{entry.type}</span>
-                        )}
-                      </div>
-                      <span className='ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800'>
-                        {entry.type}
-                      </span>
-                    </>
-                  );
-                  // Markers, and blocks that hold nothing else, always stay
-                  if (leaves.length === 0) {
-                    return (
-                      <li key={entry.position} style={indent} className='flex items-center pr-4 py-3 text-gray-500'>
-                        <div className='h-4 w-4' />
-                        {label}
-                      </li>
-                    );
-                  }
-                  // A block's box stands for everything in it
-                  return (
-                    <li key={entry.position} className='hover:bg-gray-50'>
-                      <label style={indent} className='flex items-center pr-4 py-3 cursor-pointer'>
-                        <input
-                          type='checkbox'
-                          className='h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer'
-                          checked={running === leaves.length}
-                          ref={(input) => {
-                            if (input) input.indeterminate = running > 0 && running < leaves.length;
-                          }}
-                          onChange={() =>
-                            setToggled((prev) => ({
-                              ...prev,
-                              ...Object.fromEntries(leaves.map((leaf) => [leaf.id, running < leaves.length])),
-                            }))
-                          }
-                        />
-                        {label}
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-        </div>
+        </Section>
       )}
 
-      <div className='bg-white shadow sm:rounded-md p-6 mb-8'>
-        <div className='flex justify-between items-center mb-4'>
-          <h2 className='text-lg font-medium'>Generated URL</h2>
+      {trialsKnown && current.entries.length > 0 && (
+        <Section
+          title='Trial Selection'
+          description='The checked trials run. A trial that other parameter values add runs too.'
+        >
+          <ul className='divide-y divide-neutral-200'>
+            {rowsOf(current.entries).map((row) => {
+              const indent = { paddingLeft: `${24 + row.depth * 24}px` };
+              if ('elseAt' in row) {
+                return (
+                  <li key={`else-${row.elseAt}`} style={indent} className='py-1 text-xs font-medium text-neutral-400'>
+                    else
+                  </li>
+                );
+              }
+              const { entry } = row;
+              const leaves = leavesOf([entry]);
+              const checked = leaves.filter((leaf) => !unchecked.includes(leaf)).length;
+              const label = (
+                <>
+                  <div className='ml-3 w-12 text-xs text-neutral-500 font-medium'>#{entry.position}</div>
+                  <div className='flex-grow'>
+                    {entry.name ? (
+                      <span className='font-medium text-neutral-900'>{entry.name}</span>
+                    ) : (
+                      <span className='font-medium text-neutral-500'>{entry.type}</span>
+                    )}
+                  </div>
+                  <span className='ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-700'>
+                    {entry.type}
+                  </span>
+                </>
+              );
+              // Markers, and blocks that hold nothing else, always stay
+              if (leaves.length === 0) {
+                return (
+                  <li key={entry.position} style={indent} className='flex items-center pr-6 py-3 text-neutral-500'>
+                    <div className='h-4 w-4' />
+                    {label}
+                  </li>
+                );
+              }
+              // A block's box stands for everything in it
+              return (
+                <li key={entry.position} className='hover:bg-neutral-50'>
+                  <label style={indent} className='flex items-center pr-6 py-3 cursor-pointer'>
+                    <input
+                      type='checkbox'
+                      className='h-4 w-4 accent-neutral-900 cursor-pointer'
+                      checked={checked === leaves.length}
+                      ref={(input) => {
+                        if (input) input.indeterminate = checked > 0 && checked < leaves.length;
+                      }}
+                      onChange={() => setChecked(leaves, checked < leaves.length)}
+                    />
+                    {label}
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      )}
+
+      {componentGroups.length > 0 && (
+        <Section title='Component Settings' description='The settings of the components in the selected trials.'>
+          {componentGroups.map((group) => (
+            <div key={group.title} className='border-b border-neutral-200 last:border-b-0'>
+              <h3 className='px-6 pt-4 text-sm font-semibold text-neutral-700'>{group.title}</h3>
+              <ul className='divide-y divide-neutral-200'>{group.fields.map(renderParamRow)}</ul>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      <Section
+        title='Generated URL'
+        action={
           <div className='flex items-center'>
             <Switch on={useBase64} onClick={() => setUseBase64((prev) => !prev)} />
-            <span className='ml-2 text-sm text-gray-600'>
+            <span className='ml-2 text-sm text-neutral-600'>
               {useBase64 ? 'Base64 Encoded' : 'Plain Parameters'}
             </span>
           </div>
+        }
+      >
+        <div className='px-6 py-5'>
+          <div className='flex flex-col md:flex-row gap-3'>
+            <input ref={urlInputRef} type='text' className={fieldClass} value={generatedUrl} readOnly />
+            <button onClick={handleCopyUrl} className={secondaryButton}>
+              {copied ? 'Copied!' : 'Copy URL'}
+            </button>
+          </div>
+          {useBase64 && (
+            <p className='mt-4 text-sm text-neutral-600'>
+              <span className='font-medium'>Note:</span> Base64 encoding combines all parameters into
+              a single "_b" parameter, creating shorter URLs that hide parameter details.
+            </p>
+          )}
         </div>
-        <div className='flex flex-col md:flex-row gap-3'>
-          <input
-            ref={urlInputRef}
-            type='text'
-            className='flex-grow px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm'
-            value={generatedUrl}
-            readOnly
-          />
-          <button
-            onClick={handleCopyUrl}
-            className='inline-flex cursor-pointer justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
-          >
-            {copied ? 'Copied!' : 'Copy URL'}
-          </button>
-        </div>
-        {useBase64 && (
-          <p className='mt-4 text-sm text-gray-600'>
-            <span className='font-medium'>Note:</span> Base64 encoding combines all parameters into
-            a single "_b" parameter, creating shorter URLs that hide parameter details.
-          </p>
-        )}
-      </div>
+      </Section>
 
       <div className='flex justify-center'>
-        <a
-          href={generatedUrl}
-          className='inline-flex justify-center py-4 px-5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
-        >
+        <a href={generatedUrl} className={primaryButton}>
           Launch Experiment with these Settings
         </a>
       </div>

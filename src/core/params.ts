@@ -7,6 +7,8 @@ export interface ParamSpec {
   /** Used when the URL does not set the param. A function is called once per participant. */
   default: unknown;
   description?: string;
+  /** Shown on the settings page in place of the default's value, such as how a function chooses it. */
+  defaultDescription?: string;
 }
 
 type Widen<T> = T extends boolean

@@ -45,6 +45,11 @@
   ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
   }
+
+  /* Tailwind's own placeholder color is lost in Bun's dev server, which wraps it in a nested & that no pseudo-element matches */
+  ::placeholder {
+    color: var(--color-neutral-400);
+  }
 }
 
 :root {

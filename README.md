@@ -326,6 +326,7 @@ export default defineExperiment({
       values: ['vn', 'scenario'],
       default: () => (Math.random() < 0.5 ? 'vn' : 'scenario'),
       description: 'Which version of the study the participant sees',
+      defaultDescription: 'one of the two, at random',
     },
     rounds: { default: 3 },
   },
@@ -339,6 +340,7 @@ export default defineExperiment({
 * A param is read from the URL by its key (`?group=scenario&rounds=5`), otherwise its default is used. A default that is a function is called once per participant.
 * With `values`, the param is typed as one of them (`'vn' | 'scenario'`), and its default, or what a default function returns, must be one of them too. Without `values`, the param takes the type of its default.
 * Whatever sets a param, the URL, a simulated participant or a default function, a value of another type stops the experiment with an error: one outside `values`, text for a number, or anything but `true` or `false` for a switch. Only a default function without `values` declares no type, so its values are not checked.
+* The settings page shows the `description`, and what the default is. A `defaultDescription` takes the place of the default's value there, so it can say how a function chooses it, or what a value like `0` stands for.
 * The resolved values are recorded in the data. Simulated participants can set them (see [Simulation](#simulation)).
 * `timeline` may use any JavaScript, such as `shuffle` or loops. Its random draws are seeded per participant, and the seed (`buildSeed`) is recorded, so the exact timeline a participant saw can be rebuilt later.
 * Params exist only inside `timeline`. Parts of the timeline in other files that need one become functions that take it, and components get it as a prop.
@@ -433,7 +435,7 @@ Edits to the experiment or to its components keep the participant where they are
 
 ### Settings page
 
-`/settings` builds a link for a run. It lists the experiment's params, then the settings: the general ones (`dev`) and those of the components in the selected trials, by component. Below them come the trials, which follow the params entered above. The trials inside an `ifBlock` or `whileBlock` are listed under it, and unchecking a block unchecks all of them. The checked trials run, as does any trial that other param values add; the link lists the unchecked ones in `?excludeSubset=`, each by its name, or without one by its position (`4.2` for the second item of the fourth entry). A block whose items are all unchecked is left out with them. The settings follow which trials are checked, as they would in the run, so unchecking a trial drops the settings of components that only it uses. Custom params are recorded as text, in `url_` columns.
+`/settings` builds a link for a run. It lists the experiment's params, the general settings (`dev`), and custom params, which are recorded as text, in `url_` columns. Below them come the trials, which follow the params entered above, and the settings of the components in the selected trials, by component. When `timeline` is a function, both can differ with every param whose default is computed, so they only appear once these params are set. What was unchecked or entered there stays in the link when such a param is cleared again. The trials inside an `ifBlock` or `whileBlock` are listed under it, and unchecking a block unchecks all of them. The checked trials run, as does any trial that other param values add; the link lists the unchecked ones in `?excludeSubset=`, each by its name, or without one by its position (`4.2` for the second item of the fourth entry). A block whose items are all unchecked is left out with them. The settings follow which trials are checked, as they would in the run, so unchecking a trial drops the settings of components that only it uses.
 
 ### Dev panel
 

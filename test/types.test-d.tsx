@@ -260,7 +260,11 @@ const slow = ({ data }: TimelineContext) => CustomTrial.getLatest(data, 'customt
 
 const experiment = defineExperiment({
   params: {
-    group: { values: ['vn', 'scenario'], default: () => (Math.random() < 0.5 ? 'vn' : 'scenario') },
+    group: {
+      values: ['vn', 'scenario'],
+      default: () => (Math.random() < 0.5 ? 'vn' : 'scenario'),
+      defaultDescription: 'one of the two, at random',
+    },
     vnOnly: { default: false },
     trials: { default: 20 },
     weights: { default: [1, 2] },

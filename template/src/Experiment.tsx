@@ -104,9 +104,8 @@ export default defineExperiment({
     Text.trial('finaltext', ({ data }) => ({
       content: (
         <>
-          Thank you for participating in our study,{' '}
-          {PlainInput.getLatest(data, 'nickname').recorded.value}. You can now close the browser
-          window.
+          Thank you for participating in our study, {PlainInput.getLatest(data, 'nickname').recorded.value}. You can now
+          close the browser window.
         </>
       ),
     })),

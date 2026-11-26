@@ -8,6 +8,7 @@ import { spawnSync } from 'child_process';
 const components = {
   quest: ['survey-core', 'survey-react-ui'],
   tutorial: ['motion'],
+  decks: ['motion'],
 };
 const extras = [...Object.keys(components), 'transcription'];
 

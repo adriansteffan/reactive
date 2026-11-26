@@ -22,9 +22,7 @@ if (import.meta.main) {
     // Anything else is served from public/
     async fetch(req) {
       const file = Bun.file(path.join(publicFolder, new URL(req.url).pathname));
-      return (await file.exists())
-        ? new Response(file)
-        : new Response('Not Found', { status: 404 });
+      return (await file.exists()) ? new Response(file) : new Response('Not Found', { status: 404 });
     },
     // --dev adds hot reloading and readable errors; without it, the page is built for production
     development: process.argv.includes('--dev'),

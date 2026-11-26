@@ -1,6 +1,6 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "type": "module",
   "scripts": {
     "test": "bun test",
@@ -25,7 +25,8 @@
     "./native": "./src/native.ts",
     "./server": "./src/server.ts",
     "./quest": "./src/quest.ts",
-    "./tutorial": "./src/tutorial.ts"
+    "./tutorial": "./src/tutorial.ts",
+    "./decks": "./src/decks.ts"
   },
   "sideEffects": [
     "*.css",

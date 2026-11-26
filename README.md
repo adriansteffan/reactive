@@ -57,14 +57,15 @@ Premade components available so far:
     * voicerecorder: a custom question type that allows participants to record voice
     * your own question types, as React components passed by name to `customQuestions`
 * Tutorial (extra): A paginated slide deck with navigation, dot indicators, and optional interactive slides via `useTutorialSlide`
+* DeckSampling and DeckChoice (extra): Two decks of cards for decisions from experience, drawn from in a set order or at random, and a choice between them (see [Decks of cards](#decks-of-cards))
 * RandomDotKinematogram: A random dot kinematogram (RDK) stimulus for motion perception experiments
 * VoiceRecording: A standalone voice recording trial with pause/stop controls, optional minimum duration warning, and confirmation dialog
 * Upload: Uploads the collected data on a button press by the participant
 
-Quest and Tutorial are extras: they need packages of their own, so a new project leaves them out. Add them in the project's root directory with
+Quest, Tutorial and the decks are extras: they need packages of their own, so a new project leaves them out. Add them in the project's root directory with
 
 ```
-bunx @adriansteffan/reactive add quest tutorial
+bunx @adriansteffan/reactive add quest tutorial decks
 ```
 
 and import them from their own entry points:
@@ -72,6 +73,7 @@ and import them from their own entry points:
 ```tsx
 import { Quest } from '@adriansteffan/reactive/quest';
 import { Tutorial, useTutorialSlide } from '@adriansteffan/reactive/tutorial';
+import { DeckChoice, DeckSampling } from '@adriansteffan/reactive/decks';
 ```
 
 An experiment that does not use them neither installs them nor sends them to its participants.
@@ -336,6 +338,61 @@ Times are taken from the frames the browser shows. A slide appears with the firs
 | `initCanvas(ctx, width, height)` | Runs once, after the canvas is set up |
 
 `canvasCountdown(seconds)` returns slides that count down one second each and record nothing.
+
+### Decks of cards
+
+DeckSampling shows two decks of cards for decisions from experience. The participant draws cards by clicking a deck or pressing its key, and sees each card's outcome, until they press the button below the decks or a deck runs out. DeckChoice shows the decks again for a choice between them. Both come from the `decks` extra (see [Usage](#usage)):
+
+```tsx
+import { uniform } from '@adriansteffan/reactive';
+import { DeckChoice, DeckSampling } from '@adriansteffan/reactive/decks';
+
+const safe = { label: 'A', key: 'f' };
+const risky = { label: 'B', key: 'j' };
+
+DeckSampling.trial('sampling', {
+  decks: {
+    safe: { ...safe, outcomes: [3, 3, 3, 3, 3, 3, 3, 3] },
+    risky: { ...risky, outcomes: [0, 0, 0, 32, 0, 0, 0, 0] },
+  },
+  minSamples: 5,
+}),
+DeckChoice.trial('choice', {
+  decks: {
+    safe: { ...safe, outcome: 3 },
+    risky: { ...risky, outcome: () => (uniform(0, 1) < 0.1 ? 32 : 0) },
+  },
+}),
+```
+
+The data records each deck by its name in `decks`, and the decks are shown from left to right in that order, so a deck can change sides between participants without changing the data. A deck's `outcomes` is a list, drawn in order, or a function that gives each draw's outcome. The decks are paired: every draw moves both of them on to their next outcome, so the participant sees the drawn deck's outcome at that position and misses the other's. With `paired: false`, each deck moves through its own list. Once a list has run out, the decks take no more draws, the heading changes, and the button is all that is left. A deck whose outcomes come from a function never runs out.
+
+| Deck field | Description |
+|---|---|
+| `outcomes` | DeckSampling: the outcomes, numbers or texts, in the order they are drawn, or a function that gives each draw's |
+| `outcome` | DeckChoice: what choosing the deck gives, or a function that draws it; without one, the trial ends at the choice |
+| `label` | What the deck's face shows, any React; the deck's name by default |
+| `color`, `textColor` | The background of the deck and its cards, and the color of its label and outcomes, as any CSS color; white with black by default |
+| `key` | A key that draws from or chooses the deck |
+
+| Prop | Description |
+|---|---|
+| `paired` | DeckSampling: whether every draw moves both decks on; `true` by default |
+| `minSamples` | DeckSampling: how many cards the participant draws before the button can end the sampling |
+| `endEarly` | DeckSampling: whether the button can end the sampling before a deck runs out; `true` by default |
+| `showForgone` | DeckSampling: also shows the other deck's outcome at the same position, faded, as the one the participant did not get, while the card they got has a thicker border; needs paired decks, and lays the cards out as `layout: 'wide'` does |
+| `outcomeDurationMs` | DeckSampling: how long a drawn card stays on the table, until the next draw by default; the decks take no draws meanwhile |
+| `pauseMs` | DeckSampling: how long the decks wait after `outcomeDurationMs` before they take the next draw |
+| `buttonText`, `inactiveButtonText` | The button's text, and DeckSampling's while fewer than `minSamples` cards are drawn |
+| `headings` | DeckSampling's `sampling` and `ended`, DeckChoice's `choice` and `result`, as any React |
+| `click` | Whether clicking a deck draws from it; with `false`, only the keys do |
+| `formatOutcome(outcome)` | What a card shows for its outcome, any React, such as `(outcome) => Number(outcome).toFixed(1)` |
+| `layout` | `'compact'`, the default, or `'wide'`, which lays each card down on the side of the deck it came from |
+| `animate` | Deals the decks onto the screen; `true` by default |
+
+DeckSampling records a row per draw: the `deck`, the `outcome`, its `position` in the deck's outcomes, counted from 0, with `showForgone` the `forgone` outcome of the other deck, the `key` that drew it or `null` for a click, and the `reactionTimeMs` since the decks took draws again: since they appeared, or since the outcome and pause after the draw before. A trial without draws has one empty row. DeckChoice records the `choice`, its `key`, `reactionTimeMs`, and the `outcome`, which is `null` for a deck without one. A chosen deck with an outcome shows it on a card, with a button that ends the trial.
+
+When the experiment loads, each trial is checked for exactly two decks, keys the decks do not share, a key for every deck with `click: false`, no empty list of outcomes, paired decks with `showForgone`, and with `endEarly: false`, a deck that can run out.
 
 ### Params
 
@@ -658,6 +715,8 @@ createParticipants: () => {
 | Quest | `answerQuestion` | `question` | `{ answer, durationMs }` | Random valid answer per question type |
 | CanvasBlock | `respondToSlide` | `slide`, and the canvas's `width` and `height` | `{ key, reactionTimeMs }`, or `{ x, y, reactionTimeMs }` for a click | Random key from the slide's `keys` and `choices`, or a random point on a slide that takes clicks, random RT; it counts under the same rules as a real response |
 | Tutorial | `respondToSlide` | `slide`, `slideIndex` | `{ data, durationMs }` | Advances through slides, no interaction data |
+| DeckSampling | `draw` | the decks' names, the `draws` so far, and whether it `canStop` | `{ deck, reactionTimeMs }`, with `deck: null` for the button, timed from when the decks take draws again | Random decks, random RT, until it may stop after 15 cards; a draw is recorded with the deck's key, or `null` without one |
+| DeckChoice | `choose` | the decks' names | `{ deck, reactionTimeMs }` | A random deck, random RT |
 | RandomDotKinematogram | `respond` | the trial's settings, except its `feedback` | `{ key, reactionTimeMs }` | A drift-diffusion model (may timeout) |
 | Upload | *(none)* | | | Builds CSVs and POSTs to backend |
 | StoreUI | *(none)* | | | Uses field default values |
@@ -696,6 +755,8 @@ Upload.trial('upload')
 | CanvasBlock | `canvas` | One row per slide, with built-in flattener |
 | StoreUI | `storeui` | One row per StoreUI occurrence |
 | RandomDotKinematogram | `rdk` | One row per RDK trial |
+| DeckSampling | `decksampling` | One row per draw |
+| DeckChoice | `deckchoice` | One row per choice |
 | fullscreenBlock's screen, MicrophoneCheck, ProlificEnding, Upload, RequestFilePermission, Tutorial | *(none)* | No CSV output |
 
 ### Output files
@@ -1233,15 +1294,17 @@ bun install
 bun link @adriansteffan/reactive
 ```
 
-The linked library would otherwise use React from its own `node_modules`, and two copies of React break hooks. So point the library's React at the project's, from the root of this repo:
+The linked library would otherwise use React and its types from its own `node_modules`: two copies of React break hooks, and two copies of its types fail the project's type check. So point the library's React at the project's, from the root of this repo:
 
 ```
-rm -rf node_modules/react node_modules/react-dom
+rm -rf node_modules/react node_modules/react-dom node_modules/@types/react node_modules/@types/react-dom
 ln -s ../../<project-name>/node_modules/react node_modules/react
 ln -s ../../<project-name>/node_modules/react-dom node_modules/react-dom
+ln -s ../../../<project-name>/node_modules/@types/react node_modules/@types/react
+ln -s ../../../<project-name>/node_modules/@types/react-dom node_modules/@types/react-dom
 ```
 
-Changes to the library then show up in the project's dev server immediately. Running `bun install` in this repo replaces the links with regular copies, so repeat these three commands afterwards.
+Changes to the library then show up in the project's dev server immediately. Running `bun install` in this repo replaces the links with regular copies, so repeat these commands afterwards.
 
 
 Manually publishing to npm (until we figure out a better ci/cd process):

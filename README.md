@@ -381,18 +381,18 @@ The data records each deck by its name in `decks`, and the decks are shown from 
 | `minSamples` | DeckSampling: how many cards the participant draws before the button can end the sampling |
 | `endEarly` | DeckSampling: whether the button can end the sampling before a deck runs out; `true` by default |
 | `showForgone` | DeckSampling: also shows the other deck's outcome at the same position, faded, as the one the participant did not get, while the card they got has a thicker border; needs paired decks, and lays the cards out as `layout: 'wide'` does |
-| `outcomeDurationMs` | DeckSampling: how long a drawn card stays on the table, until the next draw by default; the decks take no draws meanwhile. DeckChoice: how long the chosen deck's outcome is shown before the trial ends by itself, without the button |
+| `outcomeDurationMs` | DeckSampling: how long a drawn card stays on the table, until the next draw by default; the decks take no draws meanwhile. DeckChoice: how long the chosen deck's outcome is shown before the trial ends by itself, without the button. Both count from the draw or choice, so the card's `revealAnimationMs` is part of them |
 | `pauseMs` | DeckSampling: how long the decks wait after `outcomeDurationMs` before they take the next draw |
 | `buttonText`, `inactiveButtonText` | The button's text, and DeckSampling's while fewer than `minSamples` cards are drawn |
-| `headings` | DeckSampling's `sampling` and `ended`, DeckChoice's `choice` and `result`, as any React |
+| `headings` | DeckSampling's `sampling` and `ended`, DeckChoice's `choice` and `result`, as any React; an empty text shows none, and the decks stay where they are |
 | `click` | Whether clicking a deck draws from it; with `false`, only the keys do |
 | `formatOutcome(outcome)` | What a card shows for its outcome, any React, such as `(outcome) => Number(outcome).toFixed(1)` |
 | `layout` | `'compact'`, the default, or `'wide'`, which lays each card down on the side of the deck it came from |
-| `animate` | Deals the decks onto the screen; `true` by default |
-| `dealDurationMs` | How long dealing the decks takes; 700 by default |
-| `revealDurationMs` | How long a drawn or chosen card takes to slide onto the table; 300 by default |
+| `animate` | Deals the decks onto the screen; `true` by default. The decks take no draws or choices until they are dealt |
+| `dealAnimationMs` | How long dealing the decks takes, and fading out the deck DeckChoice hides after the choice; 700 by default |
+| `revealAnimationMs` | How long a drawn or chosen card takes to slide onto the table; 300 by default |
 
-DeckSampling records a row per draw: the `deck`, the `outcome`, its `position` in the deck's outcomes, counted from 0, with `showForgone` the `forgone` outcome of the other deck, the `key` that drew it or `null` for a click, and the `reactionTimeMs` since the decks took draws again: since they appeared, or since the outcome and pause after the draw before. A trial without draws has one empty row. DeckChoice records the `choice`, its `key`, `reactionTimeMs`, and the `outcome`, which is `null` for a deck without one. A chosen deck with an outcome shows it on a card, with a button that ends the trial, or for `outcomeDurationMs` without one.
+DeckSampling records a row per draw: the `deck`, the `outcome`, its `position` in the deck's outcomes, counted from 0, with `showForgone` the `forgone` outcome of the other deck, the `key` that drew it or `null` for a click, and the `reactionTimeMs` since the decks took draws again: since they were dealt, or since the outcome and pause after the draw before. A trial without draws has one empty row. DeckChoice records the `choice`, its `key`, the `reactionTimeMs` since the decks were dealt, and the `outcome`, which is `null` for a deck without one. A chosen deck with an outcome shows it on a card, with a button that ends the trial, or for `outcomeDurationMs` without one.
 
 When the experiment loads, each trial is checked for exactly two decks, keys the decks do not share, a key for every deck with `click: false`, no empty list of outcomes, paired decks with `showForgone`, and with `endEarly: false`, a deck that can run out.
 

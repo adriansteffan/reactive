@@ -36,12 +36,12 @@ interface TableProps {
   formatOutcome?: (outcome: Outcome) => ReactNode;
   /** `'wide'` lays each card down on the side of the deck it came from. Defaults to `'compact'`. */
   layout?: 'compact' | 'wide';
-  /** Deals the decks onto the screen. Defaults to `true`. */
+  /** Deals the decks onto the screen. They take no draws or choices until they are dealt. Defaults to `true`. */
   animate?: boolean;
-  /** How long dealing the decks takes. Defaults to 700. */
-  dealDurationMs?: number;
+  /** How long dealing the decks takes, and fading out a deck that is no longer needed. Defaults to 700. */
+  dealAnimationMs?: number;
   /** How long a drawn or chosen card takes to slide onto the table. Defaults to 300. */
-  revealDurationMs?: number;
+  revealAnimationMs?: number;
 }
 
 /** One card drawn from a deck. */
@@ -54,7 +54,7 @@ export type DeckDraw = {
   forgone?: Outcome;
   /** The key that drew it, or `null` for a click. */
   key: string | null;
-  /** Since the decks took draws again: since they appeared, or since the outcome and pause after the draw before. */
+  /** Since the decks took draws again: since they were dealt, or since the outcome and pause after the draw before. */
   reactionTimeMs: number;
 };
 
@@ -135,6 +135,11 @@ const CARD_LAYERS = [
   { offset: 'translate-x-[4px] translate-y-[4px]', delay: 0.1 },
   { offset: '', delay: 0.2 },
 ];
+// The layers' delays and the 0.5 s each card takes add up to this, and are scaled to the deal's duration
+const DEAL_ANIMATION_MS = 700;
+
+/** How long the decks take to be dealt, before they take draws or choices. */
+const dealMs = (props: TableProps) => (props.animate === false ? 0 : (props.dealAnimationMs ?? DEAL_ANIMATION_MS));
 
 type Colors = { color: string; textColor: string };
 
@@ -148,17 +153,15 @@ function Deck({
   side,
   onClick,
   animate,
-  dealDurationMs,
+  dealScale,
 }: {
   label: ReactNode;
   colors: Colors;
   side: 'left' | 'right';
   onClick: ((timeStamp: number) => void) | undefined;
   animate: boolean;
-  dealDurationMs: number;
+  dealScale: number;
 }) {
-  // The layers' delays and the 0.5 s each card takes add up to 0.7 s, scaled to the deal's duration
-  const scale = dealDurationMs / 700;
   return (
     <div className='relative w-44 h-60'>
       {CARD_LAYERS.map((layer, i) => {
@@ -166,7 +169,11 @@ function Deck({
           ? {
               initial: { y: -400, x: side === 'left' ? -300 : 300, rotate: side === 'left' ? -20 : 20, opacity: 0 },
               animate: { y: 0, x: 0, rotate: 0, opacity: 1 },
-              transition: { delay: layer.delay * scale, duration: 0.5 * scale, ease: [0.23, 1, 0.32, 1] as const },
+              transition: {
+                delay: layer.delay * dealScale,
+                duration: 0.5 * dealScale,
+                ease: [0.23, 1, 0.32, 1] as const,
+              },
             }
           : {};
         if (i < CARD_LAYERS.length - 1) {
@@ -215,8 +222,9 @@ function Table({
   formatOutcome = String,
   layout = 'compact',
   animate = true,
-  dealDurationMs = 700,
-  revealDurationMs = 300,
+  dealAnimationMs = DEAL_ANIMATION_MS,
+  revealAnimationMs = 300,
+  onDealt,
 }: TableProps & {
   heading: ReactNode;
   decks: Record<string, DeckLook>;
@@ -227,14 +235,29 @@ function Table({
   /** Shown between the decks while there is no card. */
   emptyMiddle: ReactNode;
   button: ReactNode;
+  /** Called with the time the decks have been dealt, from when on they take draws or choices. */
+  onDealt: (timeStamp: number) => void;
 }) {
   const th = t(useTheme());
   const names = Object.keys(decks);
   const wide = layout === 'wide';
+  const dealScale = dealAnimationMs / DEAL_ANIMATION_MS;
+
+  const [dealt, setDealt] = useState(!animate);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the decks are dealt once, when they appear
+  useEffect(() => {
+    if (!animate) return;
+    const timer = setTimeout(() => {
+      setDealt(true);
+      onDealt(performance.now());
+    }, dealAnimationMs);
+    return () => clearTimeout(timer);
+  }, []);
+  const takes = dealt ? onDeck : undefined;
 
   // The handler of the latest render, so a key press always sees the current state
-  const onDeckRef = useRef(onDeck);
-  onDeckRef.current = onDeck;
+  const onDeckRef = useRef(takes);
+  onDeckRef.current = takes;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || !onDeckRef.current) return;
@@ -252,7 +275,8 @@ function Table({
 
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center p-8 overflow-hidden ${th.containerBg}`}>
-      <h2 className={`text-2xl font-bold ${th.text} mb-16 text-center`}>{heading}</h2>
+      {/* min-h-8 is the heading's line height, so an empty heading keeps its line and the decks stay where they are */}
+      <h2 className={`text-2xl min-h-8 font-bold ${th.text} mb-16 text-center`}>{heading}</h2>
 
       <div className={`flex items-center justify-center ${wide ? 'gap-4' : 'gap-12'}`}>
         {names.map((name, index) => {
@@ -262,13 +286,13 @@ function Table({
             <motion.div
               key={name}
               animate={{ opacity: hiddenDecks.includes(name) ? 0 : 1 }}
-              transition={{ duration: 0.4 }}
+              transition={{ duration: 0.4 * dealScale }}
               className={`flex items-center ${wide ? 'gap-4' : 'gap-12'}`}
               style={{ order: index * 2, flexDirection: side === 'left' ? 'row' : 'row-reverse' }}
             >
               {deck.key !== undefined && (
                 <span
-                  className={`px-3.5 py-1.5 bg-white border-2 border-black rounded-lg font-bold text-lg select-none shadow-[0_3px_0_-2px_white,0_3px_0_0px_black] transition-opacity duration-400 ${onDeck ? '' : 'opacity-0'}`}
+                  className={`px-3.5 py-1.5 bg-white border-2 border-black rounded-lg font-bold text-lg select-none shadow-[0_3px_0_-2px_white,0_3px_0_0px_black] transition-opacity duration-400 ${takes ? '' : 'opacity-0'}`}
                 >
                   {keyLabel(deck.key)}
                 </span>
@@ -277,9 +301,9 @@ function Table({
                 label={deck.label ?? name}
                 colors={colorsOf(deck)}
                 side={side}
-                onClick={click && onDeck ? (timeStamp) => onDeck(name, null, timeStamp) : undefined}
+                onClick={click && takes ? (timeStamp) => takes(name, null, timeStamp) : undefined}
                 animate={animate}
-                dealDurationMs={dealDurationMs}
+                dealScale={dealScale}
               />
             </motion.div>
           );
@@ -304,7 +328,7 @@ function Table({
                   // In the wide layout, a card lands on the side of its deck
                   animate={{ opacity, x: wide ? (index === 0 ? -96 : 96) : 0, scale: 1 }}
                   exit={{ opacity: 0, transition: { duration: 0 } }}
-                  transition={{ duration: revealDurationMs / 1000, ease: 'easeOut' }}
+                  transition={{ duration: revealAnimationMs / 1000, ease: 'easeOut' }}
                 >
                   <span className='text-4xl font-besley font-black' style={{ color: colors.textColor }}>
                     {formatOutcome(card.outcome)}
@@ -345,7 +369,7 @@ export type DeckSamplingProps = TableProps &
     buttonText?: string;
     /** The button's text while the participant has drawn fewer than `minSamples` cards. */
     inactiveButtonText?: string;
-    /** The heading while the participant draws, and once a deck has run out. */
+    /** The heading while the participant draws, and once a deck has run out. An empty text shows none. */
     headings?: { sampling?: ReactNode; ended?: ReactNode };
   };
 
@@ -420,6 +444,9 @@ function DeckSamplingView({
       layout={shownLayout}
       decks={decks}
       onDeck={ended || waiting ? undefined : draw}
+      onDealt={(timeStamp) => {
+        takesDrawsSince.current = timeStamp;
+      }}
       cards={cards}
       emptyMiddle={
         draws.length === 0 &&
@@ -466,7 +493,7 @@ export const DeckSampling = defineComponent({
     const paired = props.paired ?? true;
     const waitMs = (props.outcomeDurationMs ?? 0) + (props.pauseMs ?? 0);
     const draws: DeckDraw[] = [];
-    let durationMs = 0;
+    let durationMs = dealMs(props);
     while (!ranOut(props.decks, draws, paired)) {
       const canStop = props.endEarly !== false && draws.length >= (props.minSamples ?? 0);
       const result = await simulators.draw({ stimulus: { decks: Object.keys(props.decks), draws: [...draws], canStop }, participant });
@@ -506,7 +533,7 @@ export type DeckChoiceProps = TableProps &
     buttonText?: string;
     /** How long the chosen deck's outcome stays on screen before the trial ends by itself, without the button. */
     outcomeDurationMs?: number;
-    /** The heading before the choice, and with the chosen deck's outcome. */
+    /** The heading before the choice, and with the chosen deck's outcome. An empty text shows none. */
     headings?: { choice?: ReactNode; result?: ReactNode };
   };
 
@@ -543,6 +570,9 @@ function DeckChoiceView({ decks, buttonText = 'Continue', outcomeDurationMs, hea
       }
       decks={decks}
       onDeck={chosen ? undefined : choose}
+      onDealt={(timeStamp) => {
+        shownAt.current = timeStamp;
+      }}
       cards={chosen && chosen.outcome !== null ? [{ deck: chosen.choice, outcome: chosen.outcome, id: 0 }] : []}
       hiddenDecks={chosen ? Object.keys(decks).filter((name) => name !== chosen.choice) : []}
       emptyMiddle={<span className={`text-3xl font-black ${th.text} select-none`}>vs.</span>}
@@ -561,7 +591,7 @@ function DeckChoiceView({ decks, buttonText = 'Continue', outcomeDurationMs, hea
 /** What DeckChoice's `choose` simulator receives: the decks' names. */
 export type DeckChoiceStimulus = { decks: string[] };
 
-/** The chosen deck, and how long after the decks appeared. */
+/** The chosen deck, and how long after the decks were dealt. */
 export type DeckChoiceSimulatorResult = { response: { deck: string; reactionTimeMs: number } };
 
 export const DeckChoice = defineComponent({
@@ -576,7 +606,11 @@ export const DeckChoice = defineComponent({
     }
     const recorded = { choice: deck, key: props.decks[deck].key ?? null, reactionTimeMs, outcome: chosenOutcome(props.decks[deck]) };
     const outcomeMs = recorded.outcome === null ? 0 : (props.outcomeDurationMs ?? 0);
-    return { recorded, participant: result.participant ?? participant, durationMs: reactionTimeMs + outcomeMs };
+    return {
+      recorded,
+      participant: result.participant ?? participant,
+      durationMs: dealMs(props) + reactionTimeMs + outcomeMs,
+    };
   },
   defaultSimulators: {
     choose: ({ stimulus }: SimulatorArgs<DeckChoiceStimulus>): DeckChoiceSimulatorResult => ({

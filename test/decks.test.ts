@@ -31,8 +31,8 @@ describe('DeckSampling', () => {
       { deck: 'risky', outcome: 20, position: 1, key: null, reactionTimeMs: 400 },
       { deck: 'risky', outcome: 30, position: 2, key: null, reactionTimeMs: 400 },
     ]);
-    // Three draws and the button
-    expect(row.durationMs).toBe(1600);
+    // The 700 ms deal, three draws and the button
+    expect(row.durationMs).toBe(700 + 1600);
   });
 
   test('unpaired decks each keep their own position', async () => {
@@ -88,8 +88,19 @@ describe('DeckSampling', () => {
     const [row] = await run([
       DeckSampling.trial({ decks, outcomeDurationMs: 500, pauseMs: 250 }).simulators(drawing(['safe', 'risky'])),
     ]);
-    // Two draws, each 400 ms after the decks took draws again, and 750 ms of outcome and pause after each
-    expect(row.durationMs).toBe(2 * (400 + 750));
+    // The deal, then two draws, each 400 ms after the decks took draws again, and 750 ms of outcome and pause after each
+    expect(row.durationMs).toBe(700 + 2 * (400 + 750));
+  });
+
+  test('the decks are dealt before they take draws, unless they are not animated', async () => {
+    const decks = { safe: { outcomes: [3] }, risky: { outcomes: [0] } };
+    const [dealt, quick, instant] = await run([
+      DeckSampling.trial({ decks }).simulators(drawing(['safe'])),
+      DeckSampling.trial({ decks, dealAnimationMs: 200 }).simulators(drawing(['safe'])),
+      DeckSampling.trial({ decks, animate: false }).simulators(drawing(['safe'])),
+    ]);
+    // The deal, then one draw, after which the decks have run out
+    expect([dealt, quick, instant].map((row) => row.durationMs)).toEqual([700 + 400, 200 + 400, 400]);
   });
 
   test('a trial without draws still has a row in the CSV', async () => {
@@ -164,8 +175,9 @@ describe('DeckChoice', () => {
       ),
       DeckChoice.trial({ decks: { safe: {}, risky: {} }, outcomeDurationMs: 1000 }).simulators(choosing('safe')),
     ]);
-    expect(shown.durationMs).toBe(1900);
+    // The 700 ms deal, the choice and the outcome
+    expect(shown.durationMs).toBe(700 + 900 + 1000);
     // A deck without an outcome ends the trial at the choice
-    expect(none.durationMs).toBe(900);
+    expect(none.durationMs).toBe(700 + 900);
   });
 });

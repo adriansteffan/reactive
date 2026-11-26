@@ -33,7 +33,7 @@ bun run dev
 
 Open [http://localhost:8001](http://localhost:8001). The page updates as you edit.
 
-`bun run start` serves the production version locally, and `bun run typecheck` and `bun run lint` check the code. Linting and formatting use [Biome](https://biomejs.dev/), which has an editor extension.
+`bun run start` serves the production version locally, and `bun run typecheck` and `bun run lint` check the code. Linting and formatting use [Biome](https://biomejs.dev/). VS Code suggests its extension when you open the project, and with it formats TypeScript, JSON and CSS files on save.
 
 ### Deployment
 

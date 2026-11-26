@@ -709,7 +709,7 @@ createParticipants: () => {
 
 | Component | Decision functions | `stimulus` | `response` | Default behavior |
 |---|---|---|---|---|
-| Text | `respond` | `content`, `buttonText`, `allowedResponseKeys` | `{ key, reactionTimeMs }` | Click button, random reaction time |
+| Text | `respond` | `content`, the `buttonText` it shows, empty for none, and `allowedResponseKeys` | `{ key, reactionTimeMs }` | Clicks the button, or on a screen without one, presses one of its keys; random reaction time |
 | Screen | `respond` | `content`, `displayDurationMs`, the fields of the trial's `response`, and the `answers` so far | `{ answer, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT, after `buttonDelayMs` for a button; a Screen whose content answers needs its own |
 | PlainInput | `respond` | `content`, `minLength` | the text entered | Returns `'simulated_input'`, filled up to `minLength` |
 | Quest | `answerQuestion` | `question` | `{ answer, durationMs }` | Random valid answer per question type |
@@ -1304,7 +1304,7 @@ ln -s ../../../<project-name>/node_modules/@types/react node_modules/@types/reac
 ln -s ../../../<project-name>/node_modules/@types/react-dom node_modules/@types/react-dom
 ```
 
-Changes to the library then show up in the project's dev server immediately. Running `bun install` in this repo replaces the links with regular copies, so repeat these commands afterwards.
+Changes to the library then show up in the project's dev server immediately. A `bun install` in this repo can replace some of the links with regular copies, so check them afterwards. To undo the setup, delete the four links and run `bun install`, which keeps a link whose target is still there.
 
 
 Manually publishing to npm (until we figure out a better ci/cd process):

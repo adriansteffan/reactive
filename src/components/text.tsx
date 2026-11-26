@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { BaseComponentProps } from '../core/component';
+import type { BaseComponentProps, SimulatorArgs } from '../core/component';
 import { type ResponseKey, responseKey } from '../utils/keys';
 import { now } from '../utils/time';
 import { defineComponent } from '../core/component';
@@ -8,6 +8,9 @@ import { useTheme, t } from '../runner/theme';
 
 /** Which key or the button ended the screen. Screens with a duration record nothing. */
 export type TextResponse = { key?: string; reactionTimeMs?: number };
+
+/** What Text's `respond` simulator receives: the content, the button it shows, empty for none, and its keys. */
+type TextStimulus = { content?: React.ReactNode; buttonText: string; allowedResponseKeys?: readonly ResponseKey[] | boolean };
 
 function Text({
   content,
@@ -117,7 +120,11 @@ export default defineComponent({
       return { recorded: {}, durationMs };
     }
     const result = await simulators.respond({
-      stimulus: { content: props.content, buttonText: props.buttonText, allowedResponseKeys: props.allowedResponseKeys },
+      stimulus: {
+        content: props.content,
+        buttonText: props.buttonText ?? (durationMs !== undefined ? '' : 'Continue'),
+        allowedResponseKeys: props.allowedResponseKeys,
+      },
       participant,
     });
     const reactionTimeMs = result.response.reactionTimeMs ?? 0;
@@ -132,8 +139,14 @@ export default defineComponent({
     };
   },
   defaultSimulators: {
-    respond: () => ({
-      response: { key: 'button', reactionTimeMs: uniform(500, 2000) },
-    }),
+    // The button, or on a screen without one, one of its keys
+    respond: ({ stimulus }: SimulatorArgs<TextStimulus>) => {
+      const reactionTimeMs = uniform(500, 2000);
+      const keys = stimulus.allowedResponseKeys === true ? [' '] : stimulus.allowedResponseKeys || [];
+      if (!stimulus.buttonText && keys.length > 0) {
+        return { response: { key: keys[Math.floor(uniform(0, keys.length))], reactionTimeMs } };
+      }
+      return { response: { key: 'button', reactionTimeMs } };
+    },
   },
 });

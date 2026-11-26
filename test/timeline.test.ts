@@ -693,6 +693,15 @@ describe('components', () => {
     expect(rows[2].recorded.value).toBe(2);
   });
 
+  test('a simulated Text screen without a button ends with one of its keys', async () => {
+    const rows = await run([
+      Text.trial({ buttonText: '', allowedResponseKeys: [' '] }),
+      Text.trial({ buttonText: '', allowedResponseKeys: true }),
+      Text.trial({ allowedResponseKeys: [' '] }),
+    ]);
+    expect(rows.map((row) => row.recorded.key)).toEqual([' ', ' ', 'button']);
+  });
+
   test("a timed Text screen ends after its duration, unless its button ends it first", async () => {
     const clickAfter = (reactionTimeMs: number) => () => ({ response: { key: 'button', reactionTimeMs } });
     const rows = await run([

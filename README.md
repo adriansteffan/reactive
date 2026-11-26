@@ -389,6 +389,8 @@ The data records each deck by its name in `decks`, and the decks are shown from 
 | `formatOutcome(outcome)` | What a card shows for its outcome, any React, such as `(outcome) => Number(outcome).toFixed(1)` |
 | `layout` | `'compact'`, the default, or `'wide'`, which lays each card down on the side of the deck it came from |
 | `animate` | Deals the decks onto the screen; `true` by default |
+| `dealDurationMs` | How long dealing the decks takes; 700 by default |
+| `revealDurationMs` | How long a drawn or chosen card takes to slide onto the table; 300 by default |
 
 DeckSampling records a row per draw: the `deck`, the `outcome`, its `position` in the deck's outcomes, counted from 0, with `showForgone` the `forgone` outcome of the other deck, the `key` that drew it or `null` for a click, and the `reactionTimeMs` since the decks took draws again: since they appeared, or since the outcome and pause after the draw before. A trial without draws has one empty row. DeckChoice records the `choice`, its `key`, `reactionTimeMs`, and the `outcome`, which is `null` for a deck without one. A chosen deck with an outcome shows it on a card, with a button that ends the trial, or for `outcomeDurationMs` without one.
 

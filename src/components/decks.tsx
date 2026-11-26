@@ -38,6 +38,10 @@ interface TableProps {
   layout?: 'compact' | 'wide';
   /** Deals the decks onto the screen. Defaults to `true`. */
   animate?: boolean;
+  /** How long dealing the decks takes. Defaults to 700. */
+  dealDurationMs?: number;
+  /** How long a drawn or chosen card takes to slide onto the table. Defaults to 300. */
+  revealDurationMs?: number;
 }
 
 /** One card drawn from a deck. */
@@ -144,13 +148,17 @@ function Deck({
   side,
   onClick,
   animate,
+  dealDurationMs,
 }: {
   label: ReactNode;
   colors: Colors;
   side: 'left' | 'right';
   onClick: ((timeStamp: number) => void) | undefined;
   animate: boolean;
+  dealDurationMs: number;
 }) {
+  // The layers' delays and the 0.5 s each card takes add up to 0.7 s, scaled to the deal's duration
+  const scale = dealDurationMs / 700;
   return (
     <div className='relative w-44 h-60'>
       {CARD_LAYERS.map((layer, i) => {
@@ -158,7 +166,7 @@ function Deck({
           ? {
               initial: { y: -400, x: side === 'left' ? -300 : 300, rotate: side === 'left' ? -20 : 20, opacity: 0 },
               animate: { y: 0, x: 0, rotate: 0, opacity: 1 },
-              transition: { delay: layer.delay, duration: 0.5, ease: [0.23, 1, 0.32, 1] as const },
+              transition: { delay: layer.delay * scale, duration: 0.5 * scale, ease: [0.23, 1, 0.32, 1] as const },
             }
           : {};
         if (i < CARD_LAYERS.length - 1) {
@@ -207,6 +215,8 @@ function Table({
   formatOutcome = String,
   layout = 'compact',
   animate = true,
+  dealDurationMs = 700,
+  revealDurationMs = 300,
 }: TableProps & {
   heading: ReactNode;
   decks: Record<string, DeckLook>;
@@ -269,6 +279,7 @@ function Table({
                 side={side}
                 onClick={click && onDeck ? (timeStamp) => onDeck(name, null, timeStamp) : undefined}
                 animate={animate}
+                dealDurationMs={dealDurationMs}
               />
             </motion.div>
           );
@@ -293,7 +304,7 @@ function Table({
                   // In the wide layout, a card lands on the side of its deck
                   animate={{ opacity, x: wide ? (index === 0 ? -96 : 96) : 0, scale: 1 }}
                   exit={{ opacity: 0, transition: { duration: 0 } }}
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  transition={{ duration: revealDurationMs / 1000, ease: 'easeOut' }}
                 >
                   <span className='text-4xl font-besley font-black' style={{ color: colors.textColor }}>
                     {formatOutcome(card.outcome)}

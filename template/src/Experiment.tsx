@@ -94,7 +94,7 @@ export default defineExperiment({
       buttonText: 'Submit',
       placeholder: 'Enter your nickname',
     }).simulators({
-      respond: ({ participant }) => ({ value: participant.nickname }),
+      respond: ({ participant }) => ({ response: participant.nickname }),
     }),
 
     CustomTrial.trial('customtrial', { maxCount: clicks }),

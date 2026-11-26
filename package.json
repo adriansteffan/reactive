@@ -1,10 +1,10 @@
 {
   "name": "@adriansteffan/reactive",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "typecheck": "bun check",
+    "typecheck": "bun check && bun check -p template",
     "lint": "biome lint --error-on-warnings"
   },
   "bin": {
@@ -84,6 +84,7 @@
     "@types/bun": "^1.4.3",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
+    "bun-plugin-tailwind": "^0.1.2",
     "motion": "^12.38.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

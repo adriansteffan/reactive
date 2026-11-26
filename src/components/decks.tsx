@@ -38,7 +38,7 @@ interface TableProps {
   layout?: 'compact' | 'wide';
   /** Deals the decks onto the screen. They take no draws or choices until they are dealt. Defaults to `true`. */
   animate?: boolean;
-  /** How long dealing the decks takes, and fading out a deck that is no longer needed. Defaults to 700. */
+  /** How long dealing the decks takes. Defaults to 700. */
   dealAnimationMs?: number;
   /** How long a drawn or chosen card takes to slide onto the table. Defaults to 300. */
   revealAnimationMs?: number;
@@ -224,6 +224,7 @@ function Table({
   animate = true,
   dealAnimationMs = DEAL_ANIMATION_MS,
   revealAnimationMs = 300,
+  hideAnimationMs,
   onDealt,
 }: TableProps & {
   heading: ReactNode;
@@ -232,6 +233,8 @@ function Table({
   onDeck: ((deck: string, key: string | null, timeStamp: number) => void) | undefined;
   cards: Card[];
   hiddenDecks?: string[];
+  /** How long the hidden decks take to fade out; by default it scales with the deal. */
+  hideAnimationMs?: number;
   /** Shown between the decks while there is no card. */
   emptyMiddle: ReactNode;
   button: ReactNode;
@@ -286,7 +289,7 @@ function Table({
             <motion.div
               key={name}
               animate={{ opacity: hiddenDecks.includes(name) ? 0 : 1 }}
-              transition={{ duration: 0.4 * dealScale }}
+              transition={{ duration: (hideAnimationMs ?? 400 * dealScale) / 1000 }}
               className={`flex items-center ${wide ? 'gap-4' : 'gap-12'}`}
               style={{ order: index * 2, flexDirection: side === 'left' ? 'row' : 'row-reverse' }}
             >
@@ -533,11 +536,24 @@ export type DeckChoiceProps = TableProps &
     buttonText?: string;
     /** How long the chosen deck's outcome stays on screen before the trial ends by itself, without the button. */
     outcomeDurationMs?: number;
+    /**
+     * How long the deck that was not chosen takes to fade out; `0` hides it at once. By default it scales with
+     * `dealAnimationMs`, 400 at its default.
+     */
+    hideAnimationMs?: number;
     /** The heading before the choice, and with the chosen deck's outcome. An empty text shows none. */
     headings?: { choice?: ReactNode; result?: ReactNode };
   };
 
-function DeckChoiceView({ decks, buttonText = 'Continue', outcomeDurationMs, headings, next, ...table }: DeckChoiceProps) {
+function DeckChoiceView({
+  decks,
+  buttonText = 'Continue',
+  outcomeDurationMs,
+  hideAnimationMs,
+  headings,
+  next,
+  ...table
+}: DeckChoiceProps) {
   const th = t(useTheme());
   const [chosen, setChosen] = useState<DeckChoiceData>();
   const chosenRef = useRef<DeckChoiceData>();
@@ -575,6 +591,7 @@ function DeckChoiceView({ decks, buttonText = 'Continue', outcomeDurationMs, hea
       }}
       cards={chosen && chosen.outcome !== null ? [{ deck: chosen.choice, outcome: chosen.outcome, id: 0 }] : []}
       hiddenDecks={chosen ? Object.keys(decks).filter((name) => name !== chosen.choice) : []}
+      hideAnimationMs={hideAnimationMs}
       emptyMiddle={<span className={`text-3xl font-black ${th.text} select-none`}>vs.</span>}
       button={
         chosen &&

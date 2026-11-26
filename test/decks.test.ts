@@ -155,4 +155,17 @@ describe('DeckChoice', () => {
       "chose the deck 'other', which the DeckChoice does not have",
     );
   });
+
+  test('with outcomeDurationMs, the outcome is shown for that long and counts towards the duration', async () => {
+    const choosing = (deck: string) => ({ choose: () => ({ response: { deck, reactionTimeMs: 900 } }) });
+    const [shown, none] = await run([
+      DeckChoice.trial({ decks: { safe: { outcome: 3 }, risky: { outcome: 0 } }, outcomeDurationMs: 1000 }).simulators(
+        choosing('safe'),
+      ),
+      DeckChoice.trial({ decks: { safe: {}, risky: {} }, outcomeDurationMs: 1000 }).simulators(choosing('safe')),
+    ]);
+    expect(shown.durationMs).toBe(1900);
+    // A deck without an outcome ends the trial at the choice
+    expect(none.durationMs).toBe(900);
+  });
 });

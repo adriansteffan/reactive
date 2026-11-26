@@ -493,15 +493,19 @@ export type DeckChoiceProps = TableProps &
     decks: Record<string, ChoiceDeck>;
     /** The button under the outcome of the chosen deck. */
     buttonText?: string;
+    /** How long the chosen deck's outcome stays on screen before the trial ends by itself, without the button. */
+    outcomeDurationMs?: number;
     /** The heading before the choice, and with the chosen deck's outcome. */
     headings?: { choice?: ReactNode; result?: ReactNode };
   };
 
-function DeckChoiceView({ decks, buttonText = 'Continue', headings, next, ...table }: DeckChoiceProps) {
+function DeckChoiceView({ decks, buttonText = 'Continue', outcomeDurationMs, headings, next, ...table }: DeckChoiceProps) {
   const th = t(useTheme());
   const [chosen, setChosen] = useState<DeckChoiceData>();
   const chosenRef = useRef<DeckChoiceData>();
   const shownAt = useRef(performance.now());
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   const choose = (deck: string, key: string | null, timeStamp: number) => {
     if (chosenRef.current) return;
@@ -514,7 +518,10 @@ function DeckChoiceView({ decks, buttonText = 'Continue', headings, next, ...tab
     chosenRef.current = choice;
     // A deck without an outcome has nothing to show
     if (choice.outcome === null) next(choice);
-    else setChosen(choice);
+    else {
+      setChosen(choice);
+      if (outcomeDurationMs !== undefined) timer.current = setTimeout(() => next(choice), outcomeDurationMs);
+    }
   };
 
   return (
@@ -529,7 +536,8 @@ function DeckChoiceView({ decks, buttonText = 'Continue', headings, next, ...tab
       hiddenDecks={chosen ? Object.keys(decks).filter((name) => name !== chosen.choice) : []}
       emptyMiddle={<span className={`text-3xl font-black ${th.text} select-none`}>vs.</span>}
       button={
-        chosen && (
+        chosen &&
+        outcomeDurationMs === undefined && (
           <button type='button' tabIndex={-1} className={th.button} onClick={() => next(chosen)}>
             {buttonText}
           </button>
@@ -556,7 +564,8 @@ export const DeckChoice = defineComponent({
       throw new Error(`A simulated participant chose the deck '${deck}', which the DeckChoice does not have.`);
     }
     const recorded = { choice: deck, key: props.decks[deck].key ?? null, reactionTimeMs, outcome: chosenOutcome(props.decks[deck]) };
-    return { recorded, participant: result.participant ?? participant, durationMs: reactionTimeMs };
+    const outcomeMs = recorded.outcome === null ? 0 : (props.outcomeDurationMs ?? 0);
+    return { recorded, participant: result.participant ?? participant, durationMs: reactionTimeMs + outcomeMs };
   },
   defaultSimulators: {
     choose: ({ stimulus }: SimulatorArgs<DeckChoiceStimulus>): DeckChoiceSimulatorResult => ({

@@ -297,7 +297,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
             <div className='flex items-center'>
               <label className='text-base font-medium text-neutral-900'>{param.name}</label>
               {param.spec.condition && (
-                <span className='ml-2 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-neutral-900 text-white'>
+                <span className='ml-2 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-white text-neutral-700 ring-1 ring-inset ring-neutral-300'>
                   condition
                 </span>
               )}

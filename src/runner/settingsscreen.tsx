@@ -165,7 +165,11 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
     setExcluded([...new Set([...elsewhere, ...others, ...(checked ? [] : ids)])]);
   };
 
-  const experimentFields = fieldsOf(experiment.params);
+  const declared = fieldsOf(experiment.params);
+  const experimentFields = [
+    ...declared.filter((field) => field.spec.condition),
+    ...declared.filter((field) => !field.spec.condition),
+  ];
   const shownFields = experimentFields.filter((field) => !field.spec.hidden);
 
   // Until these are set, every participant can get other trials, so none are shown
@@ -292,6 +296,11 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
           <div className='flex flex-col h-full'>
             <div className='flex items-center'>
               <label className='text-base font-medium text-neutral-900'>{param.name}</label>
+              {param.spec.condition && (
+                <span className='ml-2 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-neutral-900 text-white'>
+                  condition
+                </span>
+              )}
               <span className='ml-2 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600'>
                 {param.type}
               </span>
@@ -309,6 +318,7 @@ export const SettingsScreen = ({ experiment }: { experiment: Experiment<any> }) 
             onChange={(value) => setParamValues((prev) => ({ ...prev, [param.name]: value }))}
             values={param.spec.values}
             defaultValue={param.defaultValue}
+            random={param.spec.random}
           />
         </div>
       </div>

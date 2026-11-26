@@ -426,6 +426,14 @@ defineComponent({
   params: { speed: { values: [1, 2], default: 3 } },
 });
 
+defineExperiment({ params: { nback: { values: [1, 2], random: true, condition: true } }, timeline: [] });
+defineComponent({
+  name: 'ConditionSetting',
+  component: (_props: BaseComponentProps) => null,
+  // @ts-expect-error only the experiment's params can be conditions
+  params: { speed: { default: 1, condition: true } },
+});
+
 // --- StoreUI writes the declared store ---
 StoreUI.trial({ fields: [{ type: 'integer', storeKey: 'bonus', label: 'Bonus', min: 0 }] });
 // @ts-expect-error a key the store does not declare

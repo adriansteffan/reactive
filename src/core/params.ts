@@ -9,8 +9,14 @@ interface ParamDisplay {
   hidden?: boolean;
 }
 
+/** Only the experiment's own params can be conditions. */
+export interface ExperimentParamDisplay extends ParamDisplay {
+  /** Marks a param that sets the participant's condition. The settings page lists it first, with a tag. */
+  condition?: boolean;
+}
+
 /** A param: an input of the experiment or a setting of a component, read from the URL. */
-export type ParamSpec = ParamDisplay &
+export type ParamSpec = ExperimentParamDisplay &
   (
     | {
         /** The values the param can take. */
@@ -50,12 +56,12 @@ export type ParamValues<Params> = { [K in keyof Params]: ParamValue<Params[K]> }
  * when a function computes it, or is `random`, only such a function takes the values, and no param
  * takes a session CSV column that the library writes. The types of the values, `V`, and of the
  * defaults, `D`, are inferred apart, so that a function in the same declaration knows the values it
- * takes. A param without values has `unknown` in `V`.
+ * takes. A param without values has `unknown` in `V`. `Display` is what else a param can declare.
  */
-export type CheckedParams<V, D> = {
+export type CheckedParams<V, D, Display extends ParamDisplay = ParamDisplay> = {
   [K in keyof V]: K extends ReservedParamName
     ? `The session CSV keeps '${K & string}' for a column of its own, so the param needs another name`
-    : { values?: readonly (V[K] & (string | number))[] } & ParamDisplay;
+    : { values?: readonly (V[K] & (string | number))[] } & Display;
 } & {
   [K in keyof D]: unknown extends V[K & keyof V]
     ? {

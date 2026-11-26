@@ -29,6 +29,7 @@ export function ParamInput({
   onChange,
   values,
   defaultValue,
+  random,
 }: {
   type: ParamType;
   value: string;
@@ -36,8 +37,14 @@ export function ParamInput({
   /** The values the param can take, offered in a dropdown. */
   values?: readonly (string | number)[];
   defaultValue?: unknown;
+  /** Each participant gets one of the values at random, unless one is chosen here. */
+  random?: boolean;
 }) {
-  const unset = defaultValue === undefined || defaultValue === '' ? 'Default' : `Default: ${defaultValue}`;
+  const unset = random
+    ? 'Random'
+    : defaultValue === undefined || defaultValue === ''
+      ? 'Default'
+      : `Default: ${defaultValue}`;
 
   if (values) {
     return (

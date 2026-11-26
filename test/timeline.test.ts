@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { createElement } from 'react';
 import type { BaseComponentProps } from '../src/core/component';
 import type { ExperimentData, TrialData } from '../src/core/rows';
 import { createRunState, defineExperiment, realign } from '../src/core/experiment';
@@ -691,6 +692,18 @@ describe('components', () => {
     expect(rows[1].recorded.map((row: SlideData) => row.key)).toEqual(['f', 'f', 'j', 'k']);
     expect(rows[1].recorded[3].metadata).toEqual({ before: 3, seen: 3 });
     expect(rows[2].recorded.value).toBe(2);
+  });
+
+  test('a simulated Text screen takes as long as reading its text', async () => {
+    const words = (n: number) => Array(n).fill('word').join(' ');
+    const rows = await run([
+      Text.trial({ content: createElement('div', null, createElement('h1', null, words(10)), createElement('p', null, words(290))) }),
+      Text.trial({}),
+    ]);
+    // 300 words at 200 to 300 words a minute, and up to 2 s for the button
+    expect(rows[0].durationMs).toBeGreaterThanOrEqual(60_000 + 500);
+    expect(rows[0].durationMs).toBeLessThanOrEqual(90_000 + 2000);
+    expect(rows[1].durationMs).toBeLessThanOrEqual(2000);
   });
 
   test('a simulated Text screen without a button ends with one of its keys', async () => {

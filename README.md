@@ -709,7 +709,7 @@ createParticipants: () => {
 
 | Component | Decision functions | `stimulus` | `response` | Default behavior |
 |---|---|---|---|---|
-| Text | `respond` | `content`, the `buttonText` it shows, empty for none, and `allowedResponseKeys` | `{ key, reactionTimeMs }` | Clicks the button, or on a screen without one, presses one of its keys; random reaction time |
+| Text | `respond` | `content`, the `buttonText` it shows, empty for none, and `allowedResponseKeys` | `{ key, reactionTimeMs }` | Reads the text in `content` at 200–300 words a minute and takes 0.5–2 s more, then clicks the button, or on a screen without one, presses one of its keys |
 | Screen | `respond` | `content`, `displayDurationMs`, the fields of the trial's `response`, and the `answers` so far | `{ answer, reactionTimeMs }`, and optionally the `key` that gave it | One random answer from `choices`, `keys` and `buttons`, random RT, after `buttonDelayMs` for a button; a Screen whose content answers needs its own |
 | PlainInput | `respond` | `content`, `minLength` | the text entered | Returns `'simulated_input'`, filled up to `minLength` |
 | Quest | `answerQuestion` | `question` | `{ answer, durationMs }` | Random valid answer per question type |

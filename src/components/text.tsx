@@ -110,6 +110,14 @@ function Text({
   );
 }
 
+// The words of the content's text, with those its elements hold as children
+function wordsIn(node: React.ReactNode): number {
+  if (typeof node === 'string' || typeof node === 'number') return String(node).split(/\s+/).filter(Boolean).length;
+  if (Array.isArray(node)) return node.reduce((sum: number, child) => sum + wordsIn(child), 0);
+  if (React.isValidElement(node)) return wordsIn((node.props as { children?: React.ReactNode }).children);
+  return 0;
+}
+
 export default defineComponent({
   name: 'Text',
   component: Text,
@@ -139,9 +147,9 @@ export default defineComponent({
     };
   },
   defaultSimulators: {
-    // The button, or on a screen without one, one of its keys
+    // Reads the text at 200 to 300 words a minute, then takes the button, or on a screen without one, one of its keys
     respond: ({ stimulus }: SimulatorArgs<TextStimulus>) => {
-      const reactionTimeMs = uniform(500, 2000);
+      const reactionTimeMs = (wordsIn(stimulus.content) / uniform(200, 300)) * 60_000 + uniform(500, 2000);
       const keys = stimulus.allowedResponseKeys === true ? [' '] : stimulus.allowedResponseKeys || [];
       if (!stimulus.buttonText && keys.length > 0) {
         return { response: { key: keys[Math.floor(uniform(0, keys.length))], reactionTimeMs } };
